@@ -2,7 +2,7 @@ import { connect } from 'cloudflare:sockets';
 
 // 全局变量
 let 订阅路径 = "config";
-let 开门锁匙 = uuidv4(); // 随机生成UUID
+let 开门锁 argent = uuidv4(); // 随机生成UUID
 let 优选TXT路径 = []; // 动态加载
 let 优选节点 = [];
 let 启用反代 = false; // 默认关闭，通过UI切换
@@ -153,7 +153,27 @@ export default {
 
       const 管理员账号 = await env.LOGIN_STATE.get('admin_username');
       if (!管理员账号) {
-        return 创建HTML响应(生成注册页面());
+        const url = new URL(请求.url);
+        if (url.pathname === '/register') {
+          return 创建HTML响应(生成注册页面());
+        } else if (url.pathname === '/register/submit') {
+          const formData = await 请求.formData();
+          const 新账号 = formData.get('username');
+          const 新密码 = formData.get('password');
+          if (!新账号 || !新密码) {
+            return 创建JSON响应({ error: '用户名或密码不能为空' }, 400);
+          }
+          try {
+            await env.LOGIN_STATE.put('admin_username', 新账号);
+            await env.LOGIN_STATE.put('admin_password', 新密码);
+            return 创建JSON响应({ success: true, redirect: '/login' }, 200);
+          } catch (error) {
+            console.error(`KV写入失败: ${error.message}`);
+            return 创建JSON响应({ error: '注册失败，请稍后重试' }, 500);
+          }
+        } else {
+          return 创建重定向响应('/register');
+        }
       }
 
       const 请求头 = 请求.headers.get('Upgrade');
@@ -166,17 +186,6 @@ export default {
 
       if (!请求头 || 请求头 !== 'websocket') {
         switch (url.pathname) {
-          case '/register/submit':
-            formData = await 请求.formData();
-            const 新账号 = formData.get('username');
-            const 新密码 = formData.get('password');
-            if (新账号 && 新密码) {
-              await env.LOGIN_STATE.put('admin_username', 新账号);
-              await env.LOGIN_STATE.put('admin_password', 新密码);
-              return 创建重定向响应('/login');
-            } else {
-              return 创建HTML响应(生成注册页面() + '<p style="color: #ff6666;">用户名或密码不能为空</p>');
-            }
           case '/settings':
             const Token = 请求.headers.get('Cookie')?.split('=')[1];
             const 有效Token = await env.LOGIN_STATE.get('current_token');
@@ -458,31 +467,44 @@ function 生成注册页面() {
     input:focus { border-color: #4CAF50; box-shadow: 0 0 8px rgba(76, 175, 80, 0.5); outline: none; }
     button { padding: 12px; background: linear-gradient(135deg, #4CAF50, #45a049); border: none; border-radius: 5px; color: white; cursor: pointer; transition: all 0.3s ease; }
     button:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3); }
-    .error { color: #ff6666; margin-top: 10px; }
+    .error { color: #ff6666; margin-top: 10px; font-size: 14px; }
   </style>
 </head>
 <body>
   <div class="content">
     <h1>注册管理员账号</h1>
-    <form id="registerForm" action="/register/submit" method="POST">
+    <form id="registerForm">
       <input type="text" name="username" placeholder="用户名" required>
       <input type="password" name="password" placeholder="密码" required>
       <button type="submit">注册</button>
     </form>
+    <div id="message"></div>
   </div>
   <script>
     document.getElementById('registerForm').addEventListener('submit', async (event) => {
       event.preventDefault();
       const formData = new FormData(event.target);
-      const response = await fetch('/register/submit', {
-        method: 'POST',
-        body: formData
-      });
-      if (response.status === 302) {
-        window.location.href = '/login';
-      } else {
-        const errorText = await response.text();
-        document.querySelector('.content').insertAdjacentHTML('beforeend', '<p class="error">注册失败，请重试</p>');
+      const messageDiv = document.getElementById('message');
+      messageDiv.innerHTML = '';
+
+      try {
+        const response = await fetch('/register/submit', {
+          method: 'POST',
+          body: formData
+        });
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+          messageDiv.innerHTML = '<p style="color: #4CAF50;">注册成功，正在跳转...</p>';
+          setTimeout(() => {
+            window.location.href = result.redirect || '/login';
+          }, 1000);
+        } else {
+          messageDiv.innerHTML = '<p class="error">' + (result.error || '注册失败，请重试') + '</p>';
+        }
+      } catch (error) {
+        messageDiv.innerHTML = '<p class="error">网络错误，请检查连接后重试</p>';
+        console.error('注册请求失败:', error);
       }
     });
   </script>
