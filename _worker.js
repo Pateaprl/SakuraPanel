@@ -1,17 +1,22 @@
 import { connect } from 'cloudflare:sockets';
 
-// 全局变量
 let 订阅路径 = "config";
-let 开门锁匙 = uuidv4();
-let 优选TXT路径 = [];
+let 开门锁匙 = "03978e2f-2129-4c0c-8f15-22175dd0aba6";
+let 优选TXT路径 = [
+  'https://v2.i-sweet.us.kg/ips.txt',
+  'https://v2.i-sweet.us.kg/url.txt',
+  'https://这里可以无限扩展'
+];
 let 优选节点 = [];
-let 启用反代 = false;
+let 启用反代 = true;
 let 反代地址 = 'ts.hpc.tw';
 let 启用SOCKS5 = false;
 let 启用全局SOCKS5 = false;
 let SOCKS5账号 = '';
 let 节点名称 = '天书';
 let 伪装域名 = 'lkssite.vip';
+let 账号 = 'andypan';
+let 密码 = 'Yyds@2023';
 let 最大失败次数 = 5;
 let 锁定时间 = 5 * 60 * 1000;
 let 小猫 = 'cla';
@@ -23,15 +28,6 @@ let 歪兔 = 'v2';
 let 蕊蒽 = 'rayN';
 let 背景壁纸 = 'https://raw.githubusercontent.com/Alien-Et/ips/refs/heads/main/image/night.jpg';
 
-// UUID 生成函数
-function uuidv4() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
-}
-
-// 创建响应函数
 function 创建HTML响应(内容, 状态码 = 200) {
   return new Response(内容, {
     status: 状态码,
@@ -64,24 +60,27 @@ function 创建JSON响应(数据, 状态码 = 200, 额外头 = {}) {
   });
 }
 
-// 加载节点和配置（参考代码1修复）
 async function 加载节点和配置(env, hostName) {
   try {
-    const txtPaths = await env.LOGIN_STATE.get('txt_paths');
-    优选TXT路径 = txtPaths ? JSON.parse(txtPaths) : [];
     const 手动节点缓存 = await env.LOGIN_STATE.get('manual_preferred_ips');
-    let 手动节点列表 = 手动节点缓存 ? JSON.parse(手动节点缓存).map(line => line.trim()).filter(Boolean) : [];
+    let 手动节点列表 = [];
+    if (手动节点缓存) {
+      手动节点列表 = JSON.parse(手动节点缓存).map(line => line.trim()).filter(Boolean);
+    }
 
-    const 响应列表 = await Promise.all(优选TXT路径.map(async (路径) => {
-      try {
-        const 响应 = await fetch(路径);
-        if (!响应.ok) throw new Error(`请求 ${路径} 失败，状态码: ${响应.status}`);
-        return (await 响应.text()).split('\n').map(line => line.trim()).filter(Boolean);
-      } catch (错误) {
-        console.error(`拉取 ${路径} 失败: ${错误.message}`);
-        return [];
-      }
-    }));
+    const 响应列表 = await Promise.all(
+      优选TXT路径.map(async (路径) => {
+        try {
+          const 响应 = await fetch(路径);
+          if (!响应.ok) throw new Error(`请求 ${路径} 失败，状态码: ${响应.status}`);
+          const 文本 = await 响应.text();
+          return 文本.split('\n').map(line => line.trim()).filter(Boolean);
+        } catch (错误) {
+          console.error(`拉取 ${路径} 失败: ${错误.message}`);
+          return [];
+        }
+      })
+    );
 
     const 域名节点列表 = [...new Set(响应列表.flat())];
     const 合并节点列表 = [...new Set([...手动节点列表, ...域名节点列表])];
@@ -104,14 +103,12 @@ async function 加载节点和配置(env, hostName) {
       优选节点 = 当前节点列表.length > 0 ? 当前节点列表 : [`${hostName}:443`];
     }
   } catch (错误) {
-    console.error(`加载节点失败: ${错误.message}`);
     const 缓存节点 = await env.LOGIN_STATE.get('ip_preferred_ips');
     优选节点 = 缓存节点 ? JSON.parse(缓存节点) : [`${hostName}:443`];
     await env.LOGIN_STATE.put('ip_error_log', JSON.stringify({ time: Date.now(), error: '所有路径拉取失败或手动上传为空' }), { expirationTtl: 86400 });
   }
 }
 
-// 获取配置
 async function 获取配置(env, 类型, hostName) {
   const 缓存键 = 类型 === 'clash' ? 'config_clash' : 'config_v2ray';
   const 版本键 = `${缓存键}_version`;
@@ -119,7 +116,9 @@ async function 获取配置(env, 类型, hostName) {
   const 配置版本 = await env.LOGIN_STATE.get(版本键) || '0';
   const 节点版本 = await env.LOGIN_STATE.get('ip_preferred_ips_version') || '0';
 
-  if (缓存配置 && 配置版本 === 节点版本) return 缓存配置;
+  if (缓存配置 && 配置版本 === 节点版本) {
+    return 缓存配置;
+  }
 
   const 新配置 = 类型 === 'clash' ? 生成猫咪配置(hostName) : 生成备用配置(hostName);
   await env.LOGIN_STATE.put(缓存键, 新配置, { expirationTtl: 86400 });
@@ -127,44 +126,21 @@ async function 获取配置(env, 类型, hostName) {
   return 新配置;
 }
 
-// 检查锁定
 async function 检查锁定(env, 设备标识) {
   const 锁定时间戳 = await env.LOGIN_STATE.get(`lock_${设备标识}`);
   const 当前时间 = Date.now();
   const 被锁定 = 锁定时间戳 && 当前时间 < Number(锁定时间戳);
-  return { 被锁定, 剩余时间: 被锁定 ? Math.ceil((Number(锁定时间戳) - 当前时间) / 1000) : 0 };
+  return {
+    被锁定,
+    剩余时间: 被锁定 ? Math.ceil((Number(锁定时间戳) - 当前时间) / 1000) : 0
+  };
 }
 
-// 主处理逻辑
 export default {
   async fetch(请求, env) {
     try {
-      if (!env.LOGIN_STATE) return 创建HTML响应(生成KV未绑定提示页面());
-
-      const 代理状态 = await env.LOGIN_STATE.get('proxy_enabled');
-      const SOCKS5状态 = await env.LOGIN_STATE.get('socks5_enabled');
-      启用反代 = 代理状态 === 'true' ? true : 代理状态 === 'false' ? false : 启用反代;
-      启用SOCKS5 = SOCKS5状态 === 'true' ? true : SOCKS5状态 === 'false' ? false : 启用SOCKS5;
-
-      const 管理员账号 = await env.LOGIN_STATE.get('admin_username');
-      if (!管理员账号) {
-        const url = new URL(请求.url);
-        if (url.pathname === '/register') return 创建HTML响应(生成注册页面());
-        else if (url.pathname === '/register/submit') {
-          const formData = await 请求.formData();
-          const 新账号 = formData.get('username');
-          const 新密码 = formData.get('password');
-          if (!新账号 || !新密码) return 创建JSON响应({ error: '用户名或密码不能为空' }, 400);
-          try {
-            await env.LOGIN_STATE.put('admin_username', 新账号);
-            await env.LOGIN_STATE.put('admin_password', 新密码);
-            return 创建JSON响应({ success: true, redirect: '/login' }, 200);
-          } catch (error) {
-            console.error(`KV写入失败: ${error.message}`);
-            return 创建JSON响应({ error: '注册失败，请稍后重试' }, 500);
-          }
-        }
-        return 创建重定向响应('/register');
+      if (!env.LOGIN_STATE) {
+        return 创建HTML响应(生成KV未绑定提示页面());
       }
 
       const 请求头 = 请求.headers.get('Upgrade');
@@ -182,9 +158,9 @@ export default {
             await env.LOGIN_STATE.delete(`lock_${设备标识}`);
             return new Response(null, { status: 200 });
           case `/${订阅路径}`:
-            const SubToken = 请求.headers.get('Cookie')?.split('=')[1];
-            const 有效SubToken = await env.LOGIN_STATE.get('current_token');
-            if (!SubToken || SubToken !== 有效SubToken) return 创建重定向响应('/login');
+            const Token = 请求.headers.get('Cookie')?.split('=')[1];
+            const 有效Token = await env.LOGIN_STATE.get('current_token');
+            if (!Token || Token !== 有效Token) return 创建重定向响应('/login');
             return 创建HTML响应(生成订阅页面(订阅路径, hostName));
           case '/login':
             const 锁定状态 = await 检查锁定(env, 设备标识);
@@ -200,9 +176,7 @@ export default {
             formData = await 请求.formData();
             const 提供的账号 = formData.get('username');
             const 提供的密码 = formData.get('password');
-            const 存储账号 = await env.LOGIN_STATE.get('admin_username');
-            const 存储密码 = await env.LOGIN_STATE.get('admin_password');
-            if (提供的账号 === 存储账号 && 提供的密码 === 存储密码) {
+            if (提供的账号 === 账号 && 提供的密码 === 密码) {
               const 新Token = Math.random().toString(36).substring(2);
               await env.LOGIN_STATE.put('current_token', 新Token, { expirationTtl: 300 });
               await env.LOGIN_STATE.put(`fail_${设备标识}`, '0');
@@ -227,32 +201,17 @@ export default {
             await 加载节点和配置(env, hostName);
             const v2rayConfig = await 获取配置(env, 'v2ray', hostName);
             return new Response(v2rayConfig, { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8" } });
-          case `/${订阅路径}/update-settings`:
-            const 设置Token = 请求.headers.get('Cookie')?.split('=')[1];
-            const 有效设置Token = await env.LOGIN_STATE.get('current_token');
-            if (!设置Token || 设置Token !== 有效设置Token) return 创建JSON响应({ error: '未登录' }, 401);
-            formData = await 请求.formData();
-            启用反代 = formData.get('proxy') === 'on';
-            启用SOCKS5 = formData.get('socks5') === 'on';
-            const 新TXT路径 = formData.get('txtPaths')?.split('\n').map(line => line.trim()).filter(Boolean) || [];
-            await env.LOGIN_STATE.put('txt_paths', JSON.stringify(新TXT路径));
-            await env.LOGIN_STATE.put('proxy_enabled', String(启用反代));
-            await env.LOGIN_STATE.put('socks5_enabled', String(启用SOCKS5));
-            优选TXT路径 = 新TXT路径;
-            await 加载节点和配置(env, hostName);
-            const 新版本 = String(Date.now());
-            await env.LOGIN_STATE.put('config_clash', 生成猫咪配置(hostName), { expirationTtl: 86400 });
-            await env.LOGIN_STATE.put('config_clash_version', 新版本);
-            await env.LOGIN_STATE.put('config_v2ray', 生成备用配置(hostName), { expirationTtl: 86400 });
-            await env.LOGIN_STATE.put('config_v2ray_version', 新版本);
-            return 创建JSON响应({ message: '设置已更新' }, 200);
           case `/${订阅路径}/upload`:
             const uploadToken = 请求.headers.get('Cookie')?.split('=')[1];
             const 有效UploadToken = await env.LOGIN_STATE.get('current_token');
-            if (!uploadToken || uploadToken !== 有效UploadToken) return 创建JSON响应({ error: '未登录或Token无效' }, 401);
+            if (!uploadToken || uploadToken !== 有效UploadToken) {
+              return 创建JSON响应({ error: '未登录或Token无效，请重新登录' }, 401);
+            }
             formData = await 请求.formData();
             const ipFiles = formData.getAll('ipFiles');
-            if (!ipFiles || ipFiles.length === 0) return 创建JSON响应({ error: '未选择任何文件' }, 400);
+            if (!ipFiles || ipFiles.length === 0) {
+              return 创建JSON响应({ error: '未选择任何文件' }, 400);
+            }
             let allIpList = [];
             try {
               for (const ipFile of ipFiles) {
@@ -262,12 +221,18 @@ export default {
                 if (ipList.length === 0) console.warn(`文件 ${ipFile.name} 内容为空`);
                 allIpList = allIpList.concat(ipList);
               }
-              if (allIpList.length === 0) return 创建JSON响应({ error: '所有上传文件内容为空' }, 400);
+              if (allIpList.length === 0) {
+                return 创建JSON响应({ error: '所有上传文件内容为空' }, 400);
+              }
               const uniqueIpList = [...new Set(allIpList)];
+              
               const 当前手动节点 = await env.LOGIN_STATE.get('manual_preferred_ips');
               const 当前节点列表 = 当前手动节点 ? JSON.parse(当前手动节点) : [];
               const 是重复上传 = JSON.stringify(当前节点列表.sort()) === JSON.stringify(uniqueIpList.sort());
-              if (是重复上传) return 创建JSON响应({ message: '上传内容与现有节点相同，无需更新' }, 200);
+              if (是重复上传) {
+                return 创建JSON响应({ message: '上传内容与现有节点相同，无需更新' }, 200);
+              }
+
               await env.LOGIN_STATE.put('manual_preferred_ips', JSON.stringify(uniqueIpList), { expirationTtl: 86400 });
               const 新版本 = String(Date.now());
               await env.LOGIN_STATE.put('ip_preferred_ips_version', 新版本);
@@ -275,7 +240,7 @@ export default {
               await env.LOGIN_STATE.put('config_clash_version', 新版本);
               await env.LOGIN_STATE.put('config_v2ray', 生成备用配置(hostName), { expirationTtl: 86400 });
               await env.LOGIN_STATE.put('config_v2ray_version', 新版本);
-              return 创建JSON响应({ message: '上传成功' }, 200);
+              return 创建JSON响应({ message: '上传成功，即将跳转' }, 200, { 'Location': `/${订阅路径}` });
             } catch (错误) {
               console.error(`上传处理失败: ${错误.message}`);
               return 创建JSON响应({ error: `上传处理失败: ${错误.message}` }, 500);
@@ -288,6 +253,7 @@ export default {
       } else if (请求头 === 'websocket') {
         反代地址 = env.PROXYIP || 反代地址;
         SOCKS5账号 = env.SOCKS5 || SOCKS5账号;
+        启用SOCKS5 = env.SOCKS5OPEN === 'true' ? true : env.SOCKS5OPEN === 'false' ? false : 启用SOCKS5;
         启用全局SOCKS5 = env.SOCKS5GLOBAL === 'true' ? true : env.SOCKS5GLOBAL === 'false' ? false : 启用全局SOCKS5;
         return await 升级请求(请求);
       }
@@ -298,7 +264,6 @@ export default {
   }
 };
 
-// WebSocket 相关函数（参考代码1修复）
 async function 升级请求(请求) {
   const 创建接口 = new WebSocketPair();
   const [客户端, 服务端] = Object.values(创建接口);
@@ -436,374 +401,260 @@ async function 解析SOCKS5账号(SOCKS5) {
   return { username, password, hostname, port };
 }
 
-// UI 页面函数
-function 生成注册页面() {
-  return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    body { background: url('${背景壁纸}') no-repeat center center fixed; background-size: cover; font-family: 'Segoe UI', Arial, sans-serif; margin: 0; min-height: 100vh; display: flex; justify-content: center; align-items: center; }
-    .card { background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); padding: 30px; border-radius: 20px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2); max-width: 400px; width: 90%; text-align: center; color: #fff; }
-    h1 { font-size: 2em; color: #00e676; margin-bottom: 20px; }
-    form { display: flex; flex-direction: column; gap: 15px; }
-    input { padding: 12px; border: none; border-radius: 10px; background: rgba(255, 255, 255, 0.2); color: #fff; font-size: 16px; transition: all 0.3s; }
-    input:focus { outline: none; background: rgba(255, 255, 255, 0.3); box-shadow: 0 0 10px rgba(0, 230, 118, 0.5); }
-    button { padding: 12px; background: linear-gradient(135deg, #00e676, #00c853); border: none; border-radius: 10px; color: #fff; font-size: 16px; cursor: pointer; transition: all 0.3s; text-align: center; }
-    button:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0, 230, 118, 0.5); }
-    .message { margin-top: 15px; font-size: 14px; }
-    .error { color: #ff5252; }
-    .success { color: #00e676; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <h1>注册管理员</h1>
-    <form id="registerForm">
-      <input type="text" name="username" placeholder="用户名" required>
-      <input type="password" name="password" placeholder="密码" required>
-      <button type="submit">注册</button>
-    </form>
-    <div class="message" id="message"></div>
-  </div>
-  <script>
-    document.getElementById('registerForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const formData = new FormData(e.target);
-      const messageDiv = document.getElementById('message');
-      try {
-        const response = await fetch('/register/submit', { method: 'POST', body: formData });
-        const result = await response.json();
-        if (response.ok && result.success) {
-          messageDiv.innerHTML = '<span class="success">注册成功，正在跳转...</span>';
-          setTimeout(() => window.location.href = result.redirect || '/login', 1000);
-        } else {
-          messageDiv.innerHTML = '<span class="error">' + (result.error || '注册失败') + '</span>';
-        }
-      } catch (error) {
-        messageDiv.innerHTML = '<span class="error">网络错误，请稍后重试</span>';
-      }
-    });
-  </script>
-</body>
-</html>
-  `;
-}
-
 function 生成订阅页面(订阅路径, hostName) {
-  const 当前TXT路径 = 优选TXT路径.length ? 优选TXT路径.join('\n') : '';
   return `
 <!DOCTYPE html>
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { 
-      background: url('${背景壁纸}') no-repeat center center fixed; 
-      background-size: cover; 
-      font-family: 'Segoe UI', Arial, sans-serif; 
-      min-height: 100vh; 
-      display: flex; 
-      justify-content: center; 
-      align-items: center; 
-      padding: 20px; 
-      color: #fff; 
+    body {
+      background-image: url('${背景壁纸}');
+      background-size: cover;
+      background-position: center;
+      background-attachment: fixed;
+      background-repeat: no-repeat;
+      font-family: 'Comic Sans MS', 'Arial', sans-serif;
+      color: #333;
+      margin: 0;
+      padding: 20px;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
     }
-    .container { 
-      max-width: 900px; 
-      width: 100%; 
-      display: grid; 
-      gap: 20px; 
+    .container {
+      max-width: 800px;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
     }
-    .card { 
-      background: rgba(255, 255, 255, 0.1); 
-      backdrop-filter: blur(10px); 
-      padding: 25px; 
-      border-radius: 20px; 
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2); 
-      transition: transform 0.3s; 
-      text-align: center; 
+    .card {
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 20px;
+      padding: 20px;
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+      position: relative;
+      overflow: hidden;
     }
-    .card:hover { transform: translateY(-5px); }
-    h1 { 
-      font-size: 2.5em; 
-      color: #00e676; 
-      text-align: center; 
-      margin-bottom: 30px; 
-      text-shadow: 0 2px 10px rgba(0, 230, 118, 0.5); 
+    .card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
     }
-    h3 { 
-      font-size: 1.4em; 
-      color: #00e676; 
-      margin-bottom: 15px; 
+    .card::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle, rgba(255, 255, 255, 0.3), transparent);
+      opacity: 0.5;
+      pointer-events: none;
     }
-    .link-container p { 
-      margin: 10px 0; 
-      word-break: break-all; 
-      font-size: 1em; 
+    .card-title {
+      font-size: 1.5em;
+      color: #ff6f91;
+      text-align: center;
+      margin-bottom: 15px;
+      text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
     }
-    .link-container a { 
-      color: #00e676; 
-      text-decoration: none; 
-      transition: color 0.3s; 
+    .link-box {
+      background: #fff0f5;
+      border-radius: 15px;
+      padding: 10px;
+      margin: 10px 0;
+      word-break: break-all;
+      font-size: 0.9em;
     }
-    .link-container a:hover { color: #00c853; }
-    .btn { 
-      padding: 12px 24px; 
-      background: linear-gradient(135deg, #00e676, #00c853); 
-      border: none; 
-      border-radius: 10px; 
-      color: #fff; 
-      font-size: 16px; 
-      cursor: pointer; 
-      transition: all 0.3s; 
-      width: 100%; 
-      max-width: 200px; 
-      text-align: center; 
+    .link-box a {
+      color: #ff6f91;
+      text-decoration: none;
+      transition: color 0.3s ease;
     }
-    .btn:hover { 
-      transform: translateY(-3px); 
-      box-shadow: 0 5px 15px rgba(0, 230, 118, 0.5); 
+    .link-box a:hover {
+      color: #ff4d79;
     }
-    .small-btn { 
-      display: inline-flex; 
-      align-items: center; 
-      gap: 8px; 
-      padding: 8px 16px; 
-      font-size: 14px; 
-      background: linear-gradient(135deg, #2196F3, #1976D2); 
-      border-radius: 10px; 
-      color: #fff; 
-      text-align: center; 
-      transition: all 0.3s; 
-      max-width: 140px; 
+    .button-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+      margin-top: 15px;
     }
-    .small-btn:hover { 
-      background: linear-gradient(135deg, #1976D2, #1565C0); 
-      box-shadow: 0 5px 15px rgba(33, 150, 243, 0.5); 
+    .cute-button {
+      padding: 10px 20px;
+      border-radius: 25px;
+      border: none;
+      font-size: 1em;
+      color: white;
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      background-size: 200% 100%;
+      background-position: left;
     }
-    .small-btn svg { 
-      fill: #fff; 
-      width: 18px; 
-      height: 18px; 
+    .cute-button:hover {
+      transform: scale(1.05);
+      box-shadow: 0 5px 10px rgba(0, 0, 0, 0.2);
     }
-    .logout-btn { 
-      background: linear-gradient(135deg, #ff5252, #d81b60); 
+    .cute-button:active {
+      transform: scale(0.95);
     }
-    .logout-btn:hover { box-shadow: 0 5px 15px rgba(255, 82, 82, 0.5); }
-    .button-group { 
-      display: flex; 
-      gap: 15px; 
-      flex-wrap: wrap; 
-      justify-content: center; 
+    .clash-btn {
+      background: linear-gradient(to right, #ffb6c1, #ff69b4);
     }
-    .toggle-container { 
-      display: flex; 
-      justify-content: center; 
-      align-items: center; 
-      gap: 15px; 
-      margin: 15px 0; 
+    .v2ray-btn {
+      background: linear-gradient(to right, #ffdead, #ffa07a);
     }
-    .toggle-label { font-size: 1em; }
-    .toggle-switch { 
-      position: relative; 
-      width: 60px; 
-      height: 30px; 
+    .logout-btn {
+      background: linear-gradient(to right, #ff9999, #ff6666);
     }
-    .toggle-switch input { 
-      opacity: 0; 
-      width: 0; 
-      height: 0; 
+    .upload-card {
+      background: #f0f8ff;
     }
-    .slider { 
-      position: absolute; 
-      top: 0; 
-      left: 0; 
-      right: 0; 
-      bottom: 0; 
-      background: #555; 
-      border-radius: 30px; 
-      transition: background 0.4s; 
+    .upload-title {
+      font-size: 1.3em;
+      color: #87ceeb;
+      margin-bottom: 15px;
     }
-    .slider:before { 
-      position: absolute; 
-      content: ""; 
-      height: 24px; 
-      width: 24px; 
-      left: 3px; 
-      bottom: 3px; 
-      background: #fff; 
-      border-radius: 50%; 
-      transition: transform 0.4s; 
+    .upload-label {
+      display: inline-block;
+      padding: 8px 15px;
+      background: linear-gradient(to right, #87ceeb, #00b7eb);
+      color: white;
+      border-radius: 20px;
+      cursor: pointer;
+      transition: all 0.3s ease;
     }
-    input:checked + .slider { background: #00e676; }
-    input:checked + .slider:before { transform: translateX(30px); }
-    textarea { 
-      width: 100%; 
-      padding: 10px; 
-      border: none; 
-      border-radius: 10px; 
-      background: rgba(255, 255, 255, 0.2); 
-      color: #fff; 
-      resize: vertical; 
-      font-size: 1em; 
-      transition: all 0.3s; 
+    .upload-label:hover {
+      transform: scale(1.05);
+      box-shadow: 0 5px 10px rgba(0, 0, 0, 0.2);
     }
-    textarea:focus { 
-      outline: none; 
-      background: rgba(255, 255, 255, 0.3); 
-      box-shadow: 0 0 10px rgba(0, 230, 118, 0.5); 
+    .file-list {
+      margin: 10px 0;
+      max-height: 100px;
+      overflow-y: auto;
     }
-    .upload-container { 
-      text-align: center; 
+    .file-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.8);
+      padding: 5px 10px;
+      border-radius: 10px;
+      margin: 5px 0;
+      font-size: 0.9em;
     }
-    .upload-container input[type="file"] { display: none; }
-    .upload-label { 
-      display: inline-flex; 
-      align-items: center; 
-      gap: 8px; 
-      padding: 10px 20px; 
-      background: linear-gradient(135deg, #00e676, #00c853); 
-      border-radius: 10px; 
-      cursor: pointer; 
-      transition: all 0.3s; 
-      color: #fff; 
-      font-size: 14px; 
+    .file-item button {
+      background: #ff9999;
+      border: none;
+      border-radius: 15px;
+      padding: 3px 10px;
+      color: white;
+      cursor: pointer;
+      transition: background 0.3s ease;
     }
-    .upload-label:hover { 
-      transform: translateY(-3px); 
-      box-shadow: 0 5px 15px rgba(0, 230, 118, 0.5); 
+    .file-item button:hover {
+      background: #ff6666;
     }
-    .upload-label svg { fill: #fff; width: 20px; height: 20px; }
-    .file-list { 
-      margin: 15px 0; 
-      max-height: 120px; 
-      overflow-y: auto; 
+    .upload-submit {
+      background: linear-gradient(to right, #98fb98, #32cd32);
+      padding: 10px 20px;
+      border-radius: 20px;
+      border: none;
+      color: white;
+      cursor: pointer;
+      transition: all 0.3s ease;
     }
-    .file-item { 
-      display: flex; 
-      justify-content: space-between; 
-      align-items: center; 
-      padding: 8px 12px; 
-      background: rgba(255, 255, 255, 0.15); 
-      border-radius: 10px; 
-      margin: 5px 0; 
-      font-size: 14px; 
+    .upload-submit:hover {
+      transform: scale(1.05);
+      box-shadow: 0 5px 10px rgba(0, 0, 0, 0.2);
     }
-    .progress-container { 
-      display: none; 
-      margin-top: 15px; 
+    .progress-container {
+      display: none;
+      margin-top: 10px;
     }
-    .progress-bar { 
-      width: 100%; 
-      height: 20px; 
-      background: rgba(255, 255, 255, 0.1); 
-      border-radius: 10px; 
-      overflow: hidden; 
-      position: relative; 
+    .progress-bar {
+      width: 100%;
+      height: 15px;
+      background: #e0e0e0;
+      border-radius: 10px;
+      overflow: hidden;
     }
-    .progress-fill { 
-      height: 100%; 
-      background: linear-gradient(90deg, #00e676, #00c853); 
-      width: 0; 
-      transition: width 0.3s ease-in-out; 
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(to right, #87ceeb, #00b7eb);
+      width: 0;
+      transition: width 0.3s ease;
     }
-    .progress-text { 
-      position: absolute; 
-      top: 50%; 
-      left: 50%; 
-      transform: translate(-50%, -50%); 
-      font-size: 12px; 
-      color: #fff; 
-      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5); 
+    .progress-text {
+      text-align: center;
+      font-size: 0.8em;
+      color: #666;
+      margin-top: 5px;
     }
     @media (max-width: 600px) {
       .container { padding: 10px; }
-      h1 { font-size: 2em; }
-      .card { padding: 20px; }
-      .btn { max-width: 100%; }
-      .small-btn { max-width: 130px; }
-      .button-group { gap: 10px; }
-      .toggle-container { gap: 10px; }
+      .card { padding: 15px; }
+      .card-title { font-size: 1.2em; }
+      .cute-button { padding: 8px 15px; font-size: 0.9em; }
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>订阅管理中心</h1>
     <div class="card">
-      <h3>订阅链接</h3>
-      <div class="link-container">
-        <p>${小猫}${咪}：<a href="https${符号}${hostName}/${订阅路径}/${小猫}${咪}">https${符号}${hostName}/${订阅路径}/${小猫}${咪}</a></p>
-        <p>${歪兔}${蕊蒽}：<a href="https${符号}${hostName}/${订阅路径}/${歪兔}${蕊蒽}">https${符号}${hostName}/${订阅路径}/${歪兔}${蕊蒽}</a></p>
-      </div>
+      <h1 class="card-title">✨ 欢迎来到订阅乐园 ✨</h1>
+      <p style="text-align: center; color: #666;">支持 <span style="color: #ff69b4;">${小猫}${咪}</span> 和 <span style="color: #ffa07a;">${歪兔}${蕊蒽}</span> 客户端哦！</p>
     </div>
     <div class="card">
-      <h3>快速导入</h3>
+      <h2 class="card-title">🐾 ${小猫}${咪} 订阅</h2>
+      <div class="link-box">
+        <p>订阅链接：<br><a href="https${符号}${hostName}/${订阅路径}/${小猫}${咪}">https${符号}${hostName}/${订阅路径}/${小猫}${咪}</a></p>
+      </div>
       <div class="button-group">
-        <button class="small-btn" onclick="导入小猫咪('${订阅路径}', '${hostName}')">
-          <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17v-2h2v2h-2zm1-3c-2.76 0-5-2.24-5-5h2c0 1.66 1.34 3 3 3s3-1.34 3-3h2c0 2.76-2.24 5-5 5z"/></svg>
-          导入${小猫}${咪}
-        </button>
-        <button class="small-btn" onclick="导入${歪兔}${蕊蒽}('${订阅路径}', '${hostName}')">
-          <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/></svg>
-          导入${歪兔}${蕊蒽}
-        </button>
+        <button class="cute-button clash-btn" onclick="导入小猫咪('${订阅路径}', '${hostName}')">一键导入</button>
       </div>
     </div>
     <div class="card">
-      <h3>设置</h3>
-      <form id="settingsForm" action="/${订阅路径}/update-settings" method="POST">
-        <div class="toggle-container">
-          <span class="toggle-label">反代开关</span>
-          <label class="toggle-switch">
-            <input type="checkbox" name="proxy" ${启用反代 ? 'checked' : ''}>
-            <span class="slider"></span>
-          </label>
-        </div>
-        <div class="toggle-container">
-          <span class="toggle-label">SOCKS5 开关</span>
-          <label class="toggle-switch">
-            <input type="checkbox" name="socks5" ${启用SOCKS5 ? 'checked' : ''}>
-            <span class="slider"></span>
-          </label>
-        </div>
-        <div>
-          <textarea name="txtPaths" placeholder="一行一个域名">${当前TXT路径}</textarea>
-        </div>
-        <button type="submit" class="btn" style="margin-top: 15px;">保存设置</button>
-      </form>
+      <h2 class="card-title">🐰 ${歪兔}${蕊蒽} 订阅</h2>
+      <div class="link-box">
+        <p>订阅链接：<br><a href="https${符号}${hostName}/${订阅路径}/${歪兔}${蕊蒽}">https${符号}${hostName}/${订阅路径}/${歪兔}${蕊蒽}</a></p>
+      </div>
+      <div class="button-group">
+        <button class="cute-button v2ray-btn" onclick="导入${歪兔}${蕊蒽}('${订阅路径}', '${hostName}')">一键导入</button>
+      </div>
     </div>
-    <div class="card">
-      <h3>上传优选 IP</h3>
-      <form id="uploadForm" action="/${订阅路径}/upload" method="POST" enctype="multipart/form-data" class="upload-container">
-        <label for="ipFiles" class="upload-label">
-          <svg viewBox="0 0 24 24"><path d="M19 7v2.99s-1.99.01-2 0V7h-3s.01-1.99 0-2h3V2h2v5zm-3 4V8h-3V5H5c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-8h-3zM5 19l3-4 2 3 3-4 4 5H5z"/></svg>
-          选择文件
-        </label>
-        <input type="file" id="ipFiles" name="ipFiles" accept=".txt" multiple required onchange="显示文件()">
+    <div class="card upload-card">
+      <h2 class="upload-title">🌟 上传优选 IP</h2>
+      <form id="uploadForm" action="/${订阅路径}/upload" method="POST" enctype="multipart/form-data">
+        <label for="ipFiles" class="upload-label">选择文件</label>
+        <input type="file" id="ipFiles" name="ipFiles" accept=".txt" multiple required onchange="显示文件()" style="display: none;">
         <div class="file-list" id="fileList"></div>
-        <button type="submit" class="btn" onclick="开始上传(event)">上传</button>
+        <button type="submit" class="upload-submit" onclick="开始上传(event)">上传</button>
         <div class="progress-container" id="progressContainer">
           <div class="progress-bar">
             <div class="progress-fill" id="progressFill"></div>
-            <span class="progress-text" id="progressText">0%</span>
           </div>
+          <div class="progress-text" id="progressText">0%</div>
         </div>
       </form>
     </div>
     <div class="card">
-      <h3>账户管理</h3>
       <div class="button-group">
-        <a href="/${订阅路径}/logout" class="btn logout-btn">退出登录</a>
+        <a href="/${订阅路径}/logout" class="cute-button logout-btn">退出登录</a>
       </div>
     </div>
   </div>
   <script>
-    function 导入小猫咪(订阅路径, hostName) { window.location.href = '${小猫}${咪}://install-config?url=https://' + hostName + '/${订阅路径}/${小猫}${咪}'; }
-    function 导入${歪兔}${蕊蒽}(订阅路径, hostName) { window.location.href = '${歪兔}${蕊蒽}://install-config?url=https://' + hostName + '/${订阅路径}/${歪兔}${蕊蒽}'; }
+    function 导入小猫咪(订阅路径, hostName) {
+      window.location.href = '${小猫}${咪}://install-config?url=https://' + hostName + '/${订阅路径}/${小猫}${咪}';
+    }
+    function 导入${歪兔}${蕊蒽}(订阅路径, hostName) {
+      window.location.href = '${歪兔}${蕊蒽}://install-config?url=https://' + hostName + '/${订阅路径}/${歪兔}${蕊蒽}';
+    }
     function 显示文件() {
       const fileInput = document.getElementById('ipFiles');
       const fileList = document.getElementById('fileList');
@@ -811,7 +662,7 @@ function 生成订阅页面(订阅路径, hostName) {
       Array.from(fileInput.files).forEach((file, index) => {
         const div = document.createElement('div');
         div.className = 'file-item';
-        div.innerHTML = \`<span>\${file.name} (\${(file.size / 1024).toFixed(2)} KB)</span><button class="small-btn" onclick="移除文件(\${index})">移除</button>\`;
+        div.innerHTML = \`<span>\${file.name} (\${(file.size / 1024).toFixed(2)} KB)</span><button onclick="移除文件(\${index})">移除</button>\`;
         fileList.appendChild(div);
       });
     }
@@ -831,7 +682,7 @@ function 生成订阅页面(订阅路径, hostName) {
       const formData = new FormData(form);
 
       if (!formData.getAll('ipFiles').length) {
-        alert('请先选择文件！');
+        alert('请先选择文件哦！');
         return;
       }
 
@@ -856,41 +707,30 @@ function 生成订阅页面(订阅路径, hostName) {
         try {
           const response = JSON.parse(xhr.responseText);
           if (xhr.status === 200) {
-            alert(response.message);
-            setTimeout(() => location.reload(), 500);
+            if (response.message) {
+              setTimeout(() => {
+                alert(response.message);
+                window.location.href = response.Location || '/${订阅路径}';
+              }, 500);
+            } else {
+              throw new Error('响应格式错误');
+            }
           } else {
             throw new Error(response.error || '未知错误');
           }
         } catch (err) {
           progressContainer.style.display = 'none';
-          alert(\`上传失败，状态码: \${xhr.status}，原因: \${err.message}\`);
+          alert(\`上传失败啦，状态码: \${xhr.status}，原因: \${err.message}\`);
         }
       };
 
       xhr.onerror = function() {
         progressContainer.style.display = 'none';
-        alert('上传出错，请检查网络后重试！');
+        alert('上传出错啦，可能是网络问题，请检查后重试！');
       };
 
       xhr.send(formData);
     }
-
-    document.getElementById('settingsForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const formData = new FormData(e.target);
-      try {
-        const response = await fetch('/${订阅路径}/update-settings', { method: 'POST', body: formData });
-        const result = await response.json();
-        if (response.ok) {
-          alert(result.message);
-          location.reload();
-        } else {
-          alert(result.error || '保存设置失败');
-        }
-      } catch (error) {
-        alert('网络错误，请稍后重试');
-      }
-    });
   </script>
 </body>
 </html>
@@ -904,46 +744,137 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body { background: url('${背景壁纸}') no-repeat center center fixed; background-size: cover; font-family: 'Segoe UI', Arial, sans-serif; margin: 0; min-height: 100vh; display: flex; justify-content: center; align-items: center; }
-    .card { background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); padding: 30px; border-radius: 20px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2); max-width: 400px; width: 90%; text-align: center; color: #fff; }
-    h1 { font-size: 2em; color: #00e676; margin-bottom: 20px; }
-    form { display: flex; flex-direction: column; gap: 15px; }
-    input { padding: 12px; border: none; border-radius: 10px; background: rgba(255, 255, 255, 0.2); color: #fff; font-size: 16px; transition: all 0.3s; }
-    input:focus { outline: none; background: rgba(255, 255, 255, 0.3); box-shadow: 0 0 10px rgba(0, 230, 118, 0.5); }
-    button { padding: 12px; background: linear-gradient(135deg, #00e676, #00c853); border: none; border-radius: 10px; color: #fff; font-size: 16px; cursor: pointer; transition: all 0.3s; text-align: center; }
-    button:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0, 230, 118, 0.5); }
-    .error { color: #ff5252; margin-top: 10px; font-size: 14px; }
-    .lock-message { color: #ff5252; margin-top: 20px; font-size: 1.2em; }
+    body {
+      background-image: url('${背景壁纸}');
+      background-size: cover;
+      background-position: center;
+      background-attachment: fixed;
+      background-repeat: no-repeat;
+      font-family: 'Comic Sans MS', 'Arial', sans-serif;
+      color: #333;
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .content {
+      background: rgba(255, 255, 255, 0.9);
+      padding: 30px;
+      border-radius: 20px;
+      max-width: 400px;
+      width: 90%;
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+      text-align: center;
+    }
+    h1 {
+      font-size: 1.8em;
+      color: #ff6f91;
+      text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+      margin-bottom: 20px;
+    }
+    .login-form {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      width: 100%;
+      max-width: 320px;
+      margin: 0 auto;
+    }
+    .login-form input {
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid #ddd;
+      background: #fff;
+      font-size: 1em;
+      width: 100%;
+      box-sizing: border-box;
+      transition: border-color 0.3s ease;
+    }
+    .login-form input:focus {
+      border-color: #ff6f91;
+      outline: none;
+    }
+    .login-form button {
+      padding: 12px;
+      background: linear-gradient(to right, #ffb6c1, #ff69b4);
+      color: white;
+      border: none;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 1em;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    .login-form button:hover {
+      transform: scale(1.05);
+      box-shadow: 0 5px 10px rgba(0, 0, 0, 0.2);
+    }
+    .error-message {
+      color: #ff6666;
+      margin-top: 10px;
+      font-size: 0.9em;
+      animation: shake 0.5s ease-in-out;
+    }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-5px); }
+      50% { transform: translateX(5px); }
+      75% { transform: translateX(-5px); }
+    }
+    .lock-message {
+      color: #ff6666;
+      margin-top: 20px;
+      font-size: 1.1em;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    @media (max-width: 600px) {
+      .content { padding: 20px; }
+      h1 { font-size: 1.5em; }
+    }
   </style>
 </head>
 <body>
-  <div class="card">
-    <h1>请登录</h1>
+  <div class="content">
+    <h1>🌸 请登录路由器 🌸</h1>
     ${锁定状态 ? `
     <div class="lock-message">
-      登录失败次数过多，请等待 <span id="countdown">${剩余时间}</span> 秒。
+      登录失败次数过多，请等待 <span id="countdown" aria-live="polite">${剩余时间}</span> 秒后再试。
     </div>
     ` : `
-    <form action="/login/submit" method="POST">
-      <input type="text" name="username" placeholder="账号" required>
-      <input type="password" name="password" placeholder="密码" required>
+    <form class="login-form" action="/login/submit" method="POST">
+      <input type="text" id="username" name="username" placeholder="账号" required>
+      <input type="password" id="password" name="password" placeholder="密码" required>
       <button type="submit">登录</button>
     </form>
-    ${输错密码 && 剩余次数 > 0 ? `<div class="error">账号或密码错误，剩余尝试次数：${剩余次数}</div>` : ''}
+    ${输错密码 && 剩余次数 > 0 ? `<div class="error-message">账号或密码错误，剩余尝试次数：${剩余次数} 次。</div>` : ''}
     `}
   </div>
   <script>
     if (${锁定状态}) {
       const countdownElement = document.getElementById('countdown');
-      let timeLeft = ${剩余时间};
-      const timer = setInterval(() => {
-        timeLeft--;
-        countdownElement.textContent = timeLeft;
-        if (timeLeft <= 0) {
+      const storageKey = 'lockEndTime';
+      let lockEndTime = localStorage.getItem(storageKey) || (Date.now() + ${剩余时间} * 1000);
+      localStorage.setItem(storageKey, lockEndTime);
+      lockEndTime = Number(lockEndTime);
+
+      function updateCountdown() {
+        const remainingTime = Math.ceil((lockEndTime - Date.now()) / 1000);
+        if (remainingTime > 0) countdownElement.textContent = remainingTime;
+        else {
           clearInterval(timer);
+          localStorage.removeItem(storageKey);
           fetch('/reset-login-failures', { method: 'POST' }).then(() => window.location.reload());
         }
-      }, 1000);
+      }
+
+      let timer = setInterval(updateCountdown, 1000);
+      updateCountdown();
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') updateCountdown(); });
+      window.addEventListener('load', () => { if (localStorage.getItem(storageKey)) updateCountdown(); });
     }
   </script>
 </body>
@@ -958,16 +889,61 @@ function 生成KV未绑定提示页面() {
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body { background: url('${背景壁纸}') no-repeat center center fixed; background-size: cover; font-family: 'Segoe UI', Arial, sans-serif; margin: 0; min-height: 100vh; display: flex; justify-content: center; align-items: center; }
-    .card { background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); padding: 30px; border-radius: 20px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2); max-width: 600px; width: 90%; text-align: center; color: #fff; }
-    h1 { font-size: 2em; color: #ff5252; margin-bottom: 20px; }
-    p { font-size: 1.2em; line-height: 1.5; }
+    body {
+      background-image: url('${背景壁纸}');
+      background-size: cover;
+      background-position: center;
+      background-attachment: fixed;
+      background-repeat: no-repeat;
+      font-family: 'Comic Sans MS', 'Arial', sans-serif;
+      color: #333;
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .content {
+      background: rgba(255, 255, 255, 0.9);
+      padding: 30px;
+      border-radius: 20px;
+      max-width: 600px;
+      width: 90%;
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+      text-align: center;
+    }
+    h1 {
+      font-size: 1.8em;
+      color: #ff6666;
+      text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+      margin-bottom: 20px;
+    }
+    p {
+      font-size: 1.1em;
+      line-height: 1.5;
+      color: #666;
+    }
+    .highlight {
+      color: #ff6f91;
+      font-weight: bold;
+    }
+    .instruction {
+      margin-top: 20px;
+      font-size: 1em;
+      color: #87ceeb;
+    }
+    @media (max-width: 600px) {
+      .content { padding: 20px; }
+      h1 { font-size: 1.5em; }
+      p { font-size: 1em; }
+    }
   </style>
 </head>
 <body>
-  <div class="card">
-    <h1>未绑定 KV 存储空间</h1>
-    <p>请在 Cloudflare Workers 设置中绑定一个 KV 命名空间（如 LOGIN_STATE），然后重新部署服务。</p>
+  <div class="content">
+    <h1>❌ 未绑定 KV 存储空间</h1>
+    <p>当前服务未检测到已绑定的 <span class="highlight">Cloudflare KV 存储空间</span>。<br>请在 <span class="highlight">Cloudflare Workers</span> 设置中绑定一个 KV 命名空间（如 <span class="highlight">LOGIN_STATE</span>），然后重新部署服务以正常使用。</p>
+    <div class="instruction">绑定 KV 后，请访问 <span class="highlight">/config</span> 路径进入订阅界面哦！</div>
   </div>
 </body>
 </html>
