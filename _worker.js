@@ -127,7 +127,7 @@ export default {
     try {
       if (!env.LOGIN_STATE) return 创建HTML响应(生成KV未绑定提示页面());
 
-      // 初始化时从 KV 读取设置
+      // 从 KV 读取开关状态
       const 代理状态 = await env.LOGIN_STATE.get('proxy_enabled');
       const SOCKS5状态 = await env.LOGIN_STATE.get('socks5_enabled');
       启用反代 = 代理状态 === 'true' ? true : 代理状态 === 'false' ? false : 启用反代;
@@ -226,6 +226,13 @@ export default {
             await env.LOGIN_STATE.put('proxy_enabled', String(启用反代));
             await env.LOGIN_STATE.put('socks5_enabled', String(启用SOCKS5));
             优选TXT路径 = 新TXT路径;
+            // 强制更新配置
+            await 加载节点和配置(env, hostName);
+            const 新版本 = String(Date.now());
+            await env.LOGIN_STATE.put('config_clash', 生成猫咪配置(hostName), { expirationTtl: 86400 });
+            await env.LOGIN_STATE.put('config_clash_version', 新版本);
+            await env.LOGIN_STATE.put('config_v2ray', 生成备用配置(hostName), { expirationTtl: 86400 });
+            await env.LOGIN_STATE.put('config_v2ray_version', 新版本);
             return 创建JSON响应({ message: '设置已更新' }, 200);
           case `/${订阅路径}/upload`:
             const uploadToken = 请求.headers.get('Cookie')?.split('=')[1];
@@ -269,9 +276,8 @@ export default {
       } else if (请求头 === 'websocket') {
         反代地址 = env.PROXYIP || 反代地址;
         SOCKS5账号 = env.SOCKS5 || SOCKS5账号;
-        启用SOCKS5 = env.SOCKS5OPEN === 'true' ? true : env.SOCKS5OPEN === 'false' ? false : 启用SOCKS5;
         启用全局SOCKS5 = env.SOCKS5GLOBAL === 'true' ? true : env.SOCKS5GLOBAL === 'false' ? false : 启用全局SOCKS5;
-        return await 升级请求(请求);
+        return await 升级请求(请求, 启用反代, 启用SOCKS5, 反代地址, SOCKS5账号, 启用全局SOCKS5);
       }
     } catch (error) {
       console.error(`全局错误: ${error.message}`);
@@ -281,11 +287,11 @@ export default {
 };
 
 // WebSocket 相关函数
-async function 升级请求(请求) {
+async function 升级请求(请求, 启用反代, 启用SOCKS5, 反代地址, SOCKS5账号, 启用全局SOCKS5) {
   const 创建接口 = new WebSocketPair();
   const [客户端, 服务端] = Object.values(创建接口);
   服务端.accept();
-  const 结果 = await 解析头(解密(请求.headers.get('sec-websocket-protocol')));
+  const 结果 = await 解析头(解密(请求.headers.get('sec-websocket-protocol')), 启用反代, 启用SOCKS5, 反代地址, SOCKS5账号, 启用全局SOCKS5);
   if (!结果) return new Response('Invalid request', { status: 400 });
   const { TCP接口, 初始数据 } = 结果;
   建立管道(服务端, TCP接口, 初始数据);
@@ -297,9 +303,12 @@ function 解密(混淆字符) {
   return Uint8Array.from(atob(混淆字符), c => c.charCodeAt(0)).buffer;
 }
 
-async function 解析头(数据) {
+async function 解析头(数据, 启用反代, 启用SOCKS5, 反代地址, SOCKS5账号, 启用全局SOCKS5) {
   const 数据数组 = new Uint8Array(数据);
-  if (验证密钥(数据数组.slice(1, 17)) !== 开门锁匙) return null;
+  if (验证密钥(数据数组.slice(1, 17)) !== 开门锁匙) {
+    console.error('密钥验证失败');
+    return null;
+  }
 
   const 数据定位 = 数据数组[17];
   const 端口 = new DataView(数据.slice(18 + 数据定位 + 1, 20 + 数据定位 + 1)).getUint16(0);
@@ -317,22 +326,48 @@ async function 解析头(数据) {
     case 3:
       地址 = Array.from({ length: 8 }, (_, i) => new DataView(数据.slice(地址信息索引, 地址信息索引 + 16)).getUint16(i * 2).toString(16)).join(':');
       break;
-    default: return null;
+    default:
+      console.error('未知地址类型:', 地址类型);
+      return null;
   }
 
   const 初始数据 = 数据.slice(地址信息索引 + (地址类型 === 2 ? 数据数组[地址信息索引] + 1 : 地址类型 === 1 ? 4 : 16));
   let TCP接口;
+  console.log(`连接目标: ${地址}:${端口}, 反代: ${启用反代}, SOCKS5: ${启用SOCKS5}, 全局SOCKS5: ${启用全局SOCKS5}`);
+
   if (启用反代 && 启用SOCKS5 && 启用全局SOCKS5) {
-    TCP接口 = await 创建SOCKS5(地址类型, 地址, 端口);
+    TCP接口 = await 创建SOCKS5(地址类型, 地址, 端口, SOCKS5账号);
+    if (TCP接口 instanceof Response) {
+      console.error('SOCKS5 创建失败');
+      return null;
+    }
   } else {
     try {
       TCP接口 = connect({ hostname: 地址, port: 端口 });
       await TCP接口.opened;
-    } catch {
+      console.log('直接连接成功');
+    } catch (错误) {
+      console.error(`直接连接失败: ${错误.message}`);
       if (启用反代) {
-        TCP接口 = 启用SOCKS5
-          ? await 创建SOCKS5(地址类型, 地址, 端口)
-          : connect({ hostname: 反代地址.split(':')[0], port: 反代地址.split(':')[1] || 端口 });
+        if (启用SOCKS5) {
+          TCP接口 = await 创建SOCKS5(地址类型, 地址, 端口, SOCKS5账号);
+          if (TCP接口 instanceof Response) {
+            console.error('SOCKS5 创建失败');
+            return null;
+          }
+        } else {
+          try {
+            const [反代主机, 反代端口] = 反代地址.split(':');
+            TCP接口 = connect({ hostname: 反代主机, port: 反代端口 || 端口 });
+            await TCP接口.opened;
+            console.log('反代连接成功');
+          } catch (错误) {
+            console.error(`反代连接失败: ${错误.message}`);
+            return null;
+          }
+        }
+      } else {
+        return null;
       }
     }
   }
@@ -367,12 +402,13 @@ async function 建立管道(服务端, TCP接口, 初始数据) {
   }));
 }
 
-async function 创建SOCKS5(地址类型, 地址, 端口) {
+async function 创建SOCKS5(地址类型, 地址, 端口, SOCKS5账号) {
   const { username, password, hostname, port } = await 解析SOCKS5账号(SOCKS5账号);
   const SOCKS5接口 = connect({ hostname, port });
   try {
     await SOCKS5接口.opened;
   } catch {
+    console.error(`SOCKS5 连接失败: ${hostname}:${port}`);
     return new Response('SOCKS5未连通', { status: 400 });
   }
   const writer = SOCKS5接口.writable.getWriter();
