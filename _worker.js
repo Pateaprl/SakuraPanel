@@ -1,5 +1,6 @@
 import { connect } from 'cloudflare:sockets';
 
+// 保留Bug版所有全局变量
 let 订阅路径 = "config";
 let 开门锁匙 = "03978e2f-2129-4c0c-8f15-22175dd0aba6";
 let 优选TXT路径 = [
@@ -28,7 +29,7 @@ let 歪兔 = 'v2';
 let 蕊蒽 = 'rayN';
 let 背景壁纸 = 'https://raw.githubusercontent.com/Alien-Et/ips/refs/heads/main/image/night.jpg';
 
-// 创建响应函数
+// 创建响应函数保持不变
 function 创建HTML响应(内容, 状态码 = 200) {
   return new Response(内容, {
     status: 状态码,
@@ -61,9 +62,11 @@ function 创建JSON响应(数据, 状态码 = 200, 额外头 = {}) {
   });
 }
 
-// 加载节点和配置（优化错误处理并兼容手动和远程节点）
+// 优化节点加载逻辑，参考开发版
 async function 加载节点和配置(env, hostName) {
   try {
+    const txtPaths = await env.LOGIN_STATE.get('txt_paths');
+    优选TXT路径 = txtPaths ? JSON.parse(txtPaths) : 优选TXT路径;
     const 手动节点缓存 = await env.LOGIN_STATE.get('manual_preferred_ips');
     let 手动节点列表 = 手动节点缓存 ? JSON.parse(手动节点缓存).map(line => line.trim()).filter(Boolean) : [];
 
@@ -125,7 +128,10 @@ async function 检查锁定(env, 设备标识) {
   const 锁定时间戳 = await env.LOGIN_STATE.get(`lock_${设备标识}`);
   const 当前时间 = Date.now();
   const 被锁定 = 锁定时间戳 && 当前时间 < Number(锁定时间戳);
-  return { 被锁定, 剩余时间: 被锁定 ? Math.ceil((Number(锁定时间戳) - 当前时间) / 1000) : 0 };
+  return {
+    被锁定,
+    剩余时间: 被锁定 ? Math.ceil((Number(锁定时间戳) - 当前时间) / 1000) : 0
+  };
 }
 
 export default {
@@ -194,10 +200,14 @@ export default {
           case `/${订阅路径}/upload`:
             const uploadToken = 请求.headers.get('Cookie')?.split('=')[1];
             const 有效UploadToken = await env.LOGIN_STATE.get('current_token');
-            if (!uploadToken || uploadToken !== 有效UploadToken) return 创建JSON响应({ error: '未登录或Token无效' }, 401);
+            if (!uploadToken || uploadToken !== 有效UploadToken) {
+              return 创建JSON响应({ error: '未登录或Token无效，请重新登录' }, 401);
+            }
             formData = await 请求.formData();
             const ipFiles = formData.getAll('ipFiles');
-            if (!ipFiles || ipFiles.length === 0) return 创建JSON响应({ error: '未选择任何文件' }, 400);
+            if (!ipFiles || ipFiles.length === 0) {
+              return 创建JSON响应({ error: '未选择任何文件' }, 400);
+            }
             let allIpList = [];
             try {
               for (const ipFile of ipFiles) {
@@ -207,12 +217,16 @@ export default {
                 if (ipList.length === 0) console.warn(`文件 ${ipFile.name} 内容为空`);
                 allIpList = allIpList.concat(ipList);
               }
-              if (allIpList.length === 0) return 创建JSON响应({ error: '所有上传文件内容为空' }, 400);
+              if (allIpList.length === 0) {
+                return 创建JSON响应({ error: '所有上传文件内容为空' }, 400);
+              }
               const uniqueIpList = [...new Set(allIpList)];
               const 当前手动节点 = await env.LOGIN_STATE.get('manual_preferred_ips');
               const 当前节点列表 = 当前手动节点 ? JSON.parse(当前手动节点) : [];
               const 是重复上传 = JSON.stringify(当前节点列表.sort()) === JSON.stringify(uniqueIpList.sort());
-              if (是重复上传) return 创建JSON响应({ message: '上传内容与现有节点相同，无需更新' }, 200);
+              if (是重复上传) {
+                return 创建JSON响应({ message: '上传内容与现有节点相同，无需更新' }, 200);
+              }
               await env.LOGIN_STATE.put('manual_preferred_ips', JSON.stringify(uniqueIpList), { expirationTtl: 86400 });
               const 新版本 = String(Date.now());
               await env.LOGIN_STATE.put('ip_preferred_ips_version', 新版本);
@@ -220,7 +234,7 @@ export default {
               await env.LOGIN_STATE.put('config_clash_version', 新版本);
               await env.LOGIN_STATE.put('config_v2ray', 生成备用配置(hostName), { expirationTtl: 86400 });
               await env.LOGIN_STATE.put('config_v2ray_version', 新版本);
-              return 创建JSON响应({ message: '上传成功' }, 200);
+              return 创建JSON响应({ message: '上传成功，即将跳转' }, 200, { 'Location': `/${订阅路径}` });
             } catch (错误) {
               console.error(`上传处理失败: ${错误.message}`);
               return 创建JSON响应({ error: `上传处理失败: ${错误.message}` }, 500);
@@ -231,6 +245,7 @@ export default {
             return fetch(new Request(url, 请求));
         }
       } else if (请求头 === 'websocket') {
+        // 参考开发版的WebSocket处理逻辑
         反代地址 = env.PROXYIP || 反代地址;
         SOCKS5账号 = env.SOCKS5 || SOCKS5账号;
         启用SOCKS5 = env.SOCKS5OPEN === 'true' ? true : env.SOCKS5OPEN === 'false' ? false : 启用SOCKS5;
@@ -244,27 +259,27 @@ export default {
   }
 };
 
-// WebSocket相关函数（参考天书开发版优化）
+// WebSocket相关函数，参考开发版优化
 async function 升级请求(请求, 启用反代, 启用SOCKS5, 反代地址, SOCKS5账号, 启用全局SOCKS5) {
   const 创建接口 = new WebSocketPair();
   const [客户端, 服务端] = Object.values(创建接口);
   服务端.accept();
   const 结果 = await 解析头(解密(请求.headers.get('sec-websocket-protocol')), 启用反代, 启用SOCKS5, 反代地址, SOCKS5账号, 启用全局SOCKS5);
-  if (!结果) return new Response('Invalid request', { status: 400 });
+  if (!结果) return new Response('Invalid WebSocket request', { status: 400 });
   const { TCP接口, 初始数据 } = 结果;
   建立管道(服务端, TCP接口, 初始数据);
   return new Response(null, { status: 101, webSocket: 客户端 });
 }
 
 function 解密(混淆字符) {
-  混淆字符 = 混淆字符.replace(/-/g, '+').replace(/_/g, '/');
+  混淆字符 = 混淆字符?.replace(/-/g, '+').replace(/_/g, '/') || '';
   return Uint8Array.from(atob(混淆字符), c => c.charCodeAt(0)).buffer;
 }
 
 async function 解析头(数据, 启用反代, 启用SOCKS5, 反代地址, SOCKS5账号, 启用全局SOCKS5) {
   const 数据数组 = new Uint8Array(数据);
-  if (验证密钥(数据数组.slice(1, 17)) !== 开门锁匙) {
-    console.error('密钥验证失败');
+  if (数据数组.length < 18 || 验证密钥(数据数组.slice(1, 17)) !== 开门锁匙) {
+    console.error('密钥验证失败或数据长度不足');
     return null;
   }
 
@@ -276,7 +291,9 @@ async function 解析头(数据, 启用反代, 启用SOCKS5, 反代地址, SOCKS
   const 地址信息索引 = 地址索引 + 1;
 
   switch (地址类型) {
-    case 1: 地址 = new Uint8Array(数据.slice(地址信息索引, 地址信息索引 + 4)).join('.'); break;
+    case 1: 
+      地址 = new Uint8Array(数据.slice(地址信息索引, 地址信息索引 + 4)).join('.'); 
+      break;
     case 2:
       const 地址长度 = 数据数组[地址信息索引];
       地址 = new TextDecoder().decode(数据.slice(地址信息索引 + 1, 地址信息索引 + 1 + 地址长度));
@@ -295,10 +312,7 @@ async function 解析头(数据, 启用反代, 启用SOCKS5, 反代地址, SOCKS
 
   if (启用反代 && 启用SOCKS5 && 启用全局SOCKS5) {
     TCP接口 = await 创建SOCKS5(地址类型, 地址, 端口, SOCKS5账号);
-    if (TCP接口 instanceof Response) {
-      console.error('SOCKS5 创建失败');
-      return null;
-    }
+    if (TCP接口 instanceof Response) return null;
   } else {
     try {
       TCP接口 = connect({ hostname: 地址, port: 端口 });
@@ -309,10 +323,7 @@ async function 解析头(数据, 启用反代, 启用SOCKS5, 反代地址, SOCKS
       if (启用反代) {
         if (启用SOCKS5) {
           TCP接口 = await 创建SOCKS5(地址类型, 地址, 端口, SOCKS5账号);
-          if (TCP接口 instanceof Response) {
-            console.error('SOCKS5 创建失败');
-            return null;
-          }
+          if (TCP接口 instanceof Response) return null;
         } else {
           try {
             const [反代主机, 反代端口] = 反代地址.split(':');
@@ -333,7 +344,7 @@ async function 解析头(数据, 启用反代, 启用SOCKS5, 反代地址, SOCKS
 }
 
 function 验证密钥(arr) {
-  return Array.from(arr.slice(0, 16), b => b.toString(16).padStart(2, '0')).join('').match(/(.{8})(.{4})(.{4})(.{4})(.{12})/).slice(1).join('-').toLowerCase();
+  return Array.from(arr.slice(0, 16), b => b.toString(16).padStart(2, '0')).join('').match(/(.{8})(.{4})(.{4})(.{4})(.{12})/)?.slice(1).join('-').toLowerCase() || '';
 }
 
 async function 建立管道(服务端, TCP接口, 初始数据) {
@@ -352,12 +363,13 @@ async function 建立管道(服务端, TCP接口, 初始数据) {
       await 写入器.write(数据);
       写入器.releaseLock();
     }
-  }));
+  })).catch(err => console.error('PipeTo writable error:', err));
+  
   TCP接口.readable.pipeTo(new WritableStream({
     async write(数据) {
       await 服务端.send(数据);
     }
-  }));
+  })).catch(err => console.error('PipeTo readable error:', err));
 }
 
 async function 创建SOCKS5(地址类型, 地址, 端口, SOCKS5账号) {
@@ -412,7 +424,7 @@ async function 解析SOCKS5账号(SOCKS5) {
   return { username, password, hostname, port };
 }
 
-// UI页面
+// UI页面保持Bug版原样
 function 生成订阅页面(订阅路径, hostName) {
   return `
 <!DOCTYPE html>
@@ -539,8 +551,14 @@ function 生成订阅页面(订阅路径, hostName) {
         try {
           const response = JSON.parse(xhr.responseText);
           if (xhr.status === 200) {
-            alert(response.message);
-            setTimeout(() => location.reload(), 500);
+            if (response.message) {
+              setTimeout(() => {
+                alert(response.message);
+                window.location.href = response.Location || '/${订阅路径}';
+              }, 500);
+            } else {
+              throw new Error('响应格式错误');
+            }
           } else {
             throw new Error(response.error || '未知错误');
           }
@@ -552,7 +570,7 @@ function 生成订阅页面(订阅路径, hostName) {
 
       xhr.onerror = function() {
         progressContainer.style.display = 'none';
-        alert('上传出错，请检查网络后重试！');
+        alert('上传出错，可能是网络问题，请检查网络后重试！');
       };
 
       xhr.send(formData);
@@ -591,7 +609,7 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
     <h1>请登录路由器界面</h1>
     ${锁定状态 ? `
     <div class="lock-message">
-      登录失败次数过多，请等待 <span id="countdown">${剩余时间}</span> 秒后再试。
+      登录失败次数过多，请等待 <span id="countdown" aria-live="polite">${剩余时间}</span> 秒后再试。
     </div>
     ` : `
     <form class="login-form" action="/login/submit" method="POST">
@@ -605,15 +623,25 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
   <script>
     if (${锁定状态}) {
       const countdownElement = document.getElementById('countdown');
-      let timeLeft = ${剩余时间};
-      const timer = setInterval(() => {
-        timeLeft--;
-        countdownElement.textContent = timeLeft;
-        if (timeLeft <= 0) {
+      const storageKey = 'lockEndTime';
+      let lockEndTime = localStorage.getItem(storageKey) || (Date.now() + ${剩余时间} * 1000);
+      localStorage.setItem(storageKey, lockEndTime);
+      lockEndTime = Number(lockEndTime);
+
+      function updateCountdown() {
+        const remainingTime = Math.ceil((lockEndTime - Date.now()) / 1000);
+        if (remainingTime > 0) countdownElement.textContent = remainingTime;
+        else {
           clearInterval(timer);
+          localStorage.removeItem(storageKey);
           fetch('/reset-login-failures', { method: 'POST' }).then(() => window.location.reload());
         }
-      }, 1000);
+      }
+
+      let timer = setInterval(updateCountdown, 1000);
+      updateCountdown();
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') updateCountdown(); });
+      window.addEventListener('load', () => { if (localStorage.getItem(storageKey)) updateCountdown(); });
     }
   </script>
 </body>
@@ -648,24 +676,26 @@ function 生成KV未绑定提示页面() {
   `;
 }
 
-// 修复Clash配置生成，确保兼容手机客户端并解决timeout问题
+// 优化Clash配置生成，修复timeout问题，参考开发版
 function 生成猫咪配置(hostName) {
   const 节点列表 = 优选节点.length ? 优选节点 : [`${hostName}:443`];
   const 郭嘉分组 = {};
 
   节点列表.forEach((节点, 索引) => {
     const [主内容, tls] = 节点.split("@");
-    const [地址端口, 节点名字 = 节点名称] = 主内容.split("#");
+    const [地址端口, 节点名字 = `${节点名称}-${索引 + 1}`] = 主内容.split("#");
     const [, 地址, 端口 = "443"] = 地址端口.match(/^\[(.*?)\](?::(\d+))?$/) || 地址端口.match(/^(.*?)(?::(\d+))?$/);
-    const 修正地址 = 地址.includes(":") ? 地址.replace(/^\[|\]$/g, '') : 地址;
+    const 修正地址 = 地址?.includes(":") ? 地址.replace(/^\[|\]$/g, '') : 地址;
     const TLS开关 = tls === 'notls' ? 'false' : 'true';
     const 郭嘉 = 节点名字.split('-')[0] || '默认';
-    const 地址类型 = 修正地址.includes(":") ? "IPv6" : "IPv4";
+    const 地址类型 = 修正地址?.includes(":") ? "IPv6" : "IPv4";
+
+    if (!修正地址) return;
 
     郭嘉分组[郭嘉] = 郭嘉分组[郭嘉] || { IPv4: [], IPv6: [] };
     郭嘉分组[郭嘉][地址类型].push({
-      name: `${节点名字}-${郭嘉分组[郭嘉][地址类型].length + 1}`,
-      config: `- name: "${节点名字}-${郭嘉分组[郭嘉][地址类型].length + 1}"
+      name: `${节点名字}`,
+      config: `- name: "${节点名字}"
   type: vless
   server: ${修正地址}
   port: ${端口}
@@ -678,7 +708,9 @@ function 生成猫咪配置(hostName) {
   ws-opts:
     path: "/?ed=2560"
     headers:
-      Host: ${hostName}`
+      Host: ${hostName}
+    max-early-data: 2048
+    early-data-header-name: Sec-WebSocket-Protocol`
     });
   });
 
@@ -687,9 +719,10 @@ function 生成猫咪配置(hostName) {
   const 郭嘉分组配置 = 郭嘉列表.map(郭嘉 => `
   - name: "${郭嘉}"
     type: url-test
-    url: "https://www.google.com/generate_204"
+    url: "http://www.gstatic.com/generate_204"
     interval: 300
     tolerance: 50
+    lazy: true
     proxies:
 ${[...郭嘉分组[郭嘉].IPv4, ...郭嘉分组[郭嘉].IPv6].map(n => `      - "${n.name}"`).join("\n")}
 `).join("");
@@ -703,20 +736,22 @@ log-level: info
 external-controller: 127.0.0.1:9090
 dns:
   enable: true
+  ipv6: true
   listen: 0.0.0.0:53
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
   default-nameserver:
     - 8.8.8.8
     - 1.1.1.1
-  enhanced-mode: fake-ip
-  fake-ip-range: 198.18.0.1/16
   nameserver:
-    - tls://8.8.8.8:853
-    - tls://1.1.1.1:853
+    - https://dns.google/dns-query
+    - https://cloudflare-dns.com/dns-query
   fallback:
     - tls://9.9.9.9:853
     - tls://1.0.0.1:853
   fallback-filter:
     geoip: true
+    geoip-code: CN
     ipcidr:
       - 240.0.0.0/4
 
@@ -724,25 +759,26 @@ proxies:
 ${节点配置}
 
 proxy-groups:
-  - name: "🚀节点选择"
+  - name: "🚀 节点选择"
     type: select
     proxies:
-      - "🤪自动选择"
-      - "🥰负载均衡"
+      - "🤖 自动选择"
+      - "⚖️ 负载均衡"
+      - DIRECT
 ${郭嘉列表.map(郭嘉 => `      - "${郭嘉}"`).join("\n")}
 
-  - name: "🤪自动选择"
+  - name: "🤖 自动选择"
     type: url-test
-    url: "https://www.google.com/generate_204"
+    url: "http://www.gstatic.com/generate_204"
     interval: 300
     tolerance: 50
     proxies:
 ${郭嘉列表.map(郭嘉 => `      - "${郭嘉}"`).join("\n")}
 
-  - name: "🥰负载均衡"
+  - name: "⚖️ 负载均衡"
     type: load-balance
     strategy: round-robin
-    url: "https://www.google.com/generate_204"
+    url: "http://www.gstatic.com/generate_204"
     interval: 300
     proxies:
 ${郭嘉列表.map(郭嘉 => `      - "${郭嘉}"`).join("\n")}
@@ -750,10 +786,11 @@ ${郭嘉列表.map(郭嘉 => `      - "${郭嘉}"`).join("\n")}
 ${郭嘉分组配置}
 
 rules:
+  - DOMAIN-SUFFIX,local,DIRECT
   - GEOIP,LAN,DIRECT
   - DOMAIN-SUFFIX,cn,DIRECT
   - GEOIP,CN,DIRECT
-  - MATCH,🚀节点选择
+  - MATCH,🚀 节点选择
 `;
 }
 
