@@ -5,9 +5,9 @@ let 订阅路径 = "config";
 let 开门锁匙 = uuidv4();
 let 优选TXT路径 = [];
 let 优选节点 = [];
-let 启用反代 = false;
+let 启用反代 = true;  // 硬编码：反代默认开启
 let 反代地址 = 'ts.hpc.tw';
-let 启用SOCKS5 = false;
+let 启用SOCKS5 = false;  // 硬编码：SOCKS5 默认关闭
 let 启用全局SOCKS5 = false;
 let SOCKS5账号 = '';
 let 节点名称 = '天书';
@@ -127,11 +127,11 @@ export default {
     try {
       if (!env.LOGIN_STATE) return 创建HTML响应(生成KV未绑定提示页面());
 
-      // 从 KV 读取开关状态
+      // 读取 KV 中的开关状态（仅用于 UI 显示，不影响 WebSocket）
       const 代理状态 = await env.LOGIN_STATE.get('proxy_enabled');
       const SOCKS5状态 = await env.LOGIN_STATE.get('socks5_enabled');
-      启用反代 = 代理状态 === 'true' ? true : 代理状态 === 'false' ? false : 启用反代;
-      启用SOCKS5 = SOCKS5状态 === 'true' ? true : SOCKS5状态 === 'false' ? false : 启用SOCKS5;
+      const ui启用反代 = 代理状态 === 'true' ? true : 代理状态 === 'false' ? false : 启用反代;
+      const ui启用SOCKS5 = SOCKS5状态 === 'true' ? true : SOCKS5状态 === 'false' ? false : 启用SOCKS5;
 
       const 管理员账号 = await env.LOGIN_STATE.get('admin_username');
       if (!管理员账号) {
@@ -172,7 +172,7 @@ export default {
             const SubToken = 请求.headers.get('Cookie')?.split('=')[1];
             const 有效SubToken = await env.LOGIN_STATE.get('current_token');
             if (!SubToken || SubToken !== 有效SubToken) return 创建重定向响应('/login');
-            return 创建HTML响应(生成订阅页面(订阅路径, hostName));
+            return 创建HTML响应(生成订阅页面(订阅路径, hostName, ui启用反代, ui启用SOCKS5));
           case '/login':
             const 锁定状态 = await 检查锁定(env, 设备标识);
             if (锁定状态.被锁定) return 创建HTML响应(生成登录界面(true, 锁定状态.剩余时间));
@@ -219,14 +219,13 @@ export default {
             const 有效设置Token = await env.LOGIN_STATE.get('current_token');
             if (!设置Token || 设置Token !== 有效设置Token) return 创建JSON响应({ error: '未登录' }, 401);
             formData = await 请求.formData();
-            启用反代 = formData.get('proxy') === 'on';
-            启用SOCKS5 = formData.get('socks5') === 'on';
+            const 新启用反代 = formData.get('proxy') === 'on';  // 仅保存到 KV，不影响逻辑
+            const 新启用SOCKS5 = formData.get('socks5') === 'on';  // 仅保存到 KV，不影响逻辑
             const 新TXT路径 = formData.get('txtPaths')?.split('\n').map(line => line.trim()).filter(Boolean) || [];
             await env.LOGIN_STATE.put('txt_paths', JSON.stringify(新TXT路径));
-            await env.LOGIN_STATE.put('proxy_enabled', String(启用反代));
-            await env.LOGIN_STATE.put('socks5_enabled', String(启用SOCKS5));
+            await env.LOGIN_STATE.put('proxy_enabled', String(新启用反代));
+            await env.LOGIN_STATE.put('socks5_enabled', String(新启用SOCKS5));
             优选TXT路径 = 新TXT路径;
-            // 强制更新配置
             await 加载节点和配置(env, hostName);
             const 新版本 = String(Date.now());
             await env.LOGIN_STATE.put('config_clash', 生成猫咪配置(hostName), { expirationTtl: 86400 });
@@ -277,7 +276,7 @@ export default {
         反代地址 = env.PROXYIP || 反代地址;
         SOCKS5账号 = env.SOCKS5 || SOCKS5账号;
         启用全局SOCKS5 = env.SOCKS5GLOBAL === 'true' ? true : env.SOCKS5GLOBAL === 'false' ? false : 启用全局SOCKS5;
-        return await 升级请求(请求, 启用反代, 启用SOCKS5, 反代地址, SOCKS5账号, 启用全局SOCKS5);
+        return await 升级请求(请求, 反代地址, SOCKS5账号, 启用全局SOCKS5);
       }
     } catch (error) {
       console.error(`全局错误: ${error.message}`);
@@ -287,11 +286,11 @@ export default {
 };
 
 // WebSocket 相关函数
-async function 升级请求(请求, 启用反代, 启用SOCKS5, 反代地址, SOCKS5账号, 启用全局SOCKS5) {
+async function 升级请求(请求, 反代地址, SOCKS5账号, 启用全局SOCKS5) {
   const 创建接口 = new WebSocketPair();
   const [客户端, 服务端] = Object.values(创建接口);
   服务端.accept();
-  const 结果 = await 解析头(解密(请求.headers.get('sec-websocket-protocol')), 启用反代, 启用SOCKS5, 反代地址, SOCKS5账号, 启用全局SOCKS5);
+  const 结果 = await 解析头(解密(请求.headers.get('sec-websocket-protocol')), 反代地址, SOCKS5账号, 启用全局SOCKS5);
   if (!结果) return new Response('Invalid request', { status: 400 });
   const { TCP接口, 初始数据 } = 结果;
   建立管道(服务端, TCP接口, 初始数据);
@@ -303,7 +302,7 @@ function 解密(混淆字符) {
   return Uint8Array.from(atob(混淆字符), c => c.charCodeAt(0)).buffer;
 }
 
-async function 解析头(数据, 启用反代, 启用SOCKS5, 反代地址, SOCKS5账号, 启用全局SOCKS5) {
+async function 解析头(数据, 反代地址, SOCKS5账号, 启用全局SOCKS5) {
   const 数据数组 = new Uint8Array(数据);
   if (验证密钥(数据数组.slice(1, 17)) !== 开门锁匙) {
     console.error('密钥验证失败');
@@ -335,40 +334,22 @@ async function 解析头(数据, 启用反代, 启用SOCKS5, 反代地址, SOCKS
   let TCP接口;
   console.log(`连接目标: ${地址}:${端口}, 反代: ${启用反代}, SOCKS5: ${启用SOCKS5}, 全局SOCKS5: ${启用全局SOCKS5}`);
 
-  if (启用反代 && 启用SOCKS5 && 启用全局SOCKS5) {
-    TCP接口 = await 创建SOCKS5(地址类型, 地址, 端口, SOCKS5账号);
-    if (TCP接口 instanceof Response) {
-      console.error('SOCKS5 创建失败');
-      return null;
-    }
-  } else {
+  // 硬编码逻辑：反代开启，SOCKS5 关闭
+  try {
+    TCP接口 = connect({ hostname: 地址, port: 端口 });
+    await TCP接口.opened;
+    console.log('直接连接成功');
+  } catch (错误) {
+    console.error(`直接连接失败: ${错误.message}`);
+    // 启用反代 = true，尝试连接反代地址
     try {
-      TCP接口 = connect({ hostname: 地址, port: 端口 });
+      const [反代主机, 反代端口] = 反代地址.split(':');
+      TCP接口 = connect({ hostname: 反代主机, port: 反代端口 || 端口 });
       await TCP接口.opened;
-      console.log('直接连接成功');
+      console.log('反代连接成功');
     } catch (错误) {
-      console.error(`直接连接失败: ${错误.message}`);
-      if (启用反代) {
-        if (启用SOCKS5) {
-          TCP接口 = await 创建SOCKS5(地址类型, 地址, 端口, SOCKS5账号);
-          if (TCP接口 instanceof Response) {
-            console.error('SOCKS5 创建失败');
-            return null;
-          }
-        } else {
-          try {
-            const [反代主机, 反代端口] = 反代地址.split(':');
-            TCP接口 = connect({ hostname: 反代主机, port: 反代端口 || 端口 });
-            await TCP接口.opened;
-            console.log('反代连接成功');
-          } catch (错误) {
-            console.error(`反代连接失败: ${错误.message}`);
-            return null;
-          }
-        }
-      } else {
-        return null;
-      }
+      console.error(`反代连接失败: ${错误.message}`);
+      return null;
     }
   }
   return { TCP接口, 初始数据 };
@@ -509,7 +490,7 @@ function 生成注册页面() {
   `;
 }
 
-function 生成订阅页面(订阅路径, hostName) {
+function 生成订阅页面(订阅路径, hostName, ui启用反代, ui启用SOCKS5) {
   const 当前TXT路径 = 优选TXT路径.length ? 优选TXT路径.join('\n') : '';
   return `
 <!DOCTYPE html>
@@ -783,14 +764,14 @@ function 生成订阅页面(订阅路径, hostName) {
         <div class="toggle-container">
           <span class="toggle-label">反代开关</span>
           <label class="toggle-switch">
-            <input type="checkbox" name="proxy" ${启用反代 ? 'checked' : ''}>
+            <input type="checkbox" name="proxy" ${ui启用反代 ? 'checked' : ''}>
             <span class="slider"></span>
           </label>
         </div>
         <div class="toggle-container">
           <span class="toggle-label">SOCKS5 开关</span>
           <label class="toggle-switch">
-            <input type="checkbox" name="socks5" ${启用SOCKS5 ? 'checked' : ''}>
+            <input type="checkbox" name="socks5" ${ui启用SOCKS5 ? 'checked' : ''}>
             <span class="slider"></span>
           </label>
         </div>
