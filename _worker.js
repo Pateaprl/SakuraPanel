@@ -2,7 +2,7 @@ import { connect } from 'cloudflare:sockets';
 
 // 全局变量
 let 订阅路径 = "config";
-let 开门锁 argent = uuidv4(); // 随机生成UUID
+let 开门锁匙 = uuidv4(); // 修复：正确声明变量
 let 优选TXT路径 = []; // 动态加载
 let 优选节点 = [];
 let 启用反代 = false; // 默认关闭，通过UI切换
