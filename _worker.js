@@ -2,8 +2,8 @@ import { connect } from 'cloudflare:sockets';
 
 // 全局变量
 let 订阅路径 = "config";
-let 开门锁匙 = uuidv4(); // 修复后的变量名
-let 优选TXT路径 = []; // 动态加载
+let 开门锁匙 = uuidv4();
+let 优选TXT路径 = [];
 let 优选节点 = [];
 let 启用反代 = false;
 let 反代地址 = 'ts.hpc.tw';
@@ -418,25 +418,28 @@ function 生成注册页面() {
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body { background-image: url('${背景壁纸}'); background-size: cover; font-family: Arial, sans-serif; color: white; margin: 0; height: 100vh; display: flex; justify-content: center; align-items: center; }
-    .content { background: rgba(0, 0, 0, 0.8); padding: 30px; border-radius: 15px; max-width: 400px; width: 90%; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4); text-align: center; }
-    h1 { font-size: 2em; color: #4CAF50; margin-bottom: 20px; }
+    body { background: url('${背景壁纸}') no-repeat center center fixed; background-size: cover; font-family: 'Segoe UI', Arial, sans-serif; margin: 0; min-height: 100vh; display: flex; justify-content: center; align-items: center; }
+    .card { background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); padding: 30px; border-radius: 20px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2); max-width: 400px; width: 90%; text-align: center; color: #fff; }
+    h1 { font-size: 2em; color: #00e676; margin-bottom: 20px; }
     form { display: flex; flex-direction: column; gap: 15px; }
-    input { padding: 12px; border-radius: 5px; border: 1px solid #4CAF50; background: rgba(255, 255, 255, 0.1); color: white; font-size: 16px; }
-    button { padding: 12px; background: #4CAF50; border: none; border-radius: 5px; color: white; cursor: pointer; transition: all 0.3s; }
-    button:hover { background: #45a049; transform: translateY(-2px); }
-    .error { color: #ff6666; margin-top: 10px; font-size: 14px; }
+    input { padding: 12px; border: none; border-radius: 10px; background: rgba(255, 255, 255, 0.2); color: #fff; font-size: 16px; transition: all 0.3s; }
+    input:focus { outline: none; background: rgba(255, 255, 255, 0.3); box-shadow: 0 0 10px rgba(0, 230, 118, 0.5); }
+    button { padding: 12px; background: linear-gradient(135deg, #00e676, #00c853); border: none; border-radius: 10px; color: #fff; font-size: 16px; cursor: pointer; transition: all 0.3s; }
+    button:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0, 230, 118, 0.5); }
+    .message { margin-top: 15px; font-size: 14px; }
+    .error { color: #ff5252; }
+    .success { color: #00e676; }
   </style>
 </head>
 <body>
-  <div class="content">
-    <h1>注册管理员账号</h1>
+  <div class="card">
+    <h1>注册管理员</h1>
     <form id="registerForm">
       <input type="text" name="username" placeholder="用户名" required>
       <input type="password" name="password" placeholder="密码" required>
       <button type="submit">注册</button>
     </form>
-    <div id="message"></div>
+    <div class="message" id="message"></div>
   </div>
   <script>
     document.getElementById('registerForm').addEventListener('submit', async (e) => {
@@ -447,13 +450,13 @@ function 生成注册页面() {
         const response = await fetch('/register/submit', { method: 'POST', body: formData });
         const result = await response.json();
         if (response.ok && result.success) {
-          messageDiv.innerHTML = '<p style="color: #4CAF50;">注册成功，正在跳转...</p>';
+          messageDiv.innerHTML = '<span class="success">注册成功，正在跳转...</span>';
           setTimeout(() => window.location.href = result.redirect || '/login', 1000);
         } else {
-          messageDiv.innerHTML = '<p class="error">' + (result.error || '注册失败，请重试') + '</p>';
+          messageDiv.innerHTML = '<span class="error">' + (result.error || '注册失败') + '</span>';
         }
       } catch (error) {
-        messageDiv.innerHTML = '<p class="error">网络错误，请稍后重试</p>';
+        messageDiv.innerHTML = '<span class="error">网络错误，请稍后重试</span>';
       }
     });
   </script>
@@ -470,98 +473,260 @@ function 生成订阅页面(订阅路径, hostName) {
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body { background-image: url('${背景壁纸}'); background-size: cover; font-family: Arial, sans-serif; color: white; margin: 0; padding: 20px; min-height: 100vh; display: flex; justify-content: center; align-items: center; }
-    .container { background: rgba(0, 0, 0, 0.8); padding: 30px; border-radius: 15px; max-width: 800px; width: 100%; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4); }
-    h1 { font-size: 2em; color: #4CAF50; text-align: center; margin-bottom: 30px; }
-    .section { background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 10px; margin-bottom: 20px; }
-    .section h3 { color: #4CAF50; margin: 0 0 15px; font-size: 1.2em; }
-    .link-container p { margin: 10px 0; word-break: break-all; }
-    .link-container a { color: #4CAF50; text-decoration: none; }
-    .link-container a:hover { color: #45a049; }
-    .big-btn { padding: 12px 24px; background: linear-gradient(135deg, #4CAF50, #45a049); border: none; border-radius: 5px; color: white; cursor: pointer; font-size: 16px; width: 100%; max-width: 200px; transition: all 0.3s; }
-    .big-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3); }
-    .small-btn { padding: 8px 16px; background: #2196F3; border: none; border-radius: 5px; color: white; cursor: pointer; font-size: 14px; transition: all 0.3s; }
-    .small-btn:hover { background: #1976D2; transform: translateY(-2px); }
-    .logout-btn { background: #f44336; }
-    .logout-btn:hover { background: #d32f2f; }
-    .button-group { display: flex; gap: 15px; flex-wrap: wrap; justify-content: center; }
-    .toggle-switch { position: relative; display: inline-block; width: 60px; height: 30px; }
-    .toggle-switch input { opacity: 0; width: 0; height: 0; }
-    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #ccc; transition: 0.4s; border-radius: 30px; }
-    .slider:before { position: absolute; content: ""; height: 22px; width: 22px; left: 4px; bottom: 4px; background: white; transition: 0.4s; border-radius: 50%; }
-    input:checked + .slider { background: #4CAF50; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { 
+      background: url('${背景壁纸}') no-repeat center center fixed; 
+      background-size: cover; 
+      font-family: 'Segoe UI', Arial, sans-serif; 
+      min-height: 100vh; 
+      display: flex; 
+      justify-content: center; 
+      align-items: center; 
+      padding: 20px; 
+      color: #fff; 
+    }
+    .container { 
+      max-width: 900px; 
+      width: 100%; 
+      display: grid; 
+      gap: 20px; 
+    }
+    .card { 
+      background: rgba(255, 255, 255, 0.1); 
+      backdrop-filter: blur(10px); 
+      padding: 25px; 
+      border-radius: 20px; 
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2); 
+      transition: transform 0.3s; 
+    }
+    .card:hover { transform: translateY(-5px); }
+    h1 { 
+      font-size: 2.5em; 
+      color: #00e676; 
+      text-align: center; 
+      margin-bottom: 30px; 
+      text-shadow: 0 2px 10px rgba(0, 230, 118, 0.5); 
+    }
+    h3 { 
+      font-size: 1.4em; 
+      color: #00e676; 
+      margin-bottom: 15px; 
+    }
+    .link-container p { 
+      margin: 10px 0; 
+      word-break: break-all; 
+      font-size: 1em; 
+    }
+    .link-container a { 
+      color: #00e676; 
+      text-decoration: none; 
+      transition: color 0.3s; 
+    }
+    .link-container a:hover { color: #00c853; }
+    .btn { 
+      padding: 12px 24px; 
+      background: linear-gradient(135deg, #00e676, #00c853); 
+      border: none; 
+      border-radius: 10px; 
+      color: #fff; 
+      font-size: 16px; 
+      cursor: pointer; 
+      transition: all 0.3s; 
+      width: 100%; 
+      max-width: 200px; 
+    }
+    .btn:hover { 
+      transform: translateY(-3px); 
+      box-shadow: 0 5px 15px rgba(0, 230, 118, 0.5); 
+    }
+    .small-btn { 
+      padding: 8px 16px; 
+      font-size: 14px; 
+      background: #2196F3; 
+      max-width: 100px; 
+    }
+    .small-btn:hover { background: #1976D2; }
+    .logout-btn { background: linear-gradient(135deg, #ff5252, #d81b60); }
+    .logout-btn:hover { box-shadow: 0 5px 15px rgba(255, 82, 82, 0.5); }
+    .button-group { 
+      display: flex; 
+      gap: 15px; 
+      flex-wrap: wrap; 
+      justify-content: center; 
+    }
+    .toggle-container { 
+      display: flex; 
+      align-items: center; 
+      gap: 10px; 
+      margin: 10px 0; 
+    }
+    .toggle-label { font-size: 1em; }
+    .toggle-switch { 
+      position: relative; 
+      width: 60px; 
+      height: 30px; 
+    }
+    .toggle-switch input { 
+      opacity: 0; 
+      width: 0; 
+      height: 0; 
+    }
+    .slider { 
+      position: absolute; 
+      top: 0; 
+      left: 0; 
+      right: 0; 
+      bottom: 0; 
+      background: #555; 
+      border-radius: 30px; 
+      transition: background 0.4s; 
+    }
+    .slider:before { 
+      position: absolute; 
+      content: ""; 
+      height: 24px; 
+      width: 24px; 
+      left: 3px; 
+      bottom: 3px; 
+      background: #fff; 
+      border-radius: 50%; 
+      transition: transform 0.4s; 
+    }
+    input:checked + .slider { background: #00e676; }
     input:checked + .slider:before { transform: translateX(30px); }
-    .toggle-label { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
-    textarea { width: 100%; padding: 10px; border-radius: 5px; background: rgba(255, 255, 255, 0.1); border: 1px solid #4CAF50; color: white; resize: vertical; }
+    textarea { 
+      width: 100%; 
+      padding: 10px; 
+      border: none; 
+      border-radius: 10px; 
+      background: rgba(255, 255, 255, 0.2); 
+      color: #fff; 
+      resize: vertical; 
+      font-size: 1em; 
+      transition: all 0.3s; 
+    }
+    textarea:focus { 
+      outline: none; 
+      background: rgba(255, 255, 255, 0.3); 
+      box-shadow: 0 0 10px rgba(0, 230, 118, 0.5); 
+    }
     .upload-container input[type="file"] { display: none; }
-    .upload-label { display: inline-block; padding: 10px 20px; background: #4CAF50; border-radius: 5px; cursor: pointer; transition: all 0.3s; }
-    .upload-label:hover { background: #45a049; transform: translateY(-2px); }
-    .file-list { margin-top: 15px; max-height: 100px; overflow-y: auto; }
-    .file-list div { padding: 5px; background: rgba(255, 255, 255, 0.1); margin: 5px 0; border-radius: 5px; display: flex; justify-content: space-between; }
-    .file-list button { background: #f44336; border: none; border-radius: 3px; padding: 2px 8px; cursor: pointer; }
-    .file-list button:hover { background: #d32f2f; }
-    .progress-container { display: none; margin-top: 15px; }
-    .progress-bar { width: 100%; height: 20px; background: rgba(255, 255, 255, 0.1); border-radius: 10px; overflow: hidden; position: relative; }
-    .progress-fill { height: 100%; background: #4CAF50; width: 0; transition: width 0.3s; }
-    .progress-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 12px; color: white; }
+    .upload-label { 
+      display: inline-block; 
+      padding: 10px 20px; 
+      background: linear-gradient(135deg, #00e676, #00c853); 
+      border-radius: 10px; 
+      cursor: pointer; 
+      transition: all 0.3s; 
+    }
+    .upload-label:hover { 
+      transform: translateY(-3px); 
+      box-shadow: 0 5px 15px rgba(0, 230, 118, 0.5); 
+    }
+    .file-list { 
+      margin-top: 15px; 
+      max-height: 120px; 
+      overflow-y: auto; 
+    }
+    .file-item { 
+      display: flex; 
+      justify-content: space-between; 
+      align-items: center; 
+      padding: 8px; 
+      background: rgba(255, 255, 255, 0.1); 
+      border-radius: 10px; 
+      margin: 5px 0; 
+    }
+    .progress-container { 
+      display: none; 
+      margin-top: 15px; 
+    }
+    .progress-bar { 
+      width: 100%; 
+      height: 20px; 
+      background: rgba(255, 255, 255, 0.1); 
+      border-radius: 10px; 
+      overflow: hidden; 
+      position: relative; 
+    }
+    .progress-fill { 
+      height: 100%; 
+      background: linear-gradient(90deg, #00e676, #00c853); 
+      width: 0; 
+      transition: width 0.3s; 
+    }
+    .progress-text { 
+      position: absolute; 
+      top: 50%; 
+      left: 50%; 
+      transform: translate(-50%, -50%); 
+      font-size: 12px; 
+      color: #fff; 
+    }
+    @media (max-width: 600px) {
+      .container { padding: 10px; }
+      h1 { font-size: 2em; }
+      .card { padding: 20px; }
+      .btn { max-width: 100%; }
+      .button-group { flex-direction: column; align-items: center; }
+    }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>订阅管理界面</h1>
+    <h1>订阅管理中心</h1>
 
     <!-- 订阅链接 -->
-    <div class="section">
+    <div class="card">
       <h3>订阅链接</h3>
       <div class="link-container">
-        <p>${小猫}${咪}客户端：<a href="https${符号}${hostName}/${订阅路径}/${小猫}${咪}">https${符号}${hostName}/${订阅路径}/${小猫}${咪}</a></p>
-        <p>${歪兔}${蕊蒽}客户端：<a href="https${符号}${hostName}/${订阅路径}/${歪兔}${蕊蒽}">https${符号}${hostName}/${订阅路径}/${歪兔}${蕊蒽}</a></p>
+        <p>${小猫}${咪}：<a href="https${符号}${hostName}/${订阅路径}/${小猫}${咪}">https${符号}${hostName}/${订阅路径}/${小猫}${咪}</a></p>
+        <p>${歪兔}${蕊蒽}：<a href="https${符号}${hostName}/${订阅路径}/${歪兔}${蕊蒽}">https${符号}${hostName}/${订阅路径}/${歪兔}${蕊蒽}</a></p>
       </div>
     </div>
 
-    <!-- 导入按钮 -->
-    <div class="section">
+    <!-- 快速导入 -->
+    <div class="card">
       <h3>快速导入</h3>
       <div class="button-group">
-        <button class="big-btn" onclick="导入小猫咪('${订阅路径}', '${hostName}')">导入猫猫</button>
-        <button class="big-btn" onclick="导入${歪兔}${蕊蒽}('${订阅路径}', '${hostName}')">导入${歪兔}${蕊蒽}</button>
+        <button class="btn" onclick="导入小猫咪('${订阅路径}', '${hostName}')">导入${小猫}${咪}</button>
+        <button class="btn" onclick="导入${歪兔}${蕊蒽}('${订阅路径}', '${hostName}')">导入${歪兔}${蕊蒽}</button>
       </div>
     </div>
 
     <!-- 设置 -->
-    <div class="section">
+    <div class="card">
       <h3>设置</h3>
       <form id="settingsForm" action="/${订阅路径}/update-settings" method="POST">
-        <div class="toggle-label">
-          <label>反代开关</label>
+        <div class="toggle-container">
+          <span class="toggle-label">反代开关</span>
           <label class="toggle-switch">
             <input type="checkbox" name="proxy" ${启用反代 ? 'checked' : ''}>
             <span class="slider"></span>
           </label>
         </div>
-        <div class="toggle-label">
-          <label>SOCKS5 开关</label>
+        <div class="toggle-container">
+          <span class="toggle-label">SOCKS5 开关</span>
           <label class="toggle-switch">
             <input type="checkbox" name="socks5" ${启用SOCKS5 ? 'checked' : ''}>
             <span class="slider"></span>
           </label>
         </div>
         <div>
-          <label>优选 TXT 路径</label>
           <textarea name="txtPaths" placeholder="一行一个域名">${当前TXT路径}</textarea>
         </div>
-        <button type="submit" class="big-btn" style="margin-top: 15px;">保存设置</button>
+        <button type="submit" class="btn" style="margin-top: 15px;">保存设置</button>
       </form>
     </div>
 
     <!-- 上传 IP -->
-    <div class="section">
+    <div class="card">
       <h3>上传优选 IP</h3>
       <form id="uploadForm" action="/${订阅路径}/upload" method="POST" enctype="multipart/form-data">
         <label for="ipFiles" class="upload-label">选择文件</label>
         <input type="file" id="ipFiles" name="ipFiles" accept=".txt" multiple required onchange="显示文件()">
         <div class="file-list" id="fileList"></div>
-        <button type="submit" class="big-btn" onclick="开始上传(event)">上传</button>
+        <button type="submit" class="btn" onclick="开始上传(event)">上传</button>
         <div class="progress-container" id="progressContainer">
           <div class="progress-bar">
             <div class="progress-fill" id="progressFill"></div>
@@ -572,10 +737,10 @@ function 生成订阅页面(订阅路径, hostName) {
     </div>
 
     <!-- 退出登录 -->
-    <div class="section">
+    <div class="card">
       <h3>账户管理</h3>
       <div class="button-group">
-        <a href="/${订阅路径}/logout" class="big-btn logout-btn">退出登录</a>
+        <a href="/${订阅路径}/logout" class="btn logout-btn">退出登录</a>
       </div>
     </div>
   </div>
@@ -588,6 +753,7 @@ function 生成订阅页面(订阅路径, hostName) {
       fileList.innerHTML = '';
       Array.from(fileInput.files).forEach((file, index) => {
         const div = document.createElement('div');
+        div.className = 'file-item';
         div.innerHTML = \`<span>\${file.name} (\${(file.size / 1024).toFixed(2)} KB)</span><button class="small-btn" onclick="移除文件(\${index})">移除</button>\`;
         fileList.appendChild(div);
       });
@@ -681,23 +847,24 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body { background-image: url('${背景壁纸}'); background-size: cover; font-family: Arial, sans-serif; color: white; margin: 0; height: 100vh; display: flex; justify-content: center; align-items: center; }
-    .content { background: rgba(0, 0, 0, 0.8); padding: 30px; border-radius: 15px; max-width: 400px; width: 90%; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4); text-align: center; }
-    h1 { font-size: 2em; color: #4CAF50; margin-bottom: 20px; }
+    body { background: url('${背景壁纸}') no-repeat center center fixed; background-size: cover; font-family: 'Segoe UI', Arial, sans-serif; margin: 0; min-height: 100vh; display: flex; justify-content: center; align-items: center; }
+    .card { background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); padding: 30px; border-radius: 20px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2); max-width: 400px; width: 90%; text-align: center; color: #fff; }
+    h1 { font-size: 2em; color: #00e676; margin-bottom: 20px; }
     form { display: flex; flex-direction: column; gap: 15px; }
-    input { padding: 12px; border-radius: 5px; border: 1px solid #4CAF50; background: rgba(255, 255, 255, 0.1); color: white; font-size: 16px; }
-    button { padding: 12px; background: #4CAF50; border: none; border-radius: 5px; color: white; cursor: pointer; transition: all 0.3s; }
-    button:hover { background: #45a049; transform: translateY(-2px); }
-    .error { color: #ff6666; margin-top: 10px; font-size: 14px; }
-    .lock-message { color: #ff6666; margin-top: 20px; font-size: 1.2em; }
+    input { padding: 12px; border: none; border-radius: 10px; background: rgba(255, 255, 255, 0.2); color: #fff; font-size: 16px; transition: all 0.3s; }
+    input:focus { outline: none; background: rgba(255, 255, 255, 0.3); box-shadow: 0 0 10px rgba(0, 230, 118, 0.5); }
+    button { padding: 12px; background: linear-gradient(135deg, #00e676, #00c853); border: none; border-radius: 10px; color: #fff; font-size: 16px; cursor: pointer; transition: all 0.3s; }
+    button:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0, 230, 118, 0.5); }
+    .error { color: #ff5252; margin-top: 10px; font-size: 14px; }
+    .lock-message { color: #ff5252; margin-top: 20px; font-size: 1.2em; }
   </style>
 </head>
 <body>
-  <div class="content">
+  <div class="card">
     <h1>请登录</h1>
     ${锁定状态 ? `
     <div class="lock-message">
-      登录失败次数过多，请等待 <span id="countdown">${剩余时间}</span> 秒后再试。
+      登录失败次数过多，请等待 <span id="countdown">${剩余时间}</span> 秒。
     </div>
     ` : `
     <form action="/login/submit" method="POST">
@@ -734,14 +901,14 @@ function 生成KV未绑定提示页面() {
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body { background-image: url('${背景壁纸}'); background-size: cover; font-family: Arial, sans-serif; color: white; margin: 0; height: 100vh; display: flex; justify-content: center; align-items: center; }
-    .content { background: rgba(0, 0, 0, 0.8); padding: 30px; border-radius: 15px; max-width: 600px; width: 90%; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4); text-align: center; }
-    h1 { font-size: 2em; color: #ff6666; margin-bottom: 20px; }
+    body { background: url('${背景壁纸}') no-repeat center center fixed; background-size: cover; font-family: 'Segoe UI', Arial, sans-serif; margin: 0; min-height: 100vh; display: flex; justify-content: center; align-items: center; }
+    .card { background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); padding: 30px; border-radius: 20px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2); max-width: 600px; width: 90%; text-align: center; color: #fff; }
+    h1 { font-size: 2em; color: #ff5252; margin-bottom: 20px; }
     p { font-size: 1.2em; line-height: 1.5; }
   </style>
 </head>
 <body>
-  <div class="content">
+  <div class="card">
     <h1>未绑定 KV 存储空间</h1>
     <p>请在 Cloudflare Workers 设置中绑定一个 KV 命名空间（如 LOGIN_STATE），然后重新部署服务。</p>
   </div>
