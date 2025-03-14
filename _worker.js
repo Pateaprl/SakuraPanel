@@ -170,9 +170,13 @@ export default {
             formData = await 请求.formData();
             const 新账号 = formData.get('username');
             const 新密码 = formData.get('password');
-            await env.LOGIN_STATE.put('admin_username', 新账号);
-            await env.LOGIN_STATE.put('admin_password', 新密码);
-            return 创建重定向响应('/login');
+            if (新账号 && 新密码) {
+              await env.LOGIN_STATE.put('admin_username', 新账号);
+              await env.LOGIN_STATE.put('admin_password', 新密码);
+              return 创建重定向响应('/login');
+            } else {
+              return 创建HTML响应(生成注册页面() + '<p style="color: #ff6666;">用户名或密码不能为空</p>');
+            }
           case '/settings':
             const Token = 请求.headers.get('Cookie')?.split('=')[1];
             const 有效Token = await env.LOGIN_STATE.get('current_token');
@@ -454,17 +458,34 @@ function 生成注册页面() {
     input:focus { border-color: #4CAF50; box-shadow: 0 0 8px rgba(76, 175, 80, 0.5); outline: none; }
     button { padding: 12px; background: linear-gradient(135deg, #4CAF50, #45a049); border: none; border-radius: 5px; color: white; cursor: pointer; transition: all 0.3s ease; }
     button:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3); }
+    .error { color: #ff6666; margin-top: 10px; }
   </style>
 </head>
 <body>
   <div class="content">
     <h1>注册管理员账号</h1>
-    <form action="/register/submit" method="POST">
+    <form id="registerForm" action="/register/submit" method="POST">
       <input type="text" name="username" placeholder="用户名" required>
       <input type="password" name="password" placeholder="密码" required>
       <button type="submit">注册</button>
     </form>
   </div>
+  <script>
+    document.getElementById('registerForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const formData = new FormData(event.target);
+      const response = await fetch('/register/submit', {
+        method: 'POST',
+        body: formData
+      });
+      if (response.status === 302) {
+        window.location.href = '/login';
+      } else {
+        const errorText = await response.text();
+        document.querySelector('.content').insertAdjacentHTML('beforeend', '<p class="error">注册失败，请重试</p>');
+      }
+    });
+  </script>
 </body>
 </html>
   `;
