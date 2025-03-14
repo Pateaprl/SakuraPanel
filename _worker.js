@@ -440,7 +440,7 @@ function 生成订阅页面(订阅路径, hostName) {
       padding-bottom: 20px;
     }
     .card {
-      background: rgba(255, 255, 255, 0.85);
+      background: rgba(0, 0, 0, 0.7); /* 改为与图片类似的深色透明背景 */
       border-radius: 25px;
       padding: 25px;
       box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3);
@@ -450,13 +450,24 @@ function 生成订阅页面(订阅路径, hostName) {
       transition: transform 0.3s ease, box-shadow 0.3s ease;
       position: relative;
       overflow: hidden;
-      border: 2px dashed #ffb6c1; /* 统一虚线边框 */
+      position: relative; /* 确保内部虚线定位 */
+    }
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      right: 10px;
+      bottom: 10px;
+      border: 2px dashed #ffb6c1; /* 虚线框放在内部 */
+      border-radius: 20px; /* 与卡片圆角一致 */
+      z-index: -1; /* 置于内容下方 */
     }
     .card:hover {
       transform: scale(1.03);
       box-shadow: 0 10px 25px rgba(255, 182, 193, 0.5);
     }
-    .card::before {
+    .card::after {
       content: '✨';
       position: absolute;
       top: 10px;
@@ -472,7 +483,7 @@ function 生成订阅页面(订阅路径, hostName) {
       text-shadow: 1px 1px 3px rgba(255, 105, 180, 0.2);
     }
     .link-box {
-      background: #fff0f5;
+      background: rgba(255, 240, 245, 0.9); /* 调整为半透明效果 */
       border-radius: 15px;
       padding: 15px;
       margin: 10px 0;
@@ -504,8 +515,7 @@ function 生成订阅页面(订阅路径, hostName) {
       color: white;
       cursor: pointer;
       transition: transform 0.2s ease, box-shadow 0.2s ease;
-      background-size: 200% 100%;
-      background-position: left;
+      background: linear-gradient(to right, #ffb6c1, #ff69b4); /* 统一粉色渐变 */
       text-align: center;
       display: inline-block;
     }
@@ -524,9 +534,6 @@ function 生成订阅页面(订阅路径, hostName) {
     }
     .logout-btn {
       background: linear-gradient(to right, #ff9999, #ff6666);
-    }
-    .upload-card {
-      /* 移除独立背景，统一为 card 样式 */
     }
     .upload-title {
       font-size: 1.4em;
@@ -652,7 +659,7 @@ function 生成订阅页面(订阅路径, hostName) {
         <button class="cute-button v2ray-btn" onclick="导入${歪兔}${蕊蒽}('${订阅路径}', '${hostName}')">一键导入</button>
       </div>
     </div>
-    <div class="card upload-card">
+    <div class="card">
       <h2 class="upload-title">🌟 上传你的魔法 IP</h2>
       <form id="uploadForm" action="/${订阅路径}/upload" method="POST" enctype="multipart/form-data">
         <label for="ipFiles" class="upload-label">选择文件</label>
