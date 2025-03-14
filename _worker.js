@@ -127,6 +127,12 @@ export default {
     try {
       if (!env.LOGIN_STATE) return 创建HTML响应(生成KV未绑定提示页面());
 
+      // 初始化时从 KV 读取设置
+      const 代理状态 = await env.LOGIN_STATE.get('proxy_enabled');
+      const SOCKS5状态 = await env.LOGIN_STATE.get('socks5_enabled');
+      启用反代 = 代理状态 === 'true' ? true : 代理状态 === 'false' ? false : 启用反代;
+      启用SOCKS5 = SOCKS5状态 === 'true' ? true : SOCKS5状态 === 'false' ? false : 启用SOCKS5;
+
       const 管理员账号 = await env.LOGIN_STATE.get('admin_username');
       if (!管理员账号) {
         const url = new URL(请求.url);
@@ -217,6 +223,8 @@ export default {
             启用SOCKS5 = formData.get('socks5') === 'on';
             const 新TXT路径 = formData.get('txtPaths')?.split('\n').map(line => line.trim()).filter(Boolean) || [];
             await env.LOGIN_STATE.put('txt_paths', JSON.stringify(新TXT路径));
+            await env.LOGIN_STATE.put('proxy_enabled', String(启用反代));
+            await env.LOGIN_STATE.put('socks5_enabled', String(启用SOCKS5));
             优选TXT路径 = 新TXT路径;
             return 创建JSON响应({ message: '设置已更新' }, 200);
           case `/${订阅路径}/upload`:
