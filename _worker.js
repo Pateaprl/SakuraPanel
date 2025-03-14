@@ -28,7 +28,6 @@ let 歪兔 = 'v2';
 let 蕊蒽 = 'rayN';
 let 背景壁纸 = 'https://raw.githubusercontent.com/Alien-Et/ips/refs/heads/main/image/night.jpg';
 
-// 创建响应函数保持不变
 function 创建HTML响应(内容, 状态码 = 200) {
   return new Response(内容, {
     status: 状态码,
@@ -61,54 +60,46 @@ function 创建JSON响应(数据, 状态码 = 200, 额外头 = {}) {
   });
 }
 
-// 修复节点加载逻辑，合并手动节点和远程节点
 async function 加载节点和配置(env, hostName) {
-  try {
-    const 手动节点缓存 = await env.LOGIN_STATE.get('manual_preferred_ips');
-    let 手动节点列表 = [];
-    if (手动节点缓存) {
-      手动节点列表 = JSON.parse(手动节点缓存).map(line => line.trim()).filter(Boolean);
-    }
+  const 手动节点缓存 = await env.LOGIN_STATE.get('manual_preferred_ips');
+  let 手动节点列表 = [];
+  if (手动节点缓存) {
+    手动节点列表 = JSON.parse(手动节点缓存).map(line => line.trim()).filter(Boolean);
+  }
 
-    const 响应列表 = await Promise.all(
-      优选TXT路径.map(async (路径) => {
-        try {
-          const 响应 = await fetch(路径);
-          if (!响应.ok) throw new Error(`请求 ${路径} 失败，状态码: ${响应.status}`);
-          const 文本 = await 响应.text();
-          return 文本.split('\n').map(line => line.trim()).filter(Boolean);
-        } catch (错误) {
-          console.error(`拉取 ${路径} 失败: ${错误.message}`);
-          return [];
-        }
-      })
-    );
-
-    const 域名节点列表 = [...new Set(响应列表.flat())];
-    const 合并节点列表 = [...new Set([...手动节点列表, ...域名节点列表])];
-    const 缓存节点 = await env.LOGIN_STATE.get('ip_preferred_ips');
-    const 当前节点列表 = 缓存节点 ? JSON.parse(缓存节点) : [];
-    const 列表相同 = JSON.stringify(合并节点列表) === JSON.stringify(当前节点列表);
-
-    if (合并节点列表.length > 0) {
-      优选节点 = 合并节点列表;
-      if (!列表相同) {
-        const 新版本 = String(Date.now());
-        await env.LOGIN_STATE.put('ip_preferred_ips', JSON.stringify(合并节点列表), { expirationTtl: 86400 });
-        await env.LOGIN_STATE.put('ip_preferred_ips_version', 新版本);
-        await env.LOGIN_STATE.put('config_clash', 生成猫咪配置(hostName), { expirationTtl: 86400 });
-        await env.LOGIN_STATE.put('config_clash_version', 新版本);
-        await env.LOGIN_STATE.put('config_v2ray', 生成备用配置(hostName), { expirationTtl: 86400 });
-        await env.LOGIN_STATE.put('config_v2ray_version', 新版本);
+  const 响应列表 = await Promise.all(
+    优选TXT路径.map(async (路径) => {
+      try {
+        const 响应 = await fetch(路径);
+        if (!响应.ok) throw new Error(`请求 ${路径} 失败，状态码: ${响应.status}`);
+        const 文本 = await 响应.text();
+        return 文本.split('\n').map(line => line.trim()).filter(Boolean);
+      } catch (错误) {
+        console.error(`拉取 ${路径} 失败: ${错误.message}`);
+        return [];
       }
-    } else {
-      优选节点 = 当前节点列表.length > 0 ? 当前节点列表 : [`${hostName}:443`];
+    })
+  );
+
+  const 域名节点列表 = [...new Set(响应列表.flat())];
+  const 合并节点列表 = [...new Set([...手动节点列表, ...域名节点列表])];
+  const 缓存节点 = await env.LOGIN_STATE.get('ip_preferred_ips');
+  const 当前节点列表 = 缓存节点 ? JSON.parse(缓存节点) : [];
+  const 列表相同 = JSON.stringify(合并节点列表) === JSON.stringify(当前节点列表);
+
+  if (合并节点列表.length > 0) {
+    优选节点 = 合并节点列表;
+    if (!列表相同) {
+      const 新版本 = String(Date.now());
+      await env.LOGIN_STATE.put('ip_preferred_ips', JSON.stringify(合并节点列表), { expirationTtl: 86400 });
+      await env.LOGIN_STATE.put('ip_preferred_ips_version', 新版本);
+      await env.LOGIN_STATE.put('config_clash', 生成猫咪配置(hostName), { expirationTtl: 86400 });
+      await env.LOGIN_STATE.put('config_clash_version', 新版本);
+      await env.LOGIN_STATE.put('config_v2ray', 生成备用配置(hostName), { expirationTtl: 86400 });
+      await env.LOGIN_STATE.put('config_v2ray_version', 新版本);
     }
-  } catch (错误) {
-    console.error(`加载节点失败: ${错误.message}`);
-    const 缓存节点 = await env.LOGIN_STATE.get('ip_preferred_ips');
-    优选节点 = 缓存节点 ? JSON.parse(缓存节点) : [`${hostName}:443`];
-    await env.LOGIN_STATE.put('ip_error_log', JSON.stringify({ time: Date.now(), error: '所有路径拉取失败或手动上传为空' }), { expirationTtl: 86400 });
+  } else {
+    优选节点 = 当前节点列表.length > 0 ? 当前节点列表 : [`${hostName}:443`];
   }
 }
 
@@ -267,7 +258,7 @@ export default {
   }
 };
 
-// WebSocket相关函数（修复为开发版逻辑）
+// WebSocket 相关函数（仅修复问题部分）
 async function 升级请求(请求) {
   const 创建接口 = new WebSocketPair();
   const [客户端, 服务端] = Object.values(创建接口);
@@ -379,75 +370,24 @@ async function 创建TCP连接(主机名, 端口, 超时 = 10000) {
 
 async function 建立双向管道(服务端, TCP接口, 初始数据) {
   await 服务端.send(new Uint8Array([0, 0]).buffer);
-  console.log('WebSocket 连接已建立，发送初始响应');
 
-  const 到TCP流 = new ReadableStream({
-    async start(控制器) {
-      if (初始数据 && 初始数据.byteLength > 0) {
-        控制器.enqueue(初始数据);
-        console.log(`发送初始数据: ${初始数据.byteLength} 字节`);
-      }
-    },
-    pull(控制器) {
-      服务端.addEventListener('message', async (event) => {
-        try {
-          const 数据 = event.data instanceof ArrayBuffer ? new Uint8Array(event.data) : event.data;
-          控制器.enqueue(数据);
-          console.log(`从 WebSocket 接收数据: ${数据.byteLength || 数据.length} 字节`);
-        } catch (错误) {
-          console.error(`处理 WebSocket 数据失败: ${错误.message}`);
-          控制器.error(错误);
-        }
-      }, { once: true });
-    },
-    cancel() {
-      console.log('WebSocket 到 TCP 流被取消');
-      TCP接口.close();
-    }
-  });
+  if (初始数据 && 初始数据.byteLength > 0) {
+    await TCP接口.writable.getWriter().write(初始数据);
+  }
 
-  const 从TCP流 = TCP接口.readable;
-
-  const TCP写入器 = TCP接口.writable.getWriter();
-  const 服务端写入器 = {
-    async write(数据) {
-      await 服务端.send(数据);
-      console.log(`向 WebSocket 发送数据: ${数据.byteLength} 字节`);
-    }
-  };
-
-  const 到TCP管道 = 到TCP流.pipeTo(new WritableStream({
-    async write(数据) {
-      await TCP写入器.write(数据);
-    },
-    close() {
-      console.log('到 TCP 管道关闭');
-      TCP写入器.releaseLock();
-    },
-    abort(原因) {
-      console.error(`到 TCP 管道中止: ${原因}`);
-      TCP写入器.releaseLock();
-      TCP接口.close();
-    }
-  })).catch(async (错误) => {
+  const 到TCP管道 = 服务端.readable.pipeTo(TCP接口.writable).catch(async (错误) => {
     console.error(`到 TCP 管道错误: ${错误.message}`);
-    服务端.close(1001, 'TCP write error');
+    服务端.close(1001, 'Pipe to TCP failed');
     TCP接口.close();
   });
 
-  const 从TCP管道 = 从TCP流.pipeTo(new WritableStream(服务端写入器)).catch(async (错误) => {
+  const 从TCP管道 = TCP接口.readable.pipeTo(服务端.writable).catch(async (错误) => {
     console.error(`从 TCP 管道错误: ${错误.message}`);
-    服务端.close(1001, 'TCP read error');
+    服务端.close(1001, 'Pipe from TCP failed');
     TCP接口.close();
   });
 
   服务端.addEventListener('close', () => {
-    console.log('WebSocket 客户端关闭连接');
-    TCP接口.close();
-  });
-
-  服务端.addEventListener('error', (错误) => {
-    console.error(`WebSocket 错误: ${错误.message}`);
     TCP接口.close();
   });
 
@@ -510,7 +450,6 @@ async function 解析SOCKS5账号(SOCKS5) {
   return { username, password, hostname, port };
 }
 
-// 恢复完整的订阅页面（带上传功能）
 function 生成订阅页面(订阅路径, hostName) {
   return `
 <!DOCTYPE html>
@@ -762,7 +701,6 @@ function 生成KV未绑定提示页面() {
   `;
 }
 
-// 修复Clash配置生成，增加错误处理
 function 生成猫咪配置(hostName) {
   const 节点列表 = 优选节点.length ? 优选节点 : [`${hostName}:443`];
   const 郭嘉分组 = {};
@@ -875,7 +813,6 @@ rules:
 `;
 }
 
-// 修复V2Ray配置生成，增加错误处理
 function 生成备用配置(hostName) {
   const 节点列表 = 优选节点.length ? 优选节点 : [`${hostName}:443`];
   const 配置列表 = 节点列表.map(节点 => {
