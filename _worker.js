@@ -424,7 +424,7 @@ function 生成注册页面() {
     form { display: flex; flex-direction: column; gap: 15px; }
     input { padding: 12px; border: none; border-radius: 10px; background: rgba(255, 255, 255, 0.2); color: #fff; font-size: 16px; transition: all 0.3s; }
     input:focus { outline: none; background: rgba(255, 255, 255, 0.3); box-shadow: 0 0 10px rgba(0, 230, 118, 0.5); }
-    button { padding: 12px; background: linear-gradient(135deg, #00e676, #00c853); border: none; border-radius: 10px; color: #fff; font-size: 16px; cursor: pointer; transition: all 0.3s; }
+    button { padding: 12px; background: linear-gradient(135deg, #00e676, #00c853); border: none; border-radius: 10px; color: #fff; font-size: 16px; cursor: pointer; transition: all 0.3s; text-align: center; }
     button:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0, 230, 118, 0.5); }
     .message { margin-top: 15px; font-size: 14px; }
     .error { color: #ff5252; }
@@ -498,6 +498,7 @@ function 生成订阅页面(订阅路径, hostName) {
       border-radius: 20px; 
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2); 
       transition: transform 0.3s; 
+      text-align: center; 
     }
     .card:hover { transform: translateY(-5px); }
     h1 { 
@@ -534,6 +535,7 @@ function 生成订阅页面(订阅路径, hostName) {
       transition: all 0.3s; 
       width: 100%; 
       max-width: 200px; 
+      text-align: center; 
     }
     .btn:hover { 
       transform: translateY(-3px); 
@@ -542,11 +544,17 @@ function 生成订阅页面(订阅路径, hostName) {
     .small-btn { 
       padding: 8px 16px; 
       font-size: 14px; 
-      background: #2196F3; 
-      max-width: 100px; 
+      background: linear-gradient(135deg, #2196F3, #1976D2); 
+      max-width: 120px; 
+      text-align: center; 
     }
-    .small-btn:hover { background: #1976D2; }
-    .logout-btn { background: linear-gradient(135deg, #ff5252, #d81b60); }
+    .small-btn:hover { 
+      background: linear-gradient(135deg, #1976D2, #1565C0); 
+      box-shadow: 0 5px 15px rgba(33, 150, 243, 0.5); 
+    }
+    .logout-btn { 
+      background: linear-gradient(135deg, #ff5252, #d81b60); 
+    }
     .logout-btn:hover { box-shadow: 0 5px 15px rgba(255, 82, 82, 0.5); }
     .button-group { 
       display: flex; 
@@ -556,9 +564,10 @@ function 生成订阅页面(订阅路径, hostName) {
     }
     .toggle-container { 
       display: flex; 
+      justify-content: center; 
       align-items: center; 
-      gap: 10px; 
-      margin: 10px 0; 
+      gap: 15px; 
+      margin: 15px 0; 
     }
     .toggle-label { font-size: 1em; }
     .toggle-switch { 
@@ -610,21 +619,29 @@ function 生成订阅页面(订阅路径, hostName) {
       background: rgba(255, 255, 255, 0.3); 
       box-shadow: 0 0 10px rgba(0, 230, 118, 0.5); 
     }
+    .upload-container { 
+      text-align: center; 
+    }
     .upload-container input[type="file"] { display: none; }
     .upload-label { 
-      display: inline-block; 
+      display: inline-flex; 
+      align-items: center; 
+      gap: 8px; 
       padding: 10px 20px; 
       background: linear-gradient(135deg, #00e676, #00c853); 
       border-radius: 10px; 
       cursor: pointer; 
       transition: all 0.3s; 
+      color: #fff; 
+      font-size: 14px; 
     }
     .upload-label:hover { 
       transform: translateY(-3px); 
       box-shadow: 0 5px 15px rgba(0, 230, 118, 0.5); 
     }
+    .upload-label svg { fill: #fff; width: 20px; height: 20px; }
     .file-list { 
-      margin-top: 15px; 
+      margin: 15px 0; 
       max-height: 120px; 
       overflow-y: auto; 
     }
@@ -632,10 +649,11 @@ function 生成订阅页面(订阅路径, hostName) {
       display: flex; 
       justify-content: space-between; 
       align-items: center; 
-      padding: 8px; 
-      background: rgba(255, 255, 255, 0.1); 
+      padding: 8px 12px; 
+      background: rgba(255, 255, 255, 0.15); 
       border-radius: 10px; 
       margin: 5px 0; 
+      font-size: 14px; 
     }
     .progress-container { 
       display: none; 
@@ -653,7 +671,7 @@ function 生成订阅页面(订阅路径, hostName) {
       height: 100%; 
       background: linear-gradient(90deg, #00e676, #00c853); 
       width: 0; 
-      transition: width 0.3s; 
+      transition: width 0.3s ease-in-out; 
     }
     .progress-text { 
       position: absolute; 
@@ -662,13 +680,15 @@ function 生成订阅页面(订阅路径, hostName) {
       transform: translate(-50%, -50%); 
       font-size: 12px; 
       color: #fff; 
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5); 
     }
     @media (max-width: 600px) {
       .container { padding: 10px; }
       h1 { font-size: 2em; }
       .card { padding: 20px; }
-      .btn { max-width: 100%; }
+      .btn, .small-btn { max-width: 100%; }
       .button-group { flex-direction: column; align-items: center; }
+      .toggle-container { flex-direction: column; gap: 10px; }
     }
   </style>
 </head>
@@ -689,8 +709,8 @@ function 生成订阅页面(订阅路径, hostName) {
     <div class="card">
       <h3>快速导入</h3>
       <div class="button-group">
-        <button class="btn" onclick="导入小猫咪('${订阅路径}', '${hostName}')">导入${小猫}${咪}</button>
-        <button class="btn" onclick="导入${歪兔}${蕊蒽}('${订阅路径}', '${hostName}')">导入${歪兔}${蕊蒽}</button>
+        <button class="small-btn" onclick="导入小猫咪('${订阅路径}', '${hostName}')">导入${小猫}${咪}</button>
+        <button class="small-btn" onclick="导入${歪兔}${蕊蒽}('${订阅路径}', '${hostName}')">导入${歪兔}${蕊蒽}</button>
       </div>
     </div>
 
@@ -722,8 +742,11 @@ function 生成订阅页面(订阅路径, hostName) {
     <!-- 上传 IP -->
     <div class="card">
       <h3>上传优选 IP</h3>
-      <form id="uploadForm" action="/${订阅路径}/upload" method="POST" enctype="multipart/form-data">
-        <label for="ipFiles" class="upload-label">选择文件</label>
+      <form id="uploadForm" action="/${订阅路径}/upload" method="POST" enctype="multipart/form-data" class="upload-container">
+        <label for="ipFiles" class="upload-label">
+          <svg viewBox="0 0 24 24"><path d="M19 7v2.99s-1.99.01-2 0V7h-3s.01-1.99 0-2h3V2h2v5zm-3 4V8h-3V5H5c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-8h-3zM5 19l3-4 2 3 3-4 4 5H5z"/></svg>
+          选择文件
+        </label>
         <input type="file" id="ipFiles" name="ipFiles" accept=".txt" multiple required onchange="显示文件()">
         <div class="file-list" id="fileList"></div>
         <button type="submit" class="btn" onclick="开始上传(event)">上传</button>
@@ -853,7 +876,7 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
     form { display: flex; flex-direction: column; gap: 15px; }
     input { padding: 12px; border: none; border-radius: 10px; background: rgba(255, 255, 255, 0.2); color: #fff; font-size: 16px; transition: all 0.3s; }
     input:focus { outline: none; background: rgba(255, 255, 255, 0.3); box-shadow: 0 0 10px rgba(0, 230, 118, 0.5); }
-    button { padding: 12px; background: linear-gradient(135deg, #00e676, #00c853); border: none; border-radius: 10px; color: #fff; font-size: 16px; cursor: pointer; transition: all 0.3s; }
+    button { padding: 12px; background: linear-gradient(135deg, #00e676, #00c853); border: none; border-radius: 10px; color: #fff; font-size: 16px; cursor: pointer; transition: all 0.3s; text-align: center; }
     button:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0, 230, 118, 0.5); }
     .error { color: #ff5252; margin-top: 10px; font-size: 14px; }
     .lock-message { color: #ff5252; margin-top: 20px; font-size: 1.2em; }
