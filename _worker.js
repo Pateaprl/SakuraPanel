@@ -64,14 +64,12 @@ function 创建JSON响应(数据, 状态码 = 200, 额外头 = {}) {
 // 修复节点加载逻辑，合并手动节点和远程节点
 async function 加载节点和配置(env, hostName) {
   try {
-    // 获取手动上传的节点
     const 手动节点缓存 = await env.LOGIN_STATE.get('manual_preferred_ips');
     let 手动节点列表 = [];
     if (手动节点缓存) {
       手动节点列表 = JSON.parse(手动节点缓存).map(line => line.trim()).filter(Boolean);
     }
 
-    // 获取远程节点
     const 响应列表 = await Promise.all(
       优选TXT路径.map(async (路径) => {
         try {
@@ -107,6 +105,7 @@ async function 加载节点和配置(env, hostName) {
       优选节点 = 当前节点列表.length > 0 ? 当前节点列表 : [`${hostName}:443`];
     }
   } catch (错误) {
+    console.error(`加载节点失败: ${错误.message}`);
     const 缓存节点 = await env.LOGIN_STATE.get('ip_preferred_ips');
     优选节点 = 缓存节点 ? JSON.parse(缓存节点) : [`${hostName}:443`];
     await env.LOGIN_STATE.put('ip_error_log', JSON.stringify({ time: Date.now(), error: '所有路径拉取失败或手动上传为空' }), { expirationTtl: 86400 });
@@ -259,7 +258,7 @@ export default {
         SOCKS5账号 = env.SOCKS5 || SOCKS5账号;
         启用SOCKS5 = env.SOCKS5OPEN === 'true' ? true : env.SOCKS5OPEN === 'false' ? false : 启用SOCKS5;
         启用全局SOCKS5 = env.SOCKS5GLOBAL === 'true' ? true : env.SOCKS5GLOBAL === 'false' ? false : 启用全局SOCKS5;
-        return await 升级请求(请求, 启用反代, 启用SOCKS5, 反代地址, SOCKS5账号, 启用全局SOCKS5);
+        return await 升级请求(请求);
       }
     } catch (error) {
       console.error(`全局错误: ${error.message}`);
@@ -268,13 +267,11 @@ export default {
   }
 };
 
-// WebSocket相关函数（修复超时问题）
-async function 升级请求(请求, 启用反代, 启用SOCKS5, 反代地址, SOCKS5账号, 启用全局SOCKS5) {
-  console.log('收到 WebSocket 请求');
+// WebSocket相关函数（修复为开发版逻辑）
+async function 升级请求(请求) {
   const 创建接口 = new WebSocketPair();
   const [客户端, 服务端] = Object.values(创建接口);
   服务端.accept();
-  console.log('WebSocket 已接受');
 
   const secWebSocketProtocol = 请求.headers.get('sec-websocket-protocol');
   if (!secWebSocketProtocol) {
@@ -282,15 +279,23 @@ async function 升级请求(请求, 启用反代, 启用SOCKS5, 反代地址, SO
     return new Response('Invalid WebSocket request', { status: 400 });
   }
 
-  const 解析结果 = await 解析头(解密(secWebSocketProtocol), 启用反代, 启用SOCKS5, 反代地址, SOCKS5账号, 启用全局SOCKS5);
+  const 解析结果 = await 解析头(解密(secWebSocketProtocol));
   if (!解析结果) {
     服务端.close(1002, 'Invalid protocol data');
     return new Response('Invalid request', { status: 400 });
   }
 
   const { TCP接口, 初始数据 } = 解析结果;
-  建立双向管道(服务端, TCP接口, 初始数据);
-  return new Response(null, { status: 101, webSocket: 客户端 });
+
+  try {
+    await 建立双向管道(服务端, TCP接口, 初始数据);
+    return new Response(null, { status: 101, webSocket: 客户端 });
+  } catch (错误) {
+    console.error(`建立管道失败: ${错误.message}`);
+    服务端.close(1001, 'Internal error');
+    TCP接口.close();
+    return new Response('Internal server error', { status: 500 });
+  }
 }
 
 function 解密(混淆字符) {
@@ -298,9 +303,13 @@ function 解密(混淆字符) {
   return Uint8Array.from(atob(混淆字符), c => c.charCodeAt(0)).buffer;
 }
 
-async function 解析头(数据, 启用反代, 启用SOCKS5, 反代地址, SOCKS5账号, 启用全局SOCKS5) {
+async function 解析头(数据) {
   const 数据数组 = new Uint8Array(数据);
-  if (验证密钥(数据数组.slice(1, 17)) !== 开门锁匙) return null;
+  const 密钥 = 验证密钥(数据数组.slice(1, 17));
+  if (密钥 !== 开门锁匙) {
+    console.error(`密钥验证失败: ${密钥} != ${开门锁匙}`);
+    return null;
+  }
 
   const 数据定位 = 数据数组[17];
   const 端口 = new DataView(数据.slice(18 + 数据定位 + 1, 20 + 数据定位 + 1)).getUint16(0);
@@ -310,7 +319,9 @@ async function 解析头(数据, 启用反代, 启用SOCKS5, 反代地址, SOCKS
   const 地址信息索引 = 地址索引 + 1;
 
   switch (地址类型) {
-    case 1: 地址 = new Uint8Array(数据.slice(地址信息索引, 地址信息索引 + 4)).join('.'); break;
+    case 1:
+      地址 = new Uint8Array(数据.slice(地址信息索引, 地址信息索引 + 4)).join('.');
+      break;
     case 2:
       const 地址长度 = 数据数组[地址信息索引];
       地址 = new TextDecoder().decode(数据.slice(地址信息索引 + 1, 地址信息索引 + 1 + 地址长度));
@@ -318,86 +329,142 @@ async function 解析头(数据, 启用反代, 启用SOCKS5, 反代地址, SOCKS
     case 3:
       地址 = Array.from({ length: 8 }, (_, i) => new DataView(数据.slice(地址信息索引, 地址信息索引 + 16)).getUint16(i * 2).toString(16)).join(':');
       break;
-    default: return null;
+    default:
+      console.error(`未知地址类型: ${地址类型}`);
+      return null;
   }
 
   const 初始数据 = 数据.slice(地址信息索引 + (地址类型 === 2 ? 数据数组[地址信息索引] + 1 : 地址类型 === 1 ? 4 : 16));
+  console.log(`解析目标: ${地址}:${端口}, 地址类型: ${地址类型}, 初始数据长度: ${初始数据.byteLength}`);
+
   let TCP接口;
   if (启用反代 && 启用SOCKS5 && 启用全局SOCKS5) {
     TCP接口 = await 创建SOCKS5(地址类型, 地址, 端口);
+    if (TCP接口 instanceof Response) return null;
   } else {
     try {
-      TCP接口 = connect({ hostname: 地址, port: 端口 });
-      await TCP接口.opened;
-    } catch {
+      TCP接口 = await 创建TCP连接(地址, 端口);
+    } catch (错误) {
+      console.error(`TCP连接失败: ${错误.message}`);
       if (启用反代) {
         TCP接口 = 启用SOCKS5
           ? await 创建SOCKS5(地址类型, 地址, 端口)
-          : connect({ hostname: 反代地址.split(':')[0], port: 反代地址.split(':')[1] || 端口 });
+          : await 创建TCP连接(反代地址.split(':')[0], 反代地址.split(':')[1] || 端口);
+        if (TCP接口 instanceof Response) return null;
+      } else {
+        return null;
       }
     }
   }
   return { TCP接口, 初始数据 };
 }
 
+async function 创建TCP连接(主机名, 端口, 超时 = 10000) {
+  const TCP接口 = connect({ hostname: 主机名, port: 端口 });
+  const 超时控制器 = new AbortController();
+  const 超时计时器 = setTimeout(() => 超时控制器.abort(), 超时);
+
+  try {
+    await TCP接口.opened;
+    clearTimeout(超时计时器);
+    console.log(`TCP 连接成功: ${主机名}:${端口}`);
+    return TCP接口;
+  } catch (错误) {
+    clearTimeout(超时计时器);
+    console.error(`TCP 连接失败: ${主机名}:${端口}, 错误: ${错误.message}`);
+    TCP接口.close();
+    throw 错误;
+  }
+}
+
+async function 建立双向管道(服务端, TCP接口, 初始数据) {
+  await 服务端.send(new Uint8Array([0, 0]).buffer);
+  console.log('WebSocket 连接已建立，发送初始响应');
+
+  const 到TCP流 = new ReadableStream({
+    async start(控制器) {
+      if (初始数据 && 初始数据.byteLength > 0) {
+        控制器.enqueue(初始数据);
+        console.log(`发送初始数据: ${初始数据.byteLength} 字节`);
+      }
+    },
+    pull(控制器) {
+      服务端.addEventListener('message', async (event) => {
+        try {
+          const 数据 = event.data instanceof ArrayBuffer ? new Uint8Array(event.data) : event.data;
+          控制器.enqueue(数据);
+          console.log(`从 WebSocket 接收数据: ${数据.byteLength || 数据.length} 字节`);
+        } catch (错误) {
+          console.error(`处理 WebSocket 数据失败: ${错误.message}`);
+          控制器.error(错误);
+        }
+      }, { once: true });
+    },
+    cancel() {
+      console.log('WebSocket 到 TCP 流被取消');
+      TCP接口.close();
+    }
+  });
+
+  const 从TCP流 = TCP接口.readable;
+
+  const TCP写入器 = TCP接口.writable.getWriter();
+  const 服务端写入器 = {
+    async write(数据) {
+      await 服务端.send(数据);
+      console.log(`向 WebSocket 发送数据: ${数据.byteLength} 字节`);
+    }
+  };
+
+  const 到TCP管道 = 到TCP流.pipeTo(new WritableStream({
+    async write(数据) {
+      await TCP写入器.write(数据);
+    },
+    close() {
+      console.log('到 TCP 管道关闭');
+      TCP写入器.releaseLock();
+    },
+    abort(原因) {
+      console.error(`到 TCP 管道中止: ${原因}`);
+      TCP写入器.releaseLock();
+      TCP接口.close();
+    }
+  })).catch(async (错误) => {
+    console.error(`到 TCP 管道错误: ${错误.message}`);
+    服务端.close(1001, 'TCP write error');
+    TCP接口.close();
+  });
+
+  const 从TCP管道 = 从TCP流.pipeTo(new WritableStream(服务端写入器)).catch(async (错误) => {
+    console.error(`从 TCP 管道错误: ${错误.message}`);
+    服务端.close(1001, 'TCP read error');
+    TCP接口.close();
+  });
+
+  服务端.addEventListener('close', () => {
+    console.log('WebSocket 客户端关闭连接');
+    TCP接口.close();
+  });
+
+  服务端.addEventListener('error', (错误) => {
+    console.error(`WebSocket 错误: ${错误.message}`);
+    TCP接口.close();
+  });
+
+  await Promise.race([到TCP管道, 从TCP管道]);
+}
+
 function 验证密钥(arr) {
   return Array.from(arr.slice(0, 16), b => b.toString(16).padStart(2, '0')).join('').match(/(.{8})(.{4})(.{4})(.{4})(.{12})/).slice(1).join('-').toLowerCase();
 }
 
-async function 建立双向管道(服务端, TCP接口, 初始数据) {
-  console.log('建立管道开始');
-  await 服务端.send(new Uint8Array([0, 0]).buffer); // 快速发送初始响应
-  console.log('已发送初始响应');
-
-  const 数据流 = new ReadableStream({
-    async start(控制器) {
-      if (初始数据 && 初始数据.byteLength > 0) {
-        控制器.enqueue(初始数据);
-        console.log(`发送初始数据到 TCP: ${初始数据.byteLength} 字节`);
-      }
-      服务端.addEventListener('message', event => {
-        const 数据 = event.data instanceof ArrayBuffer ? new Uint8Array(event.data) : event.data;
-        控制器.enqueue(数据);
-        console.log(`从 WebSocket 接收: ${数据.byteLength || 数据.length} 字节`);
-      });
-      服务端.addEventListener('close', () => {
-        控制器.close();
-        TCP接口.close();
-        setTimeout(() => 服务端.close(1000), 2); // 延迟关闭确保数据传输完成
-        console.log('WebSocket 关闭');
-      });
-      服务端.addEventListener('error', () => {
-        控制器.close();
-        TCP接口.close();
-        setTimeout(() => 服务端.close(1001), 2);
-        console.log('WebSocket 错误');
-      });
-    }
-  });
-
-  数据流.pipeTo(new WritableStream({
-    async write(数据) {
-      const 写入器 = TCP接口.writable.getWriter();
-      await 写入器.write(数据);
-      写入器.releaseLock();
-      console.log(`写入 TCP: ${数据.byteLength} 字节`);
-    }
-  })).catch(err => console.error(`到 TCP 管道错误: ${err.message}`));
-
-  TCP接口.readable.pipeTo(new WritableStream({
-    async write(数据) {
-      await 服务端.send(数据);
-      console.log(`发送到 WebSocket: ${数据.byteLength} 字节`);
-    }
-  })).catch(err => console.error(`从 TCP 管道错误: ${err.message}`));
-}
-
 async function 创建SOCKS5(地址类型, 地址, 端口) {
-  const { username, password, hostname, port } = await 解析SOCKS5账号(SOCKS5账号);
-  const SOCKS5接口 = connect({ hostname, port });
+  const { username, password, hostname, port: socksPort } = await 解析SOCKS5账号(SOCKS5账号);
+  const SOCKS5接口 = connect({ hostname, port: socksPort });
   try {
     await SOCKS5接口.opened;
   } catch {
+    console.error(`SOCKS5 连接失败: ${hostname}:${socksPort}`);
     return new Response('SOCKS5未连通', { status: 400 });
   }
   const writer = SOCKS5接口.writable.getWriter();
@@ -695,24 +762,30 @@ function 生成KV未绑定提示页面() {
   `;
 }
 
-// 修复Clash配置生成，确保节点可用
+// 修复Clash配置生成，增加错误处理
 function 生成猫咪配置(hostName) {
   const 节点列表 = 优选节点.length ? 优选节点 : [`${hostName}:443`];
   const 郭嘉分组 = {};
 
   节点列表.forEach((节点, 索引) => {
-    const [主内容, tls] = 节点.split("@");
-    const [地址端口, 节点名字 = 节点名称] = 主内容.split("#");
-    const [, 地址, 端口 = "443"] = 地址端口.match(/^\[(.*?)\](?::(\d+))?$/) || 地址端口.match(/^(.*?)(?::(\d+))?$/);
-    const 修正地址 = 地址.includes(":") ? 地址.replace(/^\[|\]$/g, '') : 地址;
-    const TLS开关 = tls === 'notls' ? 'false' : 'true';
-    const 郭嘉 = 节点名字.split('-')[0] || '默认';
-    const 地址类型 = 修正地址.includes(":") ? "IPv6" : "IPv4";
+    try {
+      const [主内容, tls] = 节点.split("@");
+      const [地址端口, 节点名字 = 节点名称] = 主内容.split("#");
+      const match = 地址端口.match(/^\[(.*?)\](?::(\d+))?$/) || 地址端口.match(/^(.*?)(?::(\d+))?$/);
+      if (!match) {
+        console.error(`节点格式错误: ${节点}`);
+        return;
+      }
+      const [, 地址, 端口 = "443"] = match;
+      const 修正地址 = 地址.includes(":") ? 地址.replace(/^\[|\]$/g, '') : 地址;
+      const TLS开关 = tls === 'notls' ? 'false' : 'true';
+      const 郭嘉 = 节点名字.split('-')[0] || '默认';
+      const 地址类型 = 修正地址.includes(":") ? "IPv6" : "IPv4";
 
-    郭嘉分组[郭嘉] = 郭嘉分组[郭嘉] || { IPv4: [], IPv6: [] };
-    郭嘉分组[郭嘉][地址类型].push({
-      name: `${节点名字}-${郭嘉分组[郭嘉][地址类型].length + 1}`,
-      config: `- name: "${节点名字}-${郭嘉分组[郭嘉][地址类型].length + 1}"
+      郭嘉分组[郭嘉] = 郭嘉分组[郭嘉] || { IPv4: [], IPv6: [] };
+      郭嘉分组[郭嘉][地址类型].push({
+        name: `${节点名字}-${郭嘉分组[郭嘉][地址类型].length + 1}`,
+        config: `- name: "${节点名字}-${郭嘉分组[郭嘉][地址类型].length + 1}"
   type: ${歪啦}${伊埃斯}
   server: ${修正地址}
   port: ${端口}
@@ -725,7 +798,10 @@ function 生成猫咪配置(hostName) {
     path: "/?ed=2560"
     headers:
       Host: ${hostName}`
-    });
+      });
+    } catch (错误) {
+      console.error(`解析节点失败: ${节点}, 错误: ${错误.message}`);
+    }
   });
 
   const 郭嘉列表 = Object.keys(郭嘉分组).sort();
@@ -799,7 +875,7 @@ rules:
 `;
 }
 
-// 修复V2Ray配置生成，确保正确输出
+// 修复V2Ray配置生成，增加错误处理
 function 生成备用配置(hostName) {
   const 节点列表 = 优选节点.length ? 优选节点 : [`${hostName}:443`];
   const 配置列表 = 节点列表.map(节点 => {
@@ -807,10 +883,16 @@ function 生成备用配置(hostName) {
       const [主内容, tls = 'tls'] = 节点.split("@");
       const [地址端口, 节点名字 = 节点名称] = 主内容.split("#");
       const match = 地址端口.match(/^(?:\[([0-9a-fA-F:]+)\]|([^:]+))(?:\:(\d+))?$/);
-      if (!match) return null;
+      if (!match) {
+        console.error(`V2Ray节点格式错误: ${节点}`);
+        return null;
+      }
       const 地址 = match[1] || match[2];
       const 端口 = match[3] || "443";
-      if (!地址) return null;
+      if (!地址) {
+        console.error(`地址解析失败: ${节点}`);
+        return null;
+      }
       const 修正地址 = 地址.includes(":") ? `[${地址}]` : 地址;
       const TLS开关 = tls === 'notls' ? 'none' : 'tls';
       const encodedPath = encodeURIComponent('/?ed=2560');
