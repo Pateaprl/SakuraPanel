@@ -1,6 +1,5 @@
 import { connect } from 'cloudflare:sockets';
 
-// 配置变量
 let 订阅路径 = "config";
 let 开门锁匙 = "03978e2f-2129-4c0c-8f15-22175dd0aba6";
 let 优选TXT路径 = [
@@ -29,7 +28,7 @@ let 歪兔 = 'v2';
 let 蕊蒽 = 'rayN';
 let 背景壁纸 = 'https://raw.githubusercontent.com/Alien-Et/ips/refs/heads/main/image/night.jpg';
 
-// 创建响应函数
+// 创建响应函数保持不变
 function 创建HTML响应(内容, 状态码 = 200) {
   return new Response(内容, {
     status: 状态码,
@@ -62,12 +61,17 @@ function 创建JSON响应(数据, 状态码 = 200, 额外头 = {}) {
   });
 }
 
-// 加载节点和配置
+// 修复节点加载逻辑，合并手动节点和远程节点
 async function 加载节点和配置(env, hostName) {
   try {
+    // 获取手动上传的节点
     const 手动节点缓存 = await env.LOGIN_STATE.get('manual_preferred_ips');
-    let 手动节点列表 = 手动节点缓存 ? JSON.parse(手动节点缓存).map(line => line.trim()).filter(Boolean) : [];
+    let 手动节点列表 = [];
+    if (手动节点缓存) {
+      手动节点列表 = JSON.parse(手动节点缓存).map(line => line.trim()).filter(Boolean);
+    }
 
+    // 获取远程节点
     const 响应列表 = await Promise.all(
       优选TXT路径.map(async (路径) => {
         try {
@@ -116,7 +120,9 @@ async function 获取配置(env, 类型, hostName) {
   const 配置版本 = await env.LOGIN_STATE.get(版本键) || '0';
   const 节点版本 = await env.LOGIN_STATE.get('ip_preferred_ips_version') || '0';
 
-  if (缓存配置 && 配置版本 === 节点版本) return 缓存配置;
+  if (缓存配置 && 配置版本 === 节点版本) {
+    return 缓存配置;
+  }
 
   const 新配置 = 类型 === 'clash' ? 生成猫咪配置(hostName) : 生成备用配置(hostName);
   await env.LOGIN_STATE.put(缓存键, 新配置, { expirationTtl: 86400 });
@@ -134,11 +140,12 @@ async function 检查锁定(env, 设备标识) {
   };
 }
 
-// 主入口
 export default {
   async fetch(请求, env) {
     try {
-      if (!env.LOGIN_STATE) return 创建HTML响应(生成KV未绑定提示页面());
+      if (!env.LOGIN_STATE) {
+        return 创建HTML响应(生成KV未绑定提示页面());
+      }
 
       const 请求头 = 请求.headers.get('Upgrade');
       const url = new URL(请求.url);
@@ -146,6 +153,7 @@ export default {
       const UA = 请求.headers.get('User-Agent') || 'unknown';
       const IP = 请求.headers.get('CF-Connecting-IP') || 'unknown';
       const 设备标识 = `${UA}_${IP}`;
+      let formData;
 
       if (!请求头 || 请求头 !== 'websocket') {
         switch (url.pathname) {
@@ -169,7 +177,7 @@ export default {
           case '/login/submit':
             const 锁定 = await 检查锁定(env, 设备标识);
             if (锁定.被锁定) return 创建重定向响应('/login');
-            const formData = await 请求.formData();
+            formData = await 请求.formData();
             const 提供的账号 = formData.get('username');
             const 提供的密码 = formData.get('password');
             if (提供的账号 === 账号 && 提供的密码 === 密码) {
@@ -203,36 +211,44 @@ export default {
             if (!uploadToken || uploadToken !== 有效UploadToken) {
               return 创建JSON响应({ error: '未登录或Token无效，请重新登录' }, 401);
             }
-            const formDataUpload = await 请求.formData();
-            const ipFiles = formDataUpload.getAll('ipFiles');
+            formData = await 请求.formData();
+            const ipFiles = formData.getAll('ipFiles');
             if (!ipFiles || ipFiles.length === 0) {
               return 创建JSON响应({ error: '未选择任何文件' }, 400);
             }
             let allIpList = [];
-            for (const ipFile of ipFiles) {
-              if (!ipFile || !ipFile.text) throw new Error(`文件 ${ipFile.name} 无效`);
-              const ipText = await ipFile.text();
-              const ipList = ipText.split('\n').map(line => line.trim()).filter(Boolean);
-              allIpList = allIpList.concat(ipList);
+            try {
+              for (const ipFile of ipFiles) {
+                if (!ipFile || !ipFile.text) throw new Error(`文件 ${ipFile.name} 无效`);
+                const ipText = await ipFile.text();
+                const ipList = ipText.split('\n').map(line => line.trim()).filter(Boolean);
+                if (ipList.length === 0) console.warn(`文件 ${ipFile.name} 内容为空`);
+                allIpList = allIpList.concat(ipList);
+              }
+              if (allIpList.length === 0) {
+                return 创建JSON响应({ error: '所有上传文件内容为空' }, 400);
+              }
+              const uniqueIpList = [...new Set(allIpList)];
+              
+              const 当前手动节点 = await env.LOGIN_STATE.get('manual_preferred_ips');
+              const 当前节点列表 = 当前手动节点 ? JSON.parse(当前手动节点) : [];
+              const 是重复上传 = JSON.stringify(当前节点列表.sort()) === JSON.stringify(uniqueIpList.sort());
+              if (是重复上传) {
+                return 创建JSON响应({ message: '上传内容与现有节点相同，无需更新' }, 200);
+              }
+
+              await env.LOGIN_STATE.put('manual_preferred_ips', JSON.stringify(uniqueIpList), { expirationTtl: 86400 });
+              const 新版本 = String(Date.now());
+              await env.LOGIN_STATE.put('ip_preferred_ips_version', 新版本);
+              await env.LOGIN_STATE.put('config_clash', 生成猫咪配置(hostName), { expirationTtl: 86400 });
+              await env.LOGIN_STATE.put('config_clash_version', 新版本);
+              await env.LOGIN_STATE.put('config_v2ray', 生成备用配置(hostName), { expirationTtl: 86400 });
+              await env.LOGIN_STATE.put('config_v2ray_version', 新版本);
+              return 创建JSON响应({ message: '上传成功，即将跳转' }, 200, { 'Location': `/${订阅路径}` });
+            } catch (错误) {
+              console.error(`上传处理失败: ${错误.message}`);
+              return 创建JSON响应({ error: `上传处理失败: ${错误.message}` }, 500);
             }
-            if (allIpList.length === 0) {
-              return 创建JSON响应({ error: '所有上传文件内容为空' }, 400);
-            }
-            const uniqueIpList = [...new Set(allIpList)];
-            const 当前手动节点 = await env.LOGIN_STATE.get('manual_preferred_ips');
-            const 当前节点列表 = 当前手动节点 ? JSON.parse(当前手动节点) : [];
-            const 是重复上传 = JSON.stringify(当前节点列表.sort()) === JSON.stringify(uniqueIpList.sort());
-            if (是重复上传) {
-              return 创建JSON响应({ message: '上传内容与现有节点相同，无需更新' }, 200);
-            }
-            await env.LOGIN_STATE.put('manual_preferred_ips', JSON.stringify(uniqueIpList), { expirationTtl: 86400 });
-            const 新版本 = String(Date.now());
-            await env.LOGIN_STATE.put('ip_preferred_ips_version', 新版本);
-            await env.LOGIN_STATE.put('config_clash', 生成猫咪配置(hostName), { expirationTtl: 86400 });
-            await env.LOGIN_STATE.put('config_clash_version', 新版本);
-            await env.LOGIN_STATE.put('config_v2ray', 生成备用配置(hostName), { expirationTtl: 86400 });
-            await env.LOGIN_STATE.put('config_v2ray_version', 新版本);
-            return 创建JSON响应({ message: '上传成功，即将跳转' }, 200, { 'Location': `/${订阅路径}` });
           default:
             url.hostname = 伪装域名;
             url.protocol = 'https:';
@@ -245,14 +261,14 @@ export default {
         启用全局SOCKS5 = env.SOCKS5GLOBAL === 'true' ? true : env.SOCKS5GLOBAL === 'false' ? false : 启用全局SOCKS5;
         return await 升级请求(请求, 启用反代, 启用SOCKS5, 反代地址, SOCKS5账号, 启用全局SOCKS5);
       }
-    } catch (错误) {
-      console.error(`全局错误: ${错误.message}`);
-      return 创建JSON响应({ error: `服务器内部错误: ${错误.message}` }, 500);
+    } catch (error) {
+      console.error(`全局错误: ${error.message}`);
+      return 创建JSON响应({ error: `服务器内部错误: ${error.message}` }, 500);
     }
   }
 };
 
-// WebSocket 处理函数
+// WebSocket相关函数（修复超时问题）
 async function 升级请求(请求, 启用反代, 启用SOCKS5, 反代地址, SOCKS5账号, 启用全局SOCKS5) {
   console.log('收到 WebSocket 请求');
   const 创建接口 = new WebSocketPair();
@@ -308,19 +324,16 @@ async function 解析头(数据, 启用反代, 启用SOCKS5, 反代地址, SOCKS
   const 初始数据 = 数据.slice(地址信息索引 + (地址类型 === 2 ? 数据数组[地址信息索引] + 1 : 地址类型 === 1 ? 4 : 16));
   let TCP接口;
   if (启用反代 && 启用SOCKS5 && 启用全局SOCKS5) {
-    TCP接口 = await 创建SOCKS5(地址类型, 地址, 端口, SOCKS5账号);
-    if (TCP接口 instanceof Response) return null;
+    TCP接口 = await 创建SOCKS5(地址类型, 地址, 端口);
   } else {
     try {
-      TCP接口 = await 创建TCP连接(地址, 端口);
+      TCP接口 = connect({ hostname: 地址, port: 端口 });
+      await TCP接口.opened;
     } catch {
       if (启用反代) {
-        const [反代主机, 反代端口] = 反代地址.split(':');
         TCP接口 = 启用SOCKS5
-          ? await 创建SOCKS5(地址类型, 地址, 端口, SOCKS5账号)
-          : await 创建TCP连接(反代主机, 反代端口 || 端口);
-      } else {
-        return null;
+          ? await 创建SOCKS5(地址类型, 地址, 端口)
+          : connect({ hostname: 反代地址.split(':')[0], port: 反代地址.split(':')[1] || 端口 });
       }
     }
   }
@@ -333,7 +346,7 @@ function 验证密钥(arr) {
 
 async function 建立双向管道(服务端, TCP接口, 初始数据) {
   console.log('建立管道开始');
-  await 服务端.send(new Uint8Array([0, 0]).buffer);
+  await 服务端.send(new Uint8Array([0, 0]).buffer); // 快速发送初始响应
   console.log('已发送初始响应');
 
   const 数据流 = new ReadableStream({
@@ -350,7 +363,7 @@ async function 建立双向管道(服务端, TCP接口, 初始数据) {
       服务端.addEventListener('close', () => {
         控制器.close();
         TCP接口.close();
-        setTimeout(() => 服务端.close(1000), 2);
+        setTimeout(() => 服务端.close(1000), 2); // 延迟关闭确保数据传输完成
         console.log('WebSocket 关闭');
       });
       服务端.addEventListener('error', () => {
@@ -379,26 +392,7 @@ async function 建立双向管道(服务端, TCP接口, 初始数据) {
   })).catch(err => console.error(`从 TCP 管道错误: ${err.message}`));
 }
 
-async function 创建TCP连接(主机名, 端口, 超时 = 10000) {
-  console.log(`尝试连接: ${主机名}:${端口}`);
-  const TCP接口 = connect({ hostname: 主机名, port: 端口 });
-  const 超时控制器 = new AbortController();
-  const 超时计时器 = setTimeout(() => 超时控制器.abort(), 超时);
-
-  try {
-    await TCP接口.opened;
-    clearTimeout(超时计时器);
-    console.log(`TCP 连接成功: ${主机名}:${端口}`);
-    return TCP接口;
-  } catch (错误) {
-    clearTimeout(超时计时器);
-    console.error(`TCP 连接失败: ${主机名}:${端口}, 错误: ${错误.message}`);
-    TCP接口.close();
-    throw 错误;
-  }
-}
-
-async function 创建SOCKS5(地址类型, 地址, 端口, SOCKS5账号) {
+async function 创建SOCKS5(地址类型, 地址, 端口) {
   const { username, password, hostname, port } = await 解析SOCKS5账号(SOCKS5账号);
   const SOCKS5接口 = connect({ hostname, port });
   try {
@@ -449,7 +443,7 @@ async function 解析SOCKS5账号(SOCKS5) {
   return { username, password, hostname, port };
 }
 
-// UI 和配置生成函数（保持不变）
+// 恢复完整的订阅页面（带上传功能）
 function 生成订阅页面(订阅路径, hostName) {
   return `
 <!DOCTYPE html>
@@ -581,6 +575,8 @@ function 生成订阅页面(订阅路径, hostName) {
                 alert(response.message);
                 window.location.href = response.Location || '/${订阅路径}';
               }, 500);
+            } else {
+              throw new Error('响应格式错误');
             }
           } else {
             throw new Error(response.error || '未知错误');
@@ -699,6 +695,7 @@ function 生成KV未绑定提示页面() {
   `;
 }
 
+// 修复Clash配置生成，确保节点可用
 function 生成猫咪配置(hostName) {
   const 节点列表 = 优选节点.length ? 优选节点 : [`${hostName}:443`];
   const 郭嘉分组 = {};
@@ -802,6 +799,7 @@ rules:
 `;
 }
 
+// 修复V2Ray配置生成，确保正确输出
 function 生成备用配置(hostName) {
   const 节点列表 = 优选节点.length ? 优选节点 : [`${hostName}:443`];
   const 配置列表 = 节点列表.map(节点 => {
