@@ -26,7 +26,7 @@ let 歪啦 = 'vl';
 let 伊埃斯 = 'ess';
 let 歪兔 = 'v2';
 let 蕊蒽 = 'rayN';
-let 背景壁纸 = 'https://raw.githubusercontent.com/Alien-Et/ips/refs/heads/main/image/night.jpg';
+let 背景壁纸 = 'https://raw.githubusercontent.com/Alien-Et/ips/refs/heads/main/image/night.jpg'; // 你的静态壁纸链接
 
 function 创建HTML响应(内容, 状态码 = 200) {
   return new Response(内容, {
@@ -418,9 +418,17 @@ function 生成订阅页面(订阅路径, hostName) {
       display: flex;
       justify-content: center;
       align-items: center;
-      background-image: url('https://i.imgur.com/7QzX8kT.png');
-      background-size: cover;
-      background-position: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .background-media {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: -1;
     }
     .container {
       max-width: 900px;
@@ -612,6 +620,13 @@ function 生成订阅页面(订阅路径, hostName) {
   </style>
 </head>
 <body>
+  ${背景壁纸.endsWith('.mp4') || 背景壁纸.endsWith('.webm') ? `
+  <video class="background-media" autoplay loop muted playsinline>
+    <source src="${背景壁纸}" type="video/${背景壁纸.endsWith('.mp4') ? 'mp4' : 'webm'}">
+  </video>
+  ` : `
+  <img class="background-media" src="${背景壁纸}" alt="Background">
+  `}
   <div class="container">
     <div class="card">
       <h1 class="card-title">🌸 欢迎来到小仙女订阅站 🌸</h1>
@@ -761,9 +776,17 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
       display: flex;
       justify-content: center;
       align-items: center;
-      background-image: url('https://i.imgur.com/7QzX8kT.png');
-      background-size: cover;
-      background-position: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .background-media {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: -1;
     }
     .content {
       background: rgba(255, 255, 255, 0.85);
@@ -851,6 +874,13 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
   </style>
 </head>
 <body>
+  ${背景壁纸.endsWith('.mp4') || 背景壁纸.endsWith('.webm') ? `
+  <video class="background-media" autoplay loop muted playsinline>
+    <source src="${背景壁纸}" type="video/${背景壁纸.endsWith('.mp4') ? 'mp4' : 'webm'}">
+  </video>
+  ` : `
+  <img class="background-media" src="${背景壁纸}" alt="Background">
+  `}
   <div class="content">
     <h1>🌷 小仙女登录 🌷</h1>
     ${锁定状态 ? `
@@ -911,9 +941,17 @@ function 生成KV未绑定提示页面() {
       display: flex;
       justify-content: center;
       align-items: center;
-      background-image: url('https://i.imgur.com/7QzX8kT.png');
-      background-size: cover;
-      background-position: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .background-media {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: -1;
     }
     .content {
       background: rgba(255, 255, 255, 0.85);
@@ -952,6 +990,13 @@ function 生成KV未绑定提示页面() {
   </style>
 </head>
 <body>
+  ${背景壁纸.endsWith('.mp4') || 背景壁纸.endsWith('.webm') ? `
+  <video class="background-media" autoplay loop muted playsinline>
+    <source src="${背景壁纸}" type="video/${背景壁纸.endsWith('.mp4') ? 'mp4' : 'webm'}">
+  </video>
+  ` : `
+  <img class="background-media" src="${背景壁纸}" alt="Background">
+  `}
   <div class="content">
     <h1>💔 哎呀，KV没绑定哦</h1>
     <p>小仙女，你的 <span class="highlight">Cloudflare KV 存储空间</span> 还没绑定呢~<br>快去 <span class="highlight">Cloudflare Workers</span> 设置里绑一个 KV 命名空间（比如 <span class="highlight">LOGIN_STATE</span>），然后重新部署一下吧！</p>
