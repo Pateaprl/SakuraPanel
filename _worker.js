@@ -53,7 +53,7 @@ function 创建JSON响应(数据, 状态码 = 200, 额外头 = {}) {
   });
 }
 
-// 加载节点和配置（保持不变）
+// 加载节点和配置
 async function 加载节点和配置(env, hostName) {
   try {
     const txtPaths = await env.LOGIN_STATE.get('txt_paths');
@@ -272,7 +272,7 @@ export default {
   }
 };
 
-// WebSocket 相关函数（保持不变）
+// WebSocket 相关函数
 async function 升级请求(请求) {
   const 创建接口 = new WebSocketPair();
   const [客户端, 服务端] = Object.values(创建接口);
@@ -542,15 +542,26 @@ function 生成订阅页面(订阅路径, hostName) {
       box-shadow: 0 5px 15px rgba(0, 230, 118, 0.5); 
     }
     .small-btn { 
+      display: inline-flex; 
+      align-items: center; 
+      gap: 8px; 
       padding: 8px 16px; 
       font-size: 14px; 
       background: linear-gradient(135deg, #2196F3, #1976D2); 
-      max-width: 120px; 
+      border-radius: 10px; 
+      color: #fff; 
       text-align: center; 
+      transition: all 0.3s; 
+      max-width: 140px; 
     }
     .small-btn:hover { 
       background: linear-gradient(135deg, #1976D2, #1565C0); 
       box-shadow: 0 5px 15px rgba(33, 150, 243, 0.5); 
+    }
+    .small-btn svg { 
+      fill: #fff; 
+      width: 18px; 
+      height: 18px; 
     }
     .logout-btn { 
       background: linear-gradient(135deg, #ff5252, #d81b60); 
@@ -686,9 +697,10 @@ function 生成订阅页面(订阅路径, hostName) {
       .container { padding: 10px; }
       h1 { font-size: 2em; }
       .card { padding: 20px; }
-      .btn, .small-btn { max-width: 100%; }
-      .button-group { flex-direction: column; align-items: center; }
-      .toggle-container { flex-direction: column; gap: 10px; }
+      .btn { max-width: 100%; }
+      .small-btn { max-width: 130px; }
+      .button-group { gap: 10px; }
+      .toggle-container { gap: 10px; }
     }
   </style>
 </head>
@@ -709,8 +721,14 @@ function 生成订阅页面(订阅路径, hostName) {
     <div class="card">
       <h3>快速导入</h3>
       <div class="button-group">
-        <button class="small-btn" onclick="导入小猫咪('${订阅路径}', '${hostName}')">导入${小猫}${咪}</button>
-        <button class="small-btn" onclick="导入${歪兔}${蕊蒽}('${订阅路径}', '${hostName}')">导入${歪兔}${蕊蒽}</button>
+        <button class="small-btn" onclick="导入小猫咪('${订阅路径}', '${hostName}')">
+          <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17v-2h2v2h-2zm1-3c-2.76 0-5-2.24-5-5h2c0 1.66 1.34 3 3 3s3-1.34 3-3h2c0 2.76-2.24 5-5 5z"/></svg>
+          导入${小猫}${咪}
+        </button>
+        <button class="small-btn" onclick="导入${歪兔}${蕊蒽}('${订阅路径}', '${hostName}')">
+          <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/></svg>
+          导入${歪兔}${蕊蒽}
+        </button>
       </div>
     </div>
 
