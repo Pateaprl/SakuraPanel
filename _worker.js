@@ -1,5 +1,6 @@
 import { connect } from 'cloudflare:sockets';
 
+// 全局配置变量
 let 订阅路径 = "config";
 let 优选节点 = [];
 let 反代地址 = 'ts.hpc.tw';
@@ -8,7 +9,7 @@ let SOCKS5账号 = '';
 let 节点名称 = '天书';
 let 伪装域名 = 'lkssite.vip';
 let 最大失败次数 = 5;
-let 锁定时间 = 5 * 60 * 1000;
+let 锁定时间 = 5 * 60 * 1000; // 5分钟，单位毫秒
 let 小猫 = 'cla';
 let 咪 = 'sh';
 let 符号 = '://';
@@ -127,7 +128,7 @@ async function 获取配置(env, 类型, hostName) {
   return 新配置;
 }
 
-// 检查锁定
+// 检查锁定状态
 async function 检查锁定(env, 设备标识) {
   const 锁定时间戳 = await env.LOGIN_STATE.get(`lock_${设备标识}`);
   const 当前时间 = Date.now();
@@ -619,7 +620,7 @@ function 生成备用配置(hostName, uuid) {
 ${配置列表.length ? 配置列表.join("\n") : `${歪啦}${伊埃斯}://${uuid}@${hostName}:443?encryption=none&security=tls&type=ws&host=${hostName}&path=${encodeURIComponent('/?ed=2560')}&sni=${hostName}#默认节点`}`;
 }
 
-// Worker 脚本
+// Worker 主逻辑
 export default {
   async fetch(请求, env) {
     try {
