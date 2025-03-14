@@ -409,84 +409,86 @@ function 生成订阅页面(订阅路径, hostName) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     body {
-      background-image: url('${背景壁纸}');
-      background-size: cover;
-      background-position: center;
-      background-attachment: fixed;
-      background-repeat: no-repeat;
+      background: linear-gradient(135deg, #ffe6f0, #fff0f5);
       font-family: 'Comic Sans MS', 'Arial', sans-serif;
-      color: #333;
+      color: #ff6f91;
       margin: 0;
       padding: 20px;
       min-height: 100vh;
       display: flex;
       justify-content: center;
       align-items: center;
+      background-image: url('https://i.imgur.com/7QzX8kT.png');
+      background-size: cover;
+      background-position: center;
     }
     .container {
-      max-width: 800px;
+      max-width: 900px;
       width: 100%;
       display: flex;
       flex-direction: column;
-      gap: 20px;
+      align-items: center;
+      gap: 25px;
     }
     .card {
-      background: rgba(255, 255, 255, 0.9);
-      border-radius: 20px;
-      padding: 20px;
-      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+      background: rgba(255, 255, 255, 0.85);
+      border-radius: 25px;
+      padding: 25px;
+      box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3);
+      width: 100%;
+      max-width: 500px;
+      text-align: center;
       transition: transform 0.3s ease, box-shadow 0.3s ease;
       position: relative;
       overflow: hidden;
     }
     .card:hover {
-      transform: translateY(-5px);
-      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+      transform: scale(1.03);
+      box-shadow: 0 10px 25px rgba(255, 182, 193, 0.5);
     }
     .card::before {
-      content: '';
+      content: '✨';
       position: absolute;
-      top: -50%;
-      left: -50%;
-      width: 200%;
-      height: 200%;
-      background: radial-gradient(circle, rgba(255, 255, 255, 0.3), transparent);
-      opacity: 0.5;
-      pointer-events: none;
+      top: 10px;
+      right: 10px;
+      font-size: 1.5em;
+      color: #ffb6c1;
+      opacity: 0.7;
     }
     .card-title {
-      font-size: 1.5em;
-      color: #ff6f91;
-      text-align: center;
+      font-size: 1.6em;
+      color: #ff69b4;
       margin-bottom: 15px;
-      text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+      text-shadow: 1px 1px 3px rgba(255, 105, 180, 0.2);
     }
     .link-box {
       background: #fff0f5;
       border-radius: 15px;
-      padding: 10px;
+      padding: 15px;
       margin: 10px 0;
+      font-size: 0.95em;
+      color: #ff85a2;
       word-break: break-all;
-      font-size: 0.9em;
+      border: 2px dashed #ffb6c1;
     }
     .link-box a {
-      color: #ff6f91;
+      color: #ff69b4;
       text-decoration: none;
       transition: color 0.3s ease;
     }
     .link-box a:hover {
-      color: #ff4d79;
+      color: #ff1493;
     }
     .button-group {
       display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
       justify-content: center;
+      gap: 15px;
+      flex-wrap: wrap;
       margin-top: 15px;
     }
     .cute-button {
-      padding: 10px 20px;
-      border-radius: 25px;
+      padding: 12px 25px;
+      border-radius: 20px;
       border: none;
       font-size: 1em;
       color: white;
@@ -494,10 +496,12 @@ function 生成订阅页面(订阅路径, hostName) {
       transition: transform 0.2s ease, box-shadow 0.2s ease;
       background-size: 200% 100%;
       background-position: left;
+      text-align: center;
+      display: inline-block;
     }
     .cute-button:hover {
       transform: scale(1.05);
-      box-shadow: 0 5px 10px rgba(0, 0, 0, 0.2);
+      box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4);
     }
     .cute-button:active {
       transform: scale(0.95);
@@ -506,52 +510,54 @@ function 生成订阅页面(订阅路径, hostName) {
       background: linear-gradient(to right, #ffb6c1, #ff69b4);
     }
     .v2ray-btn {
-      background: linear-gradient(to right, #ffdead, #ffa07a);
+      background: linear-gradient(to right, #ffd1dc, #ff85a2);
     }
     .logout-btn {
       background: linear-gradient(to right, #ff9999, #ff6666);
     }
     .upload-card {
-      background: #f0f8ff;
+      background: #fff0f5;
     }
     .upload-title {
-      font-size: 1.3em;
-      color: #87ceeb;
+      font-size: 1.4em;
+      color: #ff85a2;
       margin-bottom: 15px;
     }
     .upload-label {
-      display: inline-block;
-      padding: 8px 15px;
-      background: linear-gradient(to right, #87ceeb, #00b7eb);
+      padding: 10px 20px;
+      background: linear-gradient(to right, #ffb6c1, #ff69b4);
       color: white;
       border-radius: 20px;
       cursor: pointer;
+      display: inline-block;
       transition: all 0.3s ease;
     }
     .upload-label:hover {
       transform: scale(1.05);
-      box-shadow: 0 5px 10px rgba(0, 0, 0, 0.2);
+      box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4);
     }
     .file-list {
-      margin: 10px 0;
-      max-height: 100px;
+      margin: 15px 0;
+      max-height: 120px;
       overflow-y: auto;
+      text-align: left;
     }
     .file-item {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      background: rgba(255, 255, 255, 0.8);
-      padding: 5px 10px;
+      background: rgba(255, 245, 247, 0.9);
+      padding: 8px 12px;
       border-radius: 10px;
       margin: 5px 0;
       font-size: 0.9em;
+      color: #ff6f91;
     }
     .file-item button {
       background: #ff9999;
       border: none;
       border-radius: 15px;
-      padding: 3px 10px;
+      padding: 5px 10px;
       color: white;
       cursor: pointer;
       transition: background 0.3s ease;
@@ -560,8 +566,8 @@ function 生成订阅页面(订阅路径, hostName) {
       background: #ff6666;
     }
     .upload-submit {
-      background: linear-gradient(to right, #98fb98, #32cd32);
-      padding: 10px 20px;
+      background: linear-gradient(to right, #ffdead, #ff85a2);
+      padding: 12px 25px;
       border-radius: 20px;
       border: none;
       color: white;
@@ -570,44 +576,46 @@ function 生成订阅页面(订阅路径, hostName) {
     }
     .upload-submit:hover {
       transform: scale(1.05);
-      box-shadow: 0 5px 10px rgba(0, 0, 0, 0.2);
+      box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4);
     }
     .progress-container {
       display: none;
-      margin-top: 10px;
+      margin-top: 15px;
     }
     .progress-bar {
       width: 100%;
       height: 15px;
-      background: #e0e0e0;
+      background: #ffe6f0;
       border-radius: 10px;
       overflow: hidden;
+      border: 1px solid #ffb6c1;
     }
     .progress-fill {
       height: 100%;
-      background: linear-gradient(to right, #87ceeb, #00b7eb);
+      background: linear-gradient(to right, #ff69b4, #ff1493);
       width: 0;
       transition: width 0.3s ease;
     }
     .progress-text {
       text-align: center;
-      font-size: 0.8em;
-      color: #666;
+      font-size: 0.85em;
+      color: #ff6f91;
       margin-top: 5px;
     }
     @media (max-width: 600px) {
       .container { padding: 10px; }
-      .card { padding: 15px; }
-      .card-title { font-size: 1.2em; }
-      .cute-button { padding: 8px 15px; font-size: 0.9em; }
+      .card { padding: 15px; max-width: 90%; }
+      .card-title { font-size: 1.3em; }
+      .cute-button, .upload-label, .upload-submit { padding: 10px 20px; font-size: 0.9em; }
+      .link-box { font-size: 0.85em; }
     }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="card">
-      <h1 class="card-title">✨ 欢迎来到订阅乐园 ✨</h1>
-      <p style="text-align: center; color: #666;">支持 <span style="color: #ff69b4;">${小猫}${咪}</span> 和 <span style="color: #ffa07a;">${歪兔}${蕊蒽}</span> 客户端哦！</p>
+      <h1 class="card-title">🌸 欢迎来到小仙女订阅站 🌸</h1>
+      <p style="color: #ff85a2; font-size: 1em;">支持 <span style="color: #ff69b4;">${小猫}${咪}</span> 和 <span style="color: #ff85a2;">${歪兔}${蕊蒽}</span> 哦~</p>
     </div>
     <div class="card">
       <h2 class="card-title">🐾 ${小猫}${咪} 订阅</h2>
@@ -628,7 +636,7 @@ function 生成订阅页面(订阅路径, hostName) {
       </div>
     </div>
     <div class="card upload-card">
-      <h2 class="upload-title">🌟 上传优选 IP</h2>
+      <h2 class="upload-title">🌟 上传你的魔法 IP</h2>
       <form id="uploadForm" action="/${订阅路径}/upload" method="POST" enctype="multipart/form-data">
         <label for="ipFiles" class="upload-label">选择文件</label>
         <input type="file" id="ipFiles" name="ipFiles" accept=".txt" multiple required onchange="显示文件()" style="display: none;">
@@ -682,7 +690,7 @@ function 生成订阅页面(订阅路径, hostName) {
       const formData = new FormData(form);
 
       if (!formData.getAll('ipFiles').length) {
-        alert('请先选择文件哦！');
+        alert('小仙女，请先选择文件哦~');
         return;
       }
 
@@ -726,7 +734,7 @@ function 生成订阅页面(订阅路径, hostName) {
 
       xhr.onerror = function() {
         progressContainer.style.display = 'none';
-        alert('上传出错啦，可能是网络问题，请检查后重试！');
+        alert('网络坏掉了，小仙女请检查一下哦~');
       };
 
       xhr.send(formData);
@@ -745,32 +753,31 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     body {
-      background-image: url('${背景壁纸}');
-      background-size: cover;
-      background-position: center;
-      background-attachment: fixed;
-      background-repeat: no-repeat;
+      background: linear-gradient(135deg, #ffe6f0, #fff0f5);
       font-family: 'Comic Sans MS', 'Arial', sans-serif;
-      color: #333;
+      color: #ff6f91;
       margin: 0;
       height: 100vh;
       display: flex;
       justify-content: center;
       align-items: center;
+      background-image: url('https://i.imgur.com/7QzX8kT.png');
+      background-size: cover;
+      background-position: center;
     }
     .content {
-      background: rgba(255, 255, 255, 0.9);
+      background: rgba(255, 255, 255, 0.85);
       padding: 30px;
-      border-radius: 20px;
+      border-radius: 25px;
       max-width: 400px;
       width: 90%;
-      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+      box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3);
       text-align: center;
     }
     h1 {
       font-size: 1.8em;
-      color: #ff6f91;
-      text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+      color: #ff69b4;
+      text-shadow: 1px 1px 3px rgba(255, 105, 180, 0.2);
       margin-bottom: 20px;
     }
     .login-form {
@@ -778,22 +785,26 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
       flex-direction: column;
       gap: 15px;
       width: 100%;
-      max-width: 320px;
+      max-width: 300px;
       margin: 0 auto;
     }
     .login-form input {
       padding: 12px;
-      border-radius: 10px;
-      border: 1px solid #ddd;
+      border-radius: 15px;
+      border: 2px solid #ffb6c1;
       background: #fff;
       font-size: 1em;
+      color: #ff6f91;
       width: 100%;
       box-sizing: border-box;
       transition: border-color 0.3s ease;
     }
     .login-form input:focus {
-      border-color: #ff6f91;
+      border-color: #ff69b4;
       outline: none;
+    }
+    .login-form input::placeholder {
+      color: #ffb6c1;
     }
     .login-form button {
       padding: 12px;
@@ -807,11 +818,11 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
     }
     .login-form button:hover {
       transform: scale(1.05);
-      box-shadow: 0 5px 10px rgba(0, 0, 0, 0.2);
+      box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4);
     }
     .error-message {
       color: #ff6666;
-      margin-top: 10px;
+      margin-top: 15px;
       font-size: 0.9em;
       animation: shake 0.5s ease-in-out;
     }
@@ -834,15 +845,17 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
     @media (max-width: 600px) {
       .content { padding: 20px; }
       h1 { font-size: 1.5em; }
+      .login-form { max-width: 250px; }
+      .login-form input, .login-form button { font-size: 0.9em; padding: 10px; }
     }
   </style>
 </head>
 <body>
   <div class="content">
-    <h1>🌸 请登录路由器 🌸</h1>
+    <h1>🌷 小仙女登录 🌷</h1>
     ${锁定状态 ? `
     <div class="lock-message">
-      登录失败次数过多，请等待 <span id="countdown" aria-live="polite">${剩余时间}</span> 秒后再试。
+      密码输错太多次啦，请等待 <span id="countdown" aria-live="polite">${剩余时间}</span> 秒哦~
     </div>
     ` : `
     <form class="login-form" action="/login/submit" method="POST">
@@ -850,7 +863,7 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
       <input type="password" id="password" name="password" placeholder="密码" required>
       <button type="submit">登录</button>
     </form>
-    ${输错密码 && 剩余次数 > 0 ? `<div class="error-message">账号或密码错误，剩余尝试次数：${剩余次数} 次。</div>` : ''}
+    ${输错密码 && 剩余次数 > 0 ? `<div class="error-message">密码不对哦，还剩 ${剩余次数} 次机会~</div>` : ''}
     `}
   </div>
   <script>
@@ -890,60 +903,59 @@ function 生成KV未绑定提示页面() {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     body {
-      background-image: url('${背景壁纸}');
-      background-size: cover;
-      background-position: center;
-      background-attachment: fixed;
-      background-repeat: no-repeat;
+      background: linear-gradient(135deg, #ffe6f0, #fff0f5);
       font-family: 'Comic Sans MS', 'Arial', sans-serif;
-      color: #333;
+      color: #ff6f91;
       margin: 0;
       height: 100vh;
       display: flex;
       justify-content: center;
       align-items: center;
+      background-image: url('https://i.imgur.com/7QzX8kT.png');
+      background-size: cover;
+      background-position: center;
     }
     .content {
-      background: rgba(255, 255, 255, 0.9);
+      background: rgba(255, 255, 255, 0.85);
       padding: 30px;
-      border-radius: 20px;
-      max-width: 600px;
+      border-radius: 25px;
+      max-width: 500px;
       width: 90%;
-      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+      box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3);
       text-align: center;
     }
     h1 {
       font-size: 1.8em;
-      color: #ff6666;
-      text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+      color: #ff69b4;
+      text-shadow: 1px 1px 3px rgba(255, 105, 180, 0.2);
       margin-bottom: 20px;
     }
     p {
       font-size: 1.1em;
-      line-height: 1.5;
-      color: #666;
+      line-height: 1.6;
+      color: #ff85a2;
     }
     .highlight {
-      color: #ff6f91;
+      color: #ff1493;
       font-weight: bold;
     }
     .instruction {
       margin-top: 20px;
       font-size: 1em;
-      color: #87ceeb;
+      color: #ff69b4;
     }
     @media (max-width: 600px) {
       .content { padding: 20px; }
       h1 { font-size: 1.5em; }
-      p { font-size: 1em; }
+      p { font-size: 0.95em; }
     }
   </style>
 </head>
 <body>
   <div class="content">
-    <h1>❌ 未绑定 KV 存储空间</h1>
-    <p>当前服务未检测到已绑定的 <span class="highlight">Cloudflare KV 存储空间</span>。<br>请在 <span class="highlight">Cloudflare Workers</span> 设置中绑定一个 KV 命名空间（如 <span class="highlight">LOGIN_STATE</span>），然后重新部署服务以正常使用。</p>
-    <div class="instruction">绑定 KV 后，请访问 <span class="highlight">/config</span> 路径进入订阅界面哦！</div>
+    <h1>💔 哎呀，KV没绑定哦</h1>
+    <p>小仙女，你的 <span class="highlight">Cloudflare KV 存储空间</span> 还没绑定呢~<br>快去 <span class="highlight">Cloudflare Workers</span> 设置里绑一个 KV 命名空间（比如 <span class="highlight">LOGIN_STATE</span>），然后重新部署一下吧！</p>
+    <div class="instruction">绑定好后，访问 <span class="highlight">/config</span> 就可以进入订阅啦~</div>
   </div>
 </body>
 </html>
