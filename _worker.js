@@ -2,12 +2,12 @@ import { connect } from 'cloudflare:sockets';
 
 // 全局变量
 let 订阅路径 = "config";
-let 开门锁匙 = uuidv4(); // 修复：正确声明变量
+let 开门锁匙 = uuidv4(); // 修复后的变量名
 let 优选TXT路径 = []; // 动态加载
 let 优选节点 = [];
-let 启用反代 = false; // 默认关闭，通过UI切换
+let 启用反代 = false;
 let 反代地址 = 'ts.hpc.tw';
-let 启用SOCKS5 = false; // 默认关闭，通过UI切换
+let 启用SOCKS5 = false;
 let 启用全局SOCKS5 = false;
 let SOCKS5账号 = '';
 let 节点名称 = '天书';
@@ -23,7 +23,7 @@ let 歪兔 = 'v2';
 let 蕊蒽 = 'rayN';
 let 背景壁纸 = 'https://raw.githubusercontent.com/Alien-Et/ips/refs/heads/main/image/night.jpg';
 
-// 简单的UUID v4生成函数
+// UUID 生成函数
 function uuidv4() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
     const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
@@ -35,59 +35,42 @@ function uuidv4() {
 function 创建HTML响应(内容, 状态码 = 200) {
   return new Response(内容, {
     status: 状态码,
-    headers: {
-      "Content-Type": "text/html;charset=utf-8",
-      "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"
-    }
+    headers: { "Content-Type": "text/html;charset=utf-8", "Cache-Control": "no-store" }
   });
 }
 
 function 创建重定向响应(路径, 额外头 = {}) {
   return new Response(null, {
     status: 302,
-    headers: {
-      "Location": 路径,
-      "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-      ...额外头
-    }
+    headers: { "Location": 路径, "Cache-Control": "no-store", ...额外头 }
   });
 }
 
 function 创建JSON响应(数据, 状态码 = 200, 额外头 = {}) {
   return new Response(JSON.stringify(数据), {
     status: 状态码,
-    headers: {
-      "Content-Type": "application/json;charset=utf-8",
-      "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-      ...额外头
-    }
+    headers: { "Content-Type": "application/json;charset=utf-8", "Cache-Control": "no-store", ...额外头 }
   });
 }
 
-// 加载节点和配置
+// 加载节点和配置（保持不变）
 async function 加载节点和配置(env, hostName) {
   try {
     const txtPaths = await env.LOGIN_STATE.get('txt_paths');
     优选TXT路径 = txtPaths ? JSON.parse(txtPaths) : [];
     const 手动节点缓存 = await env.LOGIN_STATE.get('manual_preferred_ips');
-    let 手动节点列表 = [];
-    if (手动节点缓存) {
-      手动节点列表 = JSON.parse(手动节点缓存).map(line => line.trim()).filter(Boolean);
-    }
+    let 手动节点列表 = 手动节点缓存 ? JSON.parse(手动节点缓存).map(line => line.trim()).filter(Boolean) : [];
 
-    const 响应列表 = await Promise.all(
-      优选TXT路径.map(async (路径) => {
-        try {
-          const 响应 = await fetch(路径);
-          if (!响应.ok) throw new Error(`请求 ${路径} 失败，状态码: ${响应.status}`);
-          const 文本 = await 响应.text();
-          return 文本.split('\n').map(line => line.trim()).filter(Boolean);
-        } catch (错误) {
-          console.error(`拉取 ${路径} 失败: ${错误.message}`);
-          return [];
-        }
-      })
-    );
+    const 响应列表 = await Promise.all(优选TXT路径.map(async (路径) => {
+      try {
+        const 响应 = await fetch(路径);
+        if (!响应.ok) throw new Error(`请求 ${路径} 失败，状态码: ${响应.status}`);
+        return (await 响应.text()).split('\n').map(line => line.trim()).filter(Boolean);
+      } catch (错误) {
+        console.error(`拉取 ${路径} 失败: ${错误.message}`);
+        return [];
+      }
+    }));
 
     const 域名节点列表 = [...new Set(响应列表.flat())];
     const 合并节点列表 = [...new Set([...手动节点列表, ...域名节点列表])];
@@ -123,9 +106,7 @@ async function 获取配置(env, 类型, hostName) {
   const 配置版本 = await env.LOGIN_STATE.get(版本键) || '0';
   const 节点版本 = await env.LOGIN_STATE.get('ip_preferred_ips_version') || '0';
 
-  if (缓存配置 && 配置版本 === 节点版本) {
-    return 缓存配置;
-  }
+  if (缓存配置 && 配置版本 === 节点版本) return 缓存配置;
 
   const 新配置 = 类型 === 'clash' ? 生成猫咪配置(hostName) : 生成备用配置(hostName);
   await env.LOGIN_STATE.put(缓存键, 新配置, { expirationTtl: 86400 });
@@ -137,32 +118,24 @@ async function 检查锁定(env, 设备标识) {
   const 锁定时间戳 = await env.LOGIN_STATE.get(`lock_${设备标识}`);
   const 当前时间 = Date.now();
   const 被锁定 = 锁定时间戳 && 当前时间 < Number(锁定时间戳);
-  return {
-    被锁定,
-    剩余时间: 被锁定 ? Math.ceil((Number(锁定时间戳) - 当前时间) / 1000) : 0
-  };
+  return { 被锁定, 剩余时间: 被锁定 ? Math.ceil((Number(锁定时间戳) - 当前时间) / 1000) : 0 };
 }
 
 // 主处理逻辑
 export default {
   async fetch(请求, env) {
     try {
-      if (!env.LOGIN_STATE) {
-        return 创建HTML响应(生成KV未绑定提示页面());
-      }
+      if (!env.LOGIN_STATE) return 创建HTML响应(生成KV未绑定提示页面());
 
       const 管理员账号 = await env.LOGIN_STATE.get('admin_username');
       if (!管理员账号) {
         const url = new URL(请求.url);
-        if (url.pathname === '/register') {
-          return 创建HTML响应(生成注册页面());
-        } else if (url.pathname === '/register/submit') {
+        if (url.pathname === '/register') return 创建HTML响应(生成注册页面());
+        else if (url.pathname === '/register/submit') {
           const formData = await 请求.formData();
           const 新账号 = formData.get('username');
           const 新密码 = formData.get('password');
-          if (!新账号 || !新密码) {
-            return 创建JSON响应({ error: '用户名或密码不能为空' }, 400);
-          }
+          if (!新账号 || !新密码) return 创建JSON响应({ error: '用户名或密码不能为空' }, 400);
           try {
             await env.LOGIN_STATE.put('admin_username', 新账号);
             await env.LOGIN_STATE.put('admin_password', 新密码);
@@ -171,9 +144,8 @@ export default {
             console.error(`KV写入失败: ${error.message}`);
             return 创建JSON响应({ error: '注册失败，请稍后重试' }, 500);
           }
-        } else {
-          return 创建重定向响应('/register');
         }
+        return 创建重定向响应('/register');
       }
 
       const 请求头 = 请求.headers.get('Upgrade');
@@ -186,22 +158,6 @@ export default {
 
       if (!请求头 || 请求头 !== 'websocket') {
         switch (url.pathname) {
-          case '/settings':
-            const Token = 请求.headers.get('Cookie')?.split('=')[1];
-            const 有效Token = await env.LOGIN_STATE.get('current_token');
-            if (!Token || Token !== 有效Token) return 创建重定向响应('/login');
-            return 创建HTML响应(生成设置页面(hostName));
-          case '/settings/update':
-            const 设置Token = 请求.headers.get('Cookie')?.split('=')[1];
-            const 有效设置Token = await env.LOGIN_STATE.get('current_token');
-            if (!设置Token || 设置Token !== 有效设置Token) return 创建JSON响应({ error: '未登录' }, 401);
-            formData = await 请求.formData();
-            启用反代 = formData.get('proxy') === 'on';
-            启用SOCKS5 = formData.get('socks5') === 'on';
-            const 新TXT路径 = formData.get('txtPaths')?.split('\n').map(line => line.trim()).filter(Boolean) || [];
-            await env.LOGIN_STATE.put('txt_paths', JSON.stringify(新TXT路径));
-            优选TXT路径 = 新TXT路径;
-            return 创建JSON响应({ message: '设置已更新' }, 200);
           case '/reset-login-failures':
             await env.LOGIN_STATE.put(`fail_${设备标识}`, '0');
             await env.LOGIN_STATE.delete(`lock_${设备标识}`);
@@ -252,17 +208,24 @@ export default {
             await 加载节点和配置(env, hostName);
             const v2rayConfig = await 获取配置(env, 'v2ray', hostName);
             return new Response(v2rayConfig, { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8" } });
+          case `/${订阅路径}/update-settings`:
+            const 设置Token = 请求.headers.get('Cookie')?.split('=')[1];
+            const 有效设置Token = await env.LOGIN_STATE.get('current_token');
+            if (!设置Token || 设置Token !== 有效设置Token) return 创建JSON响应({ error: '未登录' }, 401);
+            formData = await 请求.formData();
+            启用反代 = formData.get('proxy') === 'on';
+            启用SOCKS5 = formData.get('socks5') === 'on';
+            const 新TXT路径 = formData.get('txtPaths')?.split('\n').map(line => line.trim()).filter(Boolean) || [];
+            await env.LOGIN_STATE.put('txt_paths', JSON.stringify(新TXT路径));
+            优选TXT路径 = 新TXT路径;
+            return 创建JSON响应({ message: '设置已更新' }, 200);
           case `/${订阅路径}/upload`:
             const uploadToken = 请求.headers.get('Cookie')?.split('=')[1];
             const 有效UploadToken = await env.LOGIN_STATE.get('current_token');
-            if (!uploadToken || uploadToken !== 有效UploadToken) {
-              return 创建JSON响应({ error: '未登录或Token无效，请重新登录' }, 401);
-            }
+            if (!uploadToken || uploadToken !== 有效UploadToken) return 创建JSON响应({ error: '未登录或Token无效' }, 401);
             formData = await 请求.formData();
             const ipFiles = formData.getAll('ipFiles');
-            if (!ipFiles || ipFiles.length === 0) {
-              return 创建JSON响应({ error: '未选择任何文件' }, 400);
-            }
+            if (!ipFiles || ipFiles.length === 0) return 创建JSON响应({ error: '未选择任何文件' }, 400);
             let allIpList = [];
             try {
               for (const ipFile of ipFiles) {
@@ -272,16 +235,12 @@ export default {
                 if (ipList.length === 0) console.warn(`文件 ${ipFile.name} 内容为空`);
                 allIpList = allIpList.concat(ipList);
               }
-              if (allIpList.length === 0) {
-                return 创建JSON响应({ error: '所有上传文件内容为空' }, 400);
-              }
+              if (allIpList.length === 0) return 创建JSON响应({ error: '所有上传文件内容为空' }, 400);
               const uniqueIpList = [...new Set(allIpList)];
               const 当前手动节点 = await env.LOGIN_STATE.get('manual_preferred_ips');
               const 当前节点列表 = 当前手动节点 ? JSON.parse(当前手动节点) : [];
               const 是重复上传 = JSON.stringify(当前节点列表.sort()) === JSON.stringify(uniqueIpList.sort());
-              if (是重复上传) {
-                return 创建JSON响应({ message: '上传内容与现有节点相同，无需更新' }, 200);
-              }
+              if (是重复上传) return 创建JSON响应({ message: '上传内容与现有节点相同，无需更新' }, 200);
               await env.LOGIN_STATE.put('manual_preferred_ips', JSON.stringify(uniqueIpList), { expirationTtl: 86400 });
               const 新版本 = String(Date.now());
               await env.LOGIN_STATE.put('ip_preferred_ips_version', 新版本);
@@ -289,7 +248,7 @@ export default {
               await env.LOGIN_STATE.put('config_clash_version', 新版本);
               await env.LOGIN_STATE.put('config_v2ray', 生成备用配置(hostName), { expirationTtl: 86400 });
               await env.LOGIN_STATE.put('config_v2ray_version', 新版本);
-              return 创建JSON响应({ message: '上传成功，即将跳转' }, 200, { 'Location': `/${订阅路径}` });
+              return 创建JSON响应({ message: '上传成功' }, 200);
             } catch (错误) {
               console.error(`上传处理失败: ${错误.message}`);
               return 创建JSON响应({ error: `上传处理失败: ${错误.message}` }, 500);
@@ -313,7 +272,7 @@ export default {
   }
 };
 
-// WebSocket相关函数（保持不变）
+// WebSocket 相关函数（保持不变）
 async function 升级请求(请求) {
   const 创建接口 = new WebSocketPair();
   const [客户端, 服务端] = Object.values(创建接口);
@@ -451,7 +410,7 @@ async function 解析SOCKS5账号(SOCKS5) {
   return { username, password, hostname, port };
 }
 
-// UI页面
+// UI 页面
 function 生成注册页面() {
   return `
 <!DOCTYPE html>
@@ -460,13 +419,12 @@ function 生成注册页面() {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     body { background-image: url('${背景壁纸}'); background-size: cover; font-family: Arial, sans-serif; color: white; margin: 0; height: 100vh; display: flex; justify-content: center; align-items: center; }
-    .content { background: linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.9)); padding: 30px; border-radius: 15px; max-width: 400px; width: 90%; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4); text-align: center; }
-    h1 { font-size: 2em; color: #4CAF50; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3); margin-bottom: 20px; }
+    .content { background: rgba(0, 0, 0, 0.8); padding: 30px; border-radius: 15px; max-width: 400px; width: 90%; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4); text-align: center; }
+    h1 { font-size: 2em; color: #4CAF50; margin-bottom: 20px; }
     form { display: flex; flex-direction: column; gap: 15px; }
-    input { padding: 12px; border-radius: 5px; border: 1px solid rgba(255, 255, 255, 0.3); background: rgba(255, 255, 255, 0.1); color: white; font-size: 16px; }
-    input:focus { border-color: #4CAF50; box-shadow: 0 0 8px rgba(76, 175, 80, 0.5); outline: none; }
-    button { padding: 12px; background: linear-gradient(135deg, #4CAF50, #45a049); border: none; border-radius: 5px; color: white; cursor: pointer; transition: all 0.3s ease; }
-    button:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3); }
+    input { padding: 12px; border-radius: 5px; border: 1px solid #4CAF50; background: rgba(255, 255, 255, 0.1); color: white; font-size: 16px; }
+    button { padding: 12px; background: #4CAF50; border: none; border-radius: 5px; color: white; cursor: pointer; transition: all 0.3s; }
+    button:hover { background: #45a049; transform: translateY(-2px); }
     .error { color: #ff6666; margin-top: 10px; font-size: 14px; }
   </style>
 </head>
@@ -481,30 +439,21 @@ function 生成注册页面() {
     <div id="message"></div>
   </div>
   <script>
-    document.getElementById('registerForm').addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const formData = new FormData(event.target);
+    document.getElementById('registerForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData(e.target);
       const messageDiv = document.getElementById('message');
-      messageDiv.innerHTML = '';
-
       try {
-        const response = await fetch('/register/submit', {
-          method: 'POST',
-          body: formData
-        });
+        const response = await fetch('/register/submit', { method: 'POST', body: formData });
         const result = await response.json();
-
         if (response.ok && result.success) {
           messageDiv.innerHTML = '<p style="color: #4CAF50;">注册成功，正在跳转...</p>';
-          setTimeout(() => {
-            window.location.href = result.redirect || '/login';
-          }, 1000);
+          setTimeout(() => window.location.href = result.redirect || '/login', 1000);
         } else {
           messageDiv.innerHTML = '<p class="error">' + (result.error || '注册失败，请重试') + '</p>';
         }
       } catch (error) {
-        messageDiv.innerHTML = '<p class="error">网络错误，请检查连接后重试</p>';
-        console.error('注册请求失败:', error);
+        messageDiv.innerHTML = '<p class="error">网络错误，请稍后重试</p>';
       }
     });
   </script>
@@ -513,7 +462,7 @@ function 生成注册页面() {
   `;
 }
 
-function 生成设置页面(hostName) {
+function 生成订阅页面(订阅路径, hostName) {
   const 当前TXT路径 = 优选TXT路径.length ? 优选TXT路径.join('\n') : '';
   return `
 <!DOCTYPE html>
@@ -521,123 +470,98 @@ function 生成设置页面(hostName) {
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body { background-image: url('${背景壁纸}'); background-size: cover; font-family: Arial, sans-serif; color: white; margin: 0; height: 100vh; display: flex; justify-content: center; align-items: center; }
-    .content { background: linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.9)); padding: 30px; border-radius: 15px; max-width: 600px; width: 90%; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4); }
-    h1 { font-size: 2em; color: #4CAF50; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3); margin-bottom: 20px; text-align: center; }
-    .section { margin-bottom: 20px; padding: 15px; background: rgba(255, 255, 255, 0.05); border-radius: 10px; }
-    h3 { color: #4CAF50; margin: 0 0 10px; }
-    .toggle-btn { padding: 12px 24px; border-radius: 10px; border: none; color: white; cursor: pointer; font-size: 16px; transition: all 0.3s ease; width: 100%; }
-    .toggle-btn.on { background: linear-gradient(135deg, #4CAF50, #45a049); }
-    .toggle-btn.off { background: linear-gradient(135deg, #f44336, #d32f2f); }
-    .toggle-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3); }
-    textarea { width: 100%; padding: 10px; border-radius: 5px; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.3); color: white; resize: vertical; }
-    button[type="submit"] { padding: 12px; background: linear-gradient(135deg, #2196F3, #1976D2); border: none; border-radius: 5px; color: white; cursor: pointer; width: 100%; transition: all 0.3s ease; }
-    button[type="submit"]:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3); }
-  </style>
-</head>
-<body>
-  <div class="content">
-    <h1>设置</h1>
-    <form action="/settings/update" method="POST">
-      <div class="section">
-        <h3>反代开关</h3>
-        <button type="button" class="toggle-btn ${启用反代 ? 'on' : 'off'}" onclick="toggle(this, 'proxy')">${启用反代 ? '已开启' : '已关闭'}</button>
-        <input type="hidden" name="proxy" id="proxy" value="${启用反代 ? 'on' : 'off'}">
-      </div>
-      <div class="section">
-        <h3>SOCKS5 开关</h3>
-        <button type="button" class="toggle-btn ${启用SOCKS5 ? 'on' : 'off'}" onclick="toggle(this, 'socks5')">${启用SOCKS5 ? '已开启' : '已关闭'}</button>
-        <input type="hidden" name="socks5" id="socks5" value="${启用SOCKS5 ? 'on' : 'off'}">
-      </div>
-      <div class="section">
-        <h3>优选 TXT 路径</h3>
-        <textarea name="txtPaths" placeholder="一行一个域名">${当前TXT路径}</textarea>
-      </div>
-      <button type="submit">保存设置</button>
-    </form>
-  </div>
-  <script>
-    function toggle(button, fieldId) {
-      const input = document.getElementById(fieldId);
-      if (button.classList.contains('on')) {
-        button.classList.remove('on');
-        button.classList.add('off');
-        button.textContent = '已关闭';
-        input.value = 'off';
-      } else {
-        button.classList.remove('off');
-        button.classList.add('on');
-        button.textContent = '已开启';
-        input.value = 'on';
-      }
-    }
-  </script>
-</body>
-</html>
-  `;
-}
-
-function 生成订阅页面(订阅路径, hostName) {
-  return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    body { background-image: url('${背景壁纸}'); background-size: cover; background-position: center; background-attachment: fixed; background-repeat: no-repeat; font-family: Arial, sans-serif; color: white; margin: 0; height: 100vh; display: flex; justify-content: center; align-items: center; }
-    .content { background: linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.9)); padding: 30px; border-radius: 15px; max-width: 600px; width: 90%; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4); text-align: center; }
-    h1 { font-size: 2em; color: #4CAF50; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3); margin-bottom: 20px; }
-    .link-container { margin-bottom: 20px; }
-    .link-container p { margin: 10px 0; word-break: break-all; color: #ddd; }
-    .link-container a { color: #4CAF50; text-decoration: none; transition: color 0.3s ease; }
+    body { background-image: url('${背景壁纸}'); background-size: cover; font-family: Arial, sans-serif; color: white; margin: 0; padding: 20px; min-height: 100vh; display: flex; justify-content: center; align-items: center; }
+    .container { background: rgba(0, 0, 0, 0.8); padding: 30px; border-radius: 15px; max-width: 800px; width: 100%; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4); }
+    h1 { font-size: 2em; color: #4CAF50; text-align: center; margin-bottom: 30px; }
+    .section { background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+    .section h3 { color: #4CAF50; margin: 0 0 15px; font-size: 1.2em; }
+    .link-container p { margin: 10px 0; word-break: break-all; }
+    .link-container a { color: #4CAF50; text-decoration: none; }
     .link-container a:hover { color: #45a049; }
-    .button-group { display: flex; gap: 15px; flex-wrap: wrap; justify-content: center; margin-top: 20px; }
-    .import-button, .logout-button { padding: 12px 24px; border-radius: 5px; color: white; text-decoration: none; border: none; cursor: pointer; font-size: 16px; transition: all 0.3s ease; }
-    .import-button.clash { background: linear-gradient(135deg, #2196F3, #1976D2); }
-    .import-button.v2ray { background: linear-gradient(135deg, #FF9800, #F57C00); }
-    .import-button.settings { background: linear-gradient(135deg, #9C27B0, #7B1FA2); }
-    .logout-button { background: linear-gradient(135deg, #f44336, #d32f2f); }
-    .import-button:hover, .logout-button:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3); }
-    .upload-container { margin-top: 25px; padding: 20px; background: rgba(255, 255, 255, 0.05); border-radius: 10px; border: 1px dashed #4CAF50; }
-    .upload-container h3 { margin: 0 0 15px; font-size: 1.2em; color: #4CAF50; }
+    .big-btn { padding: 12px 24px; background: linear-gradient(135deg, #4CAF50, #45a049); border: none; border-radius: 5px; color: white; cursor: pointer; font-size: 16px; width: 100%; max-width: 200px; transition: all 0.3s; }
+    .big-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3); }
+    .small-btn { padding: 8px 16px; background: #2196F3; border: none; border-radius: 5px; color: white; cursor: pointer; font-size: 14px; transition: all 0.3s; }
+    .small-btn:hover { background: #1976D2; transform: translateY(-2px); }
+    .logout-btn { background: #f44336; }
+    .logout-btn:hover { background: #d32f2f; }
+    .button-group { display: flex; gap: 15px; flex-wrap: wrap; justify-content: center; }
+    .toggle-switch { position: relative; display: inline-block; width: 60px; height: 30px; }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #ccc; transition: 0.4s; border-radius: 30px; }
+    .slider:before { position: absolute; content: ""; height: 22px; width: 22px; left: 4px; bottom: 4px; background: white; transition: 0.4s; border-radius: 50%; }
+    input:checked + .slider { background: #4CAF50; }
+    input:checked + .slider:before { transform: translateX(30px); }
+    .toggle-label { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
+    textarea { width: 100%; padding: 10px; border-radius: 5px; background: rgba(255, 255, 255, 0.1); border: 1px solid #4CAF50; color: white; resize: vertical; }
     .upload-container input[type="file"] { display: none; }
-    .upload-label { display: inline-block; padding: 10px 20px; background: linear-gradient(135deg, #4CAF50, #45a049); border-radius: 5px; cursor: pointer; transition: all 0.3s ease; }
-    .upload-label:hover { background: linear-gradient(135deg, #45a049, #4CAF50); transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3); }
-    .file-list { margin-top: 15px; max-height: 100px; overflow-y: auto; text-align: left; }
-    .file-list div { padding: 5px; background: rgba(255, 255, 255, 0.1); margin: 5px 0; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; }
-    .file-list button { background: #f44336; border: none; border-radius: 3px; padding: 2px 8px; cursor: pointer; transition: all 0.3s ease; }
+    .upload-label { display: inline-block; padding: 10px 20px; background: #4CAF50; border-radius: 5px; cursor: pointer; transition: all 0.3s; }
+    .upload-label:hover { background: #45a049; transform: translateY(-2px); }
+    .file-list { margin-top: 15px; max-height: 100px; overflow-y: auto; }
+    .file-list div { padding: 5px; background: rgba(255, 255, 255, 0.1); margin: 5px 0; border-radius: 5px; display: flex; justify-content: space-between; }
+    .file-list button { background: #f44336; border: none; border-radius: 3px; padding: 2px 8px; cursor: pointer; }
     .file-list button:hover { background: #d32f2f; }
-    .upload-container button[type="submit"] { margin-top: 15px; padding: 10px 20px; background: linear-gradient(135deg, #2196F3, #1976D2); color: white; border: none; border-radius: 5px; cursor: pointer; transition: all 0.3s ease; }
-    .upload-container button[type="submit"]:hover { background: linear-gradient(135deg, #1976D2, #2196F3); transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3); }
     .progress-container { display: none; margin-top: 15px; }
     .progress-bar { width: 100%; height: 20px; background: rgba(255, 255, 255, 0.1); border-radius: 10px; overflow: hidden; position: relative; }
-    .progress-fill { height: 100%; background: linear-gradient(90deg, #4CAF50, #45a049); width: 0; transition: width 0.3s ease; }
-    .progress-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 12px; color: white; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5); }
+    .progress-fill { height: 100%; background: #4CAF50; width: 0; transition: width 0.3s; }
+    .progress-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 12px; color: white; }
   </style>
 </head>
 <body>
-  <div class="content">
-    <h1>订阅页面</h1>
-    <p>支持${小猫}${咪}和${歪兔}${蕊蒽}客户端</p>
-    <div class="link-container">
-      <p>${小猫}${咪}客户端：<a href="https${符号}${hostName}/${订阅路径}/${小猫}${咪}">https${符号}${hostName}/${订阅路径}/${小猫}${咪}</a></p>
+  <div class="container">
+    <h1>订阅管理界面</h1>
+
+    <!-- 订阅链接 -->
+    <div class="section">
+      <h3>订阅链接</h3>
+      <div class="link-container">
+        <p>${小猫}${咪}客户端：<a href="https${符号}${hostName}/${订阅路径}/${小猫}${咪}">https${符号}${hostName}/${订阅路径}/${小猫}${咪}</a></p>
+        <p>${歪兔}${蕊蒽}客户端：<a href="https${符号}${hostName}/${订阅路径}/${歪兔}${蕊蒽}">https${符号}${hostName}/${订阅路径}/${歪兔}${蕊蒽}</a></p>
+      </div>
     </div>
-    <div class="link-container">
-      <p>${歪兔}${蕊蒽}客户端：<a href="https${符号}${hostName}/${订阅路径}/${歪兔}${蕊蒽}">https${符号}${hostName}/${订阅路径}/${歪兔}${蕊蒽}</a></p>
+
+    <!-- 导入按钮 -->
+    <div class="section">
+      <h3>快速导入</h3>
+      <div class="button-group">
+        <button class="big-btn" onclick="导入小猫咪('${订阅路径}', '${hostName}')">导入猫猫</button>
+        <button class="big-btn" onclick="导入${歪兔}${蕊蒽}('${订阅路径}', '${hostName}')">导入${歪兔}${蕊蒽}</button>
+      </div>
     </div>
-    <div class="button-group">
-      <button class="import-button clash" onclick="导入小猫咪('${订阅路径}', '${hostName}')">导入猫猫</button>
-      <button class="import-button v2ray" onclick="导入${歪兔}${蕊蒽}('${订阅路径}', '${hostName}')">导入${歪兔}${蕊蒽}</button>
-      <a href="/settings" class="import-button settings">设置</a>
-      <a class="logout-button" href="/${订阅路径}/logout">退出登录</a>
+
+    <!-- 设置 -->
+    <div class="section">
+      <h3>设置</h3>
+      <form id="settingsForm" action="/${订阅路径}/update-settings" method="POST">
+        <div class="toggle-label">
+          <label>反代开关</label>
+          <label class="toggle-switch">
+            <input type="checkbox" name="proxy" ${启用反代 ? 'checked' : ''}>
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="toggle-label">
+          <label>SOCKS5 开关</label>
+          <label class="toggle-switch">
+            <input type="checkbox" name="socks5" ${启用SOCKS5 ? 'checked' : ''}>
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div>
+          <label>优选 TXT 路径</label>
+          <textarea name="txtPaths" placeholder="一行一个域名">${当前TXT路径}</textarea>
+        </div>
+        <button type="submit" class="big-btn" style="margin-top: 15px;">保存设置</button>
+      </form>
     </div>
-    <div class="upload-container">
+
+    <!-- 上传 IP -->
+    <div class="section">
       <h3>上传优选 IP</h3>
       <form id="uploadForm" action="/${订阅路径}/upload" method="POST" enctype="multipart/form-data">
         <label for="ipFiles" class="upload-label">选择文件</label>
         <input type="file" id="ipFiles" name="ipFiles" accept=".txt" multiple required onchange="显示文件()">
         <div class="file-list" id="fileList"></div>
-        <button type="submit" onclick="开始上传(event)">上传</button>
+        <button type="submit" class="big-btn" onclick="开始上传(event)">上传</button>
         <div class="progress-container" id="progressContainer">
           <div class="progress-bar">
             <div class="progress-fill" id="progressFill"></div>
@@ -645,6 +569,14 @@ function 生成订阅页面(订阅路径, hostName) {
           </div>
         </div>
       </form>
+    </div>
+
+    <!-- 退出登录 -->
+    <div class="section">
+      <h3>账户管理</h3>
+      <div class="button-group">
+        <a href="/${订阅路径}/logout" class="big-btn logout-btn">退出登录</a>
+      </div>
     </div>
   </div>
   <script>
@@ -656,7 +588,7 @@ function 生成订阅页面(订阅路径, hostName) {
       fileList.innerHTML = '';
       Array.from(fileInput.files).forEach((file, index) => {
         const div = document.createElement('div');
-        div.innerHTML = \`<span>\${file.name} (\${(file.size / 1024).toFixed(2)} KB)</span><button onclick="移除文件(\${index})">移除</button>\`;
+        div.innerHTML = \`<span>\${file.name} (\${(file.size / 1024).toFixed(2)} KB)</span><button class="small-btn" onclick="移除文件(\${index})">移除</button>\`;
         fileList.appendChild(div);
       });
     }
@@ -701,12 +633,8 @@ function 生成订阅页面(订阅路径, hostName) {
         try {
           const response = JSON.parse(xhr.responseText);
           if (xhr.status === 200) {
-            if (response.message) {
-              setTimeout(() => {
-                alert(response.message);
-                window.location.href = response.Location || '/${订阅路径}';
-              }, 500);
-            }
+            alert(response.message);
+            setTimeout(() => location.reload(), 500);
           } else {
             throw new Error(response.error || '未知错误');
           }
@@ -718,11 +646,28 @@ function 生成订阅页面(订阅路径, hostName) {
 
       xhr.onerror = function() {
         progressContainer.style.display = 'none';
-        alert('上传出错，可能是网络问题，请检查网络后重试！');
+        alert('上传出错，请检查网络后重试！');
       };
 
       xhr.send(formData);
     }
+
+    document.getElementById('settingsForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      try {
+        const response = await fetch('/${订阅路径}/update-settings', { method: 'POST', body: formData });
+        const result = await response.json();
+        if (response.ok) {
+          alert(result.message);
+          location.reload();
+        } else {
+          alert(result.error || '保存设置失败');
+        }
+      } catch (error) {
+        alert('网络错误，请稍后重试');
+      }
+    });
   </script>
 </body>
 </html>
@@ -736,56 +681,45 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body { background-image: url('${背景壁纸}'); background-size: cover; background-position: center; background-attachment: fixed; background-repeat: no-repeat; font-family: Arial, sans-serif; color: white; margin: 0; height: 100vh; display: flex; justify-content: center; align-items: center; }
-    .content { background: linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.9)); padding: 30px; border-radius: 15px; max-width: 400px; width: 90%; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4); text-align: center; }
-    h1 { font-size: 2em; color: #4CAF50; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3); margin-bottom: 20px; }
-    .login-form { display: flex; flex-direction: column; gap: 15px; width: 100%; max-width: 320px; margin: 0 auto; }
-    .login-form input { padding: 12px; border-radius: 5px; border: 1px solid rgba(255, 255, 255, 0.3); background: rgba(255, 255, 255, 0.1); color: white; font-size: 16px; width: 100%; box-sizing: border-box; transition: all 0.3s ease; }
-    .login-form input:focus { border-color: #4CAF50; box-shadow: 0 0 8px rgba(76, 175, 80, 0.5); outline: none; }
-    .login-form button { padding: 12px 20px; background: linear-gradient(135deg, #4CAF50, #45a049); color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; transition: all 0.3s ease; }
-    .login-form button:hover { background: linear-gradient(135deg, #45a049, #4CAF50); transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3); }
-    .error-message { color: #ff6666; margin-top: 10px; font-size: 14px; animation: shake 0.5s ease-in-out; }
-    @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-5px); } }
-    .lock-message { color: #ff6666; margin-top: 20px; font-size: 1.2em; animation: pulse 1.5s infinite; }
-    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    body { background-image: url('${背景壁纸}'); background-size: cover; font-family: Arial, sans-serif; color: white; margin: 0; height: 100vh; display: flex; justify-content: center; align-items: center; }
+    .content { background: rgba(0, 0, 0, 0.8); padding: 30px; border-radius: 15px; max-width: 400px; width: 90%; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4); text-align: center; }
+    h1 { font-size: 2em; color: #4CAF50; margin-bottom: 20px; }
+    form { display: flex; flex-direction: column; gap: 15px; }
+    input { padding: 12px; border-radius: 5px; border: 1px solid #4CAF50; background: rgba(255, 255, 255, 0.1); color: white; font-size: 16px; }
+    button { padding: 12px; background: #4CAF50; border: none; border-radius: 5px; color: white; cursor: pointer; transition: all 0.3s; }
+    button:hover { background: #45a049; transform: translateY(-2px); }
+    .error { color: #ff6666; margin-top: 10px; font-size: 14px; }
+    .lock-message { color: #ff6666; margin-top: 20px; font-size: 1.2em; }
   </style>
 </head>
 <body>
   <div class="content">
-    <h1>请登录路由器界面</h1>
+    <h1>请登录</h1>
     ${锁定状态 ? `
     <div class="lock-message">
       登录失败次数过多，请等待 <span id="countdown">${剩余时间}</span> 秒后再试。
     </div>
     ` : `
-    <form class="login-form" action="/login/submit" method="POST">
-      <input type="text" id="username" name="username" placeholder="账号" required>
-      <input type="password" id="password" name="password" placeholder="密码" required>
+    <form action="/login/submit" method="POST">
+      <input type="text" name="username" placeholder="账号" required>
+      <input type="password" name="password" placeholder="密码" required>
       <button type="submit">登录</button>
     </form>
-    ${输错密码 && 剩余次数 > 0 ? `<div class="error-message">账号或密码错误，剩余尝试次数：${剩余次数} 次。</div>` : ''}
+    ${输错密码 && 剩余次数 > 0 ? `<div class="error">账号或密码错误，剩余尝试次数：${剩余次数}</div>` : ''}
     `}
   </div>
   <script>
     if (${锁定状态}) {
       const countdownElement = document.getElementById('countdown');
-      const storageKey = 'lockEndTime';
-      let lockEndTime = localStorage.getItem(storageKey) || (Date.now() + ${剩余时间} * 1000);
-      localStorage.setItem(storageKey, lockEndTime);
-      lockEndTime = Number(lockEndTime);
-
-      function updateCountdown() {
-        const remainingTime = Math.ceil((lockEndTime - Date.now()) / 1000);
-        if (remainingTime > 0) countdownElement.textContent = remainingTime;
-        else {
+      let timeLeft = ${剩余时间};
+      const timer = setInterval(() => {
+        timeLeft--;
+        countdownElement.textContent = timeLeft;
+        if (timeLeft <= 0) {
           clearInterval(timer);
-          localStorage.removeItem(storageKey);
           fetch('/reset-login-failures', { method: 'POST' }).then(() => window.location.reload());
         }
-      }
-
-      let timer = setInterval(updateCountdown, 1000);
-      updateCountdown();
+      }, 1000);
     }
   </script>
 </body>
@@ -800,19 +734,16 @@ function 生成KV未绑定提示页面() {
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body { background-image: url('${背景壁纸}'); background-size: cover; background-position: center; background-attachment: fixed; background-repeat: no-repeat; font-family: Arial, sans-serif; color: white; margin: 0; height: 100vh; display: flex; justify-content: center; align-items: center; }
-    .content { background: linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.9)); padding: 30px; border-radius: 15px; max-width: 600px; width: 90%; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4); text-align: center; }
-    h1 { font-size: 2em; color: #ff6666; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3); margin-bottom: 20px; }
-    p { font-size: 1.2em; line-height: 1.5; color: #ddd; }
-    .highlight { color: #4CAF50; font-weight: bold; }
-    .instruction { margin-top: 20px; font-size: 1.1em; color: #4CAF50; }
+    body { background-image: url('${背景壁纸}'); background-size: cover; font-family: Arial, sans-serif; color: white; margin: 0; height: 100vh; display: flex; justify-content: center; align-items: center; }
+    .content { background: rgba(0, 0, 0, 0.8); padding: 30px; border-radius: 15px; max-width: 600px; width: 90%; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4); text-align: center; }
+    h1 { font-size: 2em; color: #ff6666; margin-bottom: 20px; }
+    p { font-size: 1.2em; line-height: 1.5; }
   </style>
 </head>
 <body>
   <div class="content">
     <h1>未绑定 KV 存储空间</h1>
-    <p>当前服务未检测到已绑定的 <span class="highlight">Cloudflare KV 存储空间</span>。<br>请在 <span class="highlight">Cloudflare Workers</span> 设置中绑定一个 KV 命名空间（如 <span class="highlight">LOGIN_STATE</span>），然后重新部署服务以正常使用。</p>
-    <div class="instruction">绑定 KV 后，请访问 <span class="highlight">/config</span> 路径进入订阅界面。</div>
+    <p>请在 Cloudflare Workers 设置中绑定一个 KV 命名空间（如 LOGIN_STATE），然后重新部署服务。</p>
   </div>
 </body>
 </html>
