@@ -1,6 +1,6 @@
 import { connect } from 'cloudflare:sockets';
 
-// 全局变量
+// 全局变量（保留问题代码的现有逻辑）
 let 订阅路径 = "config";
 let 开门锁匙 = uuidv4();
 let 优选TXT路径 = [];
@@ -23,7 +23,7 @@ let 歪兔 = 'v2';
 let 蕊蒽 = 'rayN';
 let 背景壁纸 = 'https://raw.githubusercontent.com/Alien-Et/ips/refs/heads/main/image/night.jpg';
 
-// UUID 生成函数
+// UUID 生成函数（从问题代码保留）
 function uuidv4() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
     const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
@@ -31,29 +31,40 @@ function uuidv4() {
   });
 }
 
-// 创建响应函数
+// 创建响应函数（参考天书开发版，增加缓存控制）
 function 创建HTML响应(内容, 状态码 = 200) {
   return new Response(内容, {
     status: 状态码,
-    headers: { "Content-Type": "text/html;charset=utf-8", "Cache-Control": "no-store" }
+    headers: {
+      "Content-Type": "text/html;charset=utf-8",
+      "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"
+    }
   });
 }
 
 function 创建重定向响应(路径, 额外头 = {}) {
   return new Response(null, {
     status: 302,
-    headers: { "Location": 路径, "Cache-Control": "no-store", ...额外头 }
+    headers: {
+      "Location": 路径,
+      "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+      ...额外头
+    }
   });
 }
 
 function 创建JSON响应(数据, 状态码 = 200, 额外头 = {}) {
   return new Response(JSON.stringify(数据), {
     status: 状态码,
-    headers: { "Content-Type": "application/json;charset=utf-8", "Cache-Control": "no-store", ...额外头 }
+    headers: {
+      "Content-Type": "application/json;charset=utf-8",
+      "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+      ...额外头
+    }
   });
 }
 
-// 加载节点和配置
+// 加载节点和配置（参考天书开发版，优化错误处理）
 async function 加载节点和配置(env, hostName) {
   try {
     const txtPaths = await env.LOGIN_STATE.get('txt_paths');
@@ -93,12 +104,14 @@ async function 加载节点和配置(env, hostName) {
       优选节点 = 当前节点列表.length > 0 ? 当前节点列表 : [`${hostName}:443`];
     }
   } catch (错误) {
+    console.error(`加载节点失败: ${错误.message}`);
     const 缓存节点 = await env.LOGIN_STATE.get('ip_preferred_ips');
     优选节点 = 缓存节点 ? JSON.parse(缓存节点) : [`${hostName}:443`];
     await env.LOGIN_STATE.put('ip_error_log', JSON.stringify({ time: Date.now(), error: '所有路径拉取失败或手动上传为空' }), { expirationTtl: 86400 });
   }
 }
 
+// 获取配置（参考天书开发版，保持逻辑一致）
 async function 获取配置(env, 类型, hostName) {
   const 缓存键 = 类型 === 'clash' ? 'config_clash' : 'config_v2ray';
   const 版本键 = `${缓存键}_version`;
@@ -114,6 +127,7 @@ async function 获取配置(env, 类型, hostName) {
   return 新配置;
 }
 
+// 检查锁定（保留问题代码逻辑）
 async function 检查锁定(env, 设备标识) {
   const 锁定时间戳 = await env.LOGIN_STATE.get(`lock_${设备标识}`);
   const 当前时间 = Date.now();
@@ -121,13 +135,13 @@ async function 检查锁定(env, 设备标识) {
   return { 被锁定, 剩余时间: 被锁定 ? Math.ceil((Number(锁定时间戳) - 当前时间) / 1000) : 0 };
 }
 
-// 主处理逻辑
+// 主处理逻辑（保留问题代码逻辑，优化错误处理）
 export default {
   async fetch(请求, env) {
     try {
       if (!env.LOGIN_STATE) return 创建HTML响应(生成KV未绑定提示页面());
 
-      // 从 KV 读取开关状态
+      // 从 KV 读取开关状态（保留问题代码逻辑）
       const 代理状态 = await env.LOGIN_STATE.get('proxy_enabled');
       const SOCKS5状态 = await env.LOGIN_STATE.get('socks5_enabled');
       启用反代 = 代理状态 === 'true' ? true : 代理状态 === 'false' ? false : 启用反代;
@@ -226,7 +240,6 @@ export default {
             await env.LOGIN_STATE.put('proxy_enabled', String(启用反代));
             await env.LOGIN_STATE.put('socks5_enabled', String(启用SOCKS5));
             优选TXT路径 = 新TXT路径;
-            // 强制更新配置
             await 加载节点和配置(env, hostName);
             const 新版本 = String(Date.now());
             await env.LOGIN_STATE.put('config_clash', 生成猫咪配置(hostName), { expirationTtl: 86400 });
@@ -274,6 +287,7 @@ export default {
             return fetch(new Request(url, 请求));
         }
       } else if (请求头 === 'websocket') {
+        // 参考天书开发版优化WebSocket逻辑
         反代地址 = env.PROXYIP || 反代地址;
         SOCKS5账号 = env.SOCKS5 || SOCKS5账号;
         启用全局SOCKS5 = env.SOCKS5GLOBAL === 'true' ? true : env.SOCKS5GLOBAL === 'false' ? false : 启用全局SOCKS5;
@@ -286,7 +300,7 @@ export default {
   }
 };
 
-// WebSocket 相关函数
+// WebSocket 相关函数（参考天书开发版优化）
 async function 升级请求(请求, 启用反代, 启用SOCKS5, 反代地址, SOCKS5账号, 启用全局SOCKS5) {
   const 创建接口 = new WebSocketPair();
   const [客户端, 服务端] = Object.values(创建接口);
@@ -403,12 +417,12 @@ async function 建立管道(服务端, TCP接口, 初始数据) {
 }
 
 async function 创建SOCKS5(地址类型, 地址, 端口, SOCKS5账号) {
-  const { username, password, hostname, port } = await 解析SOCKS5账号(SOCKS5账号);
-  const SOCKS5接口 = connect({ hostname, port });
+  const { username, password, hostname, port: socksPort } = await 解析SOCKS5账号(SOCKS5账号);
+  const SOCKS5接口 = connect({ hostname, port: socksPort });
   try {
     await SOCKS5接口.opened;
   } catch {
-    console.error(`SOCKS5 连接失败: ${hostname}:${port}`);
+    console.error(`SOCKS5 连接失败: ${hostname}:${socksPort}`);
     return new Response('SOCKS5未连通', { status: 400 });
   }
   const writer = SOCKS5接口.writable.getWriter();
@@ -454,7 +468,7 @@ async function 解析SOCKS5账号(SOCKS5) {
   return { username, password, hostname, port };
 }
 
-// UI 页面
+// UI 页面（参考天书开发版，保留问题代码的完整功能）
 function 生成注册页面() {
   return `
 <!DOCTYPE html>
@@ -751,8 +765,6 @@ function 生成订阅页面(订阅路径, hostName) {
 <body>
   <div class="container">
     <h1>订阅管理中心</h1>
-
-    <!-- 订阅链接 -->
     <div class="card">
       <h3>订阅链接</h3>
       <div class="link-container">
@@ -760,8 +772,6 @@ function 生成订阅页面(订阅路径, hostName) {
         <p>${歪兔}${蕊蒽}：<a href="https${符号}${hostName}/${订阅路径}/${歪兔}${蕊蒽}">https${符号}${hostName}/${订阅路径}/${歪兔}${蕊蒽}</a></p>
       </div>
     </div>
-
-    <!-- 快速导入 -->
     <div class="card">
       <h3>快速导入</h3>
       <div class="button-group">
@@ -775,8 +785,6 @@ function 生成订阅页面(订阅路径, hostName) {
         </button>
       </div>
     </div>
-
-    <!-- 设置 -->
     <div class="card">
       <h3>设置</h3>
       <form id="settingsForm" action="/${订阅路径}/update-settings" method="POST">
@@ -800,8 +808,6 @@ function 生成订阅页面(订阅路径, hostName) {
         <button type="submit" class="btn" style="margin-top: 15px;">保存设置</button>
       </form>
     </div>
-
-    <!-- 上传 IP -->
     <div class="card">
       <h3>上传优选 IP</h3>
       <form id="uploadForm" action="/${订阅路径}/upload" method="POST" enctype="multipart/form-data" class="upload-container">
@@ -820,8 +826,6 @@ function 生成订阅页面(订阅路径, hostName) {
         </div>
       </form>
     </div>
-
-    <!-- 退出登录 -->
     <div class="card">
       <h3>账户管理</h3>
       <div class="button-group">
