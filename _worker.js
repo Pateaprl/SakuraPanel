@@ -417,7 +417,7 @@ function 生成订阅页面(订阅路径, hostName) {
       min-height: 100vh;
       display: flex;
       justify-content: center;
-      align-items: flex-start; /* 改为 flex-start 以支持滚动 */
+      align-items: flex-start; /* 支持滚动 */
     }
     .background-media {
       position: fixed;
@@ -435,9 +435,9 @@ function 生成订阅页面(订阅路径, hostName) {
       flex-direction: column;
       align-items: center;
       gap: 25px;
-      position: relative; /* 确保容器在背景之上 */
-      z-index: 1; /* 提高层级，确保可交互 */
-      padding-bottom: 20px; /* 底部留白，避免内容被遮挡 */
+      position: relative;
+      z-index: 1;
+      padding-bottom: 20px;
     }
     .card {
       background: rgba(255, 255, 255, 0.85);
@@ -450,6 +450,7 @@ function 生成订阅页面(订阅路径, hostName) {
       transition: transform 0.3s ease, box-shadow 0.3s ease;
       position: relative;
       overflow: hidden;
+      border: 2px dashed #ffb6c1; /* 统一虚线边框 */
     }
     .card:hover {
       transform: scale(1.03);
@@ -525,7 +526,7 @@ function 生成订阅页面(订阅路径, hostName) {
       background: linear-gradient(to right, #ff9999, #ff6666);
     }
     .upload-card {
-      background: #fff0f5;
+      /* 移除独立背景，统一为 card 样式 */
     }
     .upload-title {
       font-size: 1.4em;
