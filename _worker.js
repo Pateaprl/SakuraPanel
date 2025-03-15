@@ -8,10 +8,7 @@ let 优选TXT路径 = [
   'https://这里可以无限扩展'
 ];
 let 优选节点 = [];
-let 启用反代 = true;
 let 反代地址 = 'ts.hpc.tw';
-let 启用SOCKS5 = false;
-let 启用全局SOCKS5 = false;
 let SOCKS5账号 = '';
 let 节点名称 = '小仙女';
 let 伪装域名 = 'lkssite.vip';
@@ -25,7 +22,7 @@ let 符号 = '://';
 let 歪啦 = 'vl';
 let 伊埃斯 = 'ess';
 let 歪兔 = 'v2';
-let 蕊蒽 = 'rayN';
+let 蕊蒽 = 'rayng';
 let 白天背景壁纸 = 'https://raw.githubusercontent.com/Alien-Et/ips/refs/heads/main/image/day.jpg';
 let 暗黑背景壁纸 = 'https://raw.githubusercontent.com/Alien-Et/ips/refs/heads/main/image/night.jpg';
 
@@ -137,89 +134,6 @@ async function 检查锁定(env, 设备标识) {
   };
 }
 
-// 公共页面生成函数
-function 生成公共页面({
-  标题 = '',
-  内容 = '',
-  样式 = '',
-  脚本 = '',
-  背景切换 = true,
-  是订阅页面 = false
-} = {}) {
-  return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    body {
-      font-family: 'Comic Sans MS', 'Arial', sans-serif;
-      color: #ff6f91;
-      margin: 0;
-      ${是订阅页面 ? 'padding: 20px; min-height: 100vh; align-items: flex-start;' : 'height: 100vh; display: flex; justify-content: center; align-items: center;'}
-      position: relative;
-      overflow: hidden;
-      transition: background 0.5s ease;
-    }
-    @media (prefers-color-scheme: light) {
-      body { background: linear-gradient(135deg, #ffe6f0, #fff0f5); }
-      .content { background: rgba(255, 255, 255, 0.85); box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3); }
-    }
-    @media (prefers-color-scheme: dark) {
-      body { background: linear-gradient(135deg, #1e1e2f, #2a2a3b); }
-      .content { background: rgba(30, 30, 30, 0.9); color: #ffd1dc; box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2); }
-    }
-    .background-media {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      z-index: -1;
-      transition: opacity 0.5s ease;
-    }
-    .content {
-      padding: 30px;
-      border-radius: 25px;
-      max-width: 500px;
-      width: 90%;
-      text-align: center;
-    }
-    h1 {
-      font-size: 1.8em;
-      color: #ff69b4;
-      text-shadow: 1px 1px 3px rgba(255, 105, 180, 0.2);
-      margin-bottom: 20px;
-    }
-    ${样式}
-  </style>
-</head>
-<body>
-  <img id="backgroundImage" class="background-media" alt="Background">
-  <div class="content">
-    ${标题 ? `<h1>${标题}</h1>` : ''}
-    ${内容}
-  </div>
-  <script>
-    ${背景切换 ? `
-    const lightBg = '${白天背景壁纸}';
-    const darkBg = '${暗黑背景壁纸}';
-    const bgImage = document.getElementById('backgroundImage');
-    function updateBackground() {
-      const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      bgImage.src = isDarkMode ? darkBg : lightBg;
-    }
-    updateBackground();
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
-    ` : ''}
-    ${脚本}
-  </script>
-</body>
-</html>
-  `;
-}
-
 export default {
   async fetch(请求, env) {
     try {
@@ -329,6 +243,24 @@ export default {
               console.error(`上传处理失败: ${错误.message}`);
               return 创建JSON响应({ error: `上传处理失败: ${错误.message}` }, 500);
             }
+          case '/set-proxy-state':
+            formData = await 请求.formData();
+            const proxyEnabled = formData.get('proxyEnabled');
+            const proxyType = formData.get('proxyType');
+            await env.LOGIN_STATE.put('proxyEnabled', proxyEnabled);
+            await env.LOGIN_STATE.put('proxyType', proxyType);
+            return new Response(null, { status: 200 });
+          case '/get-proxy-status':
+            const 代理启用 = await env.LOGIN_STATE.get('proxyEnabled') === 'true';
+            const 代理类型 = await env.LOGIN_STATE.get('proxyType') || 'reverse';
+            const 反代地址 = env.PROXYIP || 'ts.hpc.tw';
+            const SOCKS5账号 = env.SOCKS5 || '';
+            let status = '直连';
+            if (代理启用) {
+              if (代理类型 === 'reverse' && 反代地址) status = '反代';
+              else if (代理类型 === 'socks5' && SOCKS5账号) status = 'SOCKS5';
+            }
+            return 创建JSON响应({ status });
           default:
             url.hostname = 伪装域名;
             url.protocol = 'https:';
@@ -337,9 +269,7 @@ export default {
       } else if (请求头 === 'websocket') {
         反代地址 = env.PROXYIP || 反代地址;
         SOCKS5账号 = env.SOCKS5 || SOCKS5账号;
-        启用SOCKS5 = env.SOCKS5OPEN === 'true' ? true : env.SOCKS5OPEN === 'false' ? false : 启用SOCKS5;
-        启用全局SOCKS5 = env.SOCKS5GLOBAL === 'true' ? true : env.SOCKS5GLOBAL === 'false' ? false : 启用全局SOCKS5;
-        return await 升级请求(请求);
+        return await 升级请求(请求, env);
       }
     } catch (error) {
       console.error(`全局错误: ${error.message}`);
@@ -348,11 +278,11 @@ export default {
   }
 };
 
-async function 升级请求(请求) {
+async function 升级请求(请求, env) {
   const 创建接口 = new WebSocketPair();
   const [客户端, 服务端] = Object.values(创建接口);
   服务端.accept();
-  const 结果 = await 解析头(解密(请求.headers.get('sec-websocket-protocol')));
+  const 结果 = await 解析头(解密(请求.headers.get('sec-websocket-protocol')), env);
   if (!结果) return new Response('Invalid request', { status: 400 });
   const { TCP接口, 初始数据 } = 结果;
   建立管道(服务端, TCP接口, 初始数据);
@@ -364,7 +294,7 @@ function 解密(混淆字符) {
   return Uint8Array.from(atob(混淆字符), c => c.charCodeAt(0)).buffer;
 }
 
-async function 解析头(数据) {
+async function 解析头(数据, env) {
   const 数据数组 = new Uint8Array(数据);
   if (验证密钥(数据数组.slice(1, 17)) !== 开门锁匙) return null;
 
@@ -388,22 +318,69 @@ async function 解析头(数据) {
   }
 
   const 初始数据 = 数据.slice(地址信息索引 + (地址类型 === 2 ? 数据数组[地址信息索引] + 1 : 地址类型 === 1 ? 4 : 16));
-  let TCP接口;
-  if (启用反代 && 启用SOCKS5 && 启用全局SOCKS5) {
-    TCP接口 = await 创建SOCKS5(地址类型, 地址, 端口);
-  } else {
-    try {
-      TCP接口 = connect({ hostname: 地址, port: 端口 });
-      await TCP接口.opened;
-    } catch {
-      if (启用反代) {
-        TCP接口 = 启用SOCKS5
-          ? await 创建SOCKS5(地址类型, 地址, 端口)
-          : connect({ hostname: 反代地址.split(':')[0], port: 反代地址.split(':')[1] || 端口 });
+  const TCP接口 = await 智能连接(地址, 端口, 地址类型, env);
+  return { TCP接口, 初始数据 };
+}
+
+async function 智能连接(地址, 端口, 地址类型, env) {
+  const 反代地址 = env.PROXYIP || 'ts.hpc.tw';
+  const SOCKS5账号 = env.SOCKS5 || '';
+
+  if (!地址 || 地址.trim() === '') {
+    return await 尝试直连(地址, 端口);
+  }
+
+  const 是域名 = 地址类型 === 2 && !地址.match(/^\d+\.\d+\.\d+\.\d+$/);
+  const 是IP = 地址类型 === 1 || (地址类型 === 2 && 地址.match(/^\d+\.\d+\.\d+\.\d+$/)) || 地址类型 === 3;
+
+  if (是域名 || 是IP) {
+    const 代理启用 = await env.LOGIN_STATE.get('proxyEnabled') === 'true';
+    const 代理类型 = await env.LOGIN_STATE.get('proxyType') || 'reverse';
+
+    if (!代理启用) {
+      return await 尝试直连(地址, 端口);
+    }
+
+    if (代理类型 === 'reverse') {
+      if (反代地址) {
+        try {
+          const [反代主机, 反代端口] = 反代地址.split(':');
+          const 连接 = connect({ hostname: 反代主机, port: 反代端口 || 端口 });
+          await 连接.opened;
+          console.log(`通过反代连接: ${反代地址}`);
+          return 连接;
+        } catch (错误) {
+          console.error(`反代连接失败: ${错误.message}`);
+        }
+      }
+    } else if (代理类型 === 'socks5') {
+      if (SOCKS5账号) {
+        try {
+          const SOCKS5连接 = await 创建SOCKS5(地址类型, 地址, 端口);
+          console.log(`通过 SOCKS5 连接: ${地址}:${端口}`);
+          return SOCKS5连接;
+        } catch (错误) {
+          console.error(`SOCKS5 连接失败: ${错误.message}`);
+        }
       }
     }
+
+    return await 尝试直连(地址, 端口);
   }
-  return { TCP接口, 初始数据 };
+
+  return await 尝试直连(地址, 端口);
+}
+
+async function 尝试直连(地址, 端口) {
+  try {
+    const 连接 = connect({ hostname: 地址, port: 端口 });
+    await 连接.opened;
+    console.log(`回退到直连: ${地址}:${端口}`);
+    return 连接;
+  } catch (错误) {
+    console.error(`直连失败: ${错误.message}`);
+    throw new Error(`无法连接: ${错误.message}`);
+  }
 }
 
 function 验证密钥(arr) {
@@ -486,274 +463,640 @@ async function 解析SOCKS5账号(SOCKS5) {
 }
 
 function 生成订阅页面(订阅路径, hostName) {
-  const 样式 = `
-    /* 白天模式 */
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: 'Comic Sans MS', 'Arial', sans-serif;
+      color: #ff6f91;
+      margin: 0;
+      padding: 20px;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      transition: background 0.5s ease;
+    }
     @media (prefers-color-scheme: light) {
-      .card { background: rgba(255, 245, 247, 0.9); box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3); }
-      .card::before { border: 2px dashed #ffb6c1; }
-      .card:hover { box-shadow: 0 10px 25px rgba(255, 182, 193, 0.5); }
-      .link-box { background: rgba(255, 240, 245, 0.9); border: 2px dashed #ffb6c1; }
-      .file-item { background: rgba(255, 245, 247, 0.9); }
+      body {
+        background: linear-gradient(135deg, #ffe6f0, #fff0f5);
+      }
+      .card, .proxy-card {
+        background: rgba(255, 245, 247, 0.9);
+        box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3);
+      }
+      .card::before, .proxy-card::before {
+        border: 2px dashed #ffb6c1;
+      }
+      .card:hover, .proxy-card:hover {
+        box-shadow: 0 10px 25px rgba(255, 182, 193, 0.5);
+      }
     }
-    /* 暗黑模式 */
     @media (prefers-color-scheme: dark) {
-      .card { background: rgba(30, 30, 30, 0.9); color: #ffd1dc; box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2); }
-      .card::before { border: 2px dashed #ff85a2; }
-      .card:hover { box-shadow: 0 10px 25px rgba(255, 133, 162, 0.4); }
-      .link-box { background: rgba(40, 40, 40, 0.9); border: 2px dashed #ff85a2; color: #ffd1dc; }
-      .link-box a { color: #ff85a2; }
-      .link-box a:hover { color: #ff1493; }
-      .file-item { background: rgba(50, 50, 50, 0.9); color: #ffd1dc; }
+      body {
+        background: linear-gradient(135deg, #1e1e2f, #2a2a3b);
+      }
+      .card, .proxy-card {
+        background: rgba(30, 30, 30, 0.9);
+        color: #ffd1dc;
+        box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2);
+      }
+      .card::before, .proxy-card::before {
+        border: 2px dashed #ff85a2;
+      }
+      .card:hover, .proxy-card:hover {
+        box-shadow: 0 10px 25px rgba(255, 133, 162, 0.4);
+      }
     }
-    .container { max-width: 900px; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 25px; position: relative; z-index: 1; padding-bottom: 20px; }
-    .card { border-radius: 25px; padding: 25px; width: 100%; max-width: 500px; transition: transform 0.3s ease, box-shadow 0.3s ease; position: relative; overflow: hidden; }
-    .card::before { content: ''; position: absolute; top: 10px; left: 10px; right: 10px; bottom: 10px; border-radius: 20px; z-index: -1; }
-    .card:hover { transform: scale(1.03); }
-    .card::after { content: '✨'; position: absolute; top: 10px; right: 10px; font-size: 1.5em; color: #ffb6c1; opacity: 0.7; }
-    .card-title { font-size: 1.6em; color: #ff69b4; margin-bottom: 15px; text-shadow: 1px 1px 3px rgba(255, 105, 180, 0.2); }
-    .link-box { border-radius: 15px; padding: 15px; margin: 10px 0; font-size: 0.95em; word-break: break-all; }
-    .link-box a { color: #ff69b4; text-decoration: none; transition: color 0.3s ease; }
-    .link-box a:hover { color: #ff1493; }
-    .button-group { display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; margin-top: 15px; }
-    .cute-button { padding: 12px 25px; border-radius: 20px; border: none; font-size: 1em; color: white; cursor: pointer; transition: transform 0.2s ease, box-shadow 0.2s ease; text-align: center; display: inline-block; }
-    .cute-button:hover { transform: scale(1.05); box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4); }
-    .cute-button:active { transform: scale(0.95); }
-    .clash-btn { background: linear-gradient(to right, #ffb6c1, #ff69b4); }
-    .v2ray-btn { background: linear-gradient(to right, #ffd1dc, #ff85a2); }
-    .logout-btn { background: linear-gradient(to right, #ff9999, #ff6666); }
-    .upload-title { font-size: 1.4em; color: #ff85a2; margin-bottom: 15px; }
-    .upload-label { padding: 10px 20px; background: linear-gradient(to right, #ffb6c1, #ff69b4); color: white; border-radius: 20px; cursor: pointer; display: inline-block; transition: all 0.3s ease; }
-    .upload-label:hover { transform: scale(1.05); box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4); }
-    .file-list { margin: 15px 0; max-height: 120px; overflow-y: auto; text-align: left; }
-    .file-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-radius: 10px; margin: 5px 0; font-size: 0.9em; }
-    .file-item button { background: #ff9999; border: none; border-radius: 15px; padding: 5px 10px; color: white; cursor: pointer; transition: background 0.3s ease; }
-    .file-item button:hover { background: #ff6666; }
-    .upload-submit { background: linear-gradient(to right, #ffdead, #ff85a2); padding: 12px 25px; border-radius: 20px; border: none; color: white; cursor: pointer; transition: all 0.3s ease; }
-    .upload-submit:hover { transform: scale(1.05); box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4); }
-    .progress-container { display: none; margin-top: 15px; }
-    .progress-bar { width: 100%; height: 15px; background: #ffe6f0; border-radius: 10px; overflow: hidden; border: 1px solid #ffb6c1; }
-    .progress-fill { height: 100%; background: linear-gradient(to right, #ff69b4, #ff1493); width: 0; transition: width 0.3s ease; }
-    .progress-text { text-align: center; font-size: 0.85em; color: #ff6f91; margin-top: 5px; }
+    .background-media {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: -1;
+      transition: opacity 0.5s ease;
+    }
+    .container {
+      max-width: 900px;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 25px;
+      position: relative;
+      z-index: 1;
+      padding-bottom: 20px;
+    }
+    .card, .proxy-card {
+      border-radius: 25px;
+      padding: 25px;
+      width: 100%;
+      max-width: 500px;
+      text-align: center;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .card::before, .proxy-card::before {
+      content: '';
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      right: 10px;
+      bottom: 10px;
+      border-radius: 20px;
+      z-index: -1;
+    }
+    .card:hover, .proxy-card:hover {
+      transform: scale(1.03);
+    }
+    .card-title, .proxy-card h2 {
+      font-size: 1.6em;
+      color: #ff69b4;
+      margin-bottom: 15px;
+      text-shadow: 1px 1px 3px rgba(255, 105, 180, 0.2);
+    }
+    .switch-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 60px;
+      height: 34px;
+    }
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #ccc;
+      transition: .4s;
+      border-radius: 34px;
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 26px;
+      width: 26px;
+      left: 4px;
+      bottom: 4px;
+      background-color: white;
+      transition: .4s;
+      border-radius: 50%;
+    }
+    input:checked + .slider {
+      background-color: #ff69b4;
+    }
+    input:checked + .slider:before {
+      transform: translateX(26px);
+    }
+    .capsule-switch {
+      display: inline-flex;
+      background: #ffe6f0;
+      border-radius: 25px;
+      overflow: hidden;
+    }
+    .capsule-option {
+      padding: 10px 20px;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+    .capsule-option.active {
+      background: #ff69b4;
+      color: white;
+    }
+    .capsule-option:not(.active):hover {
+      background: #ffd1dc;
+    }
+    .proxy-status {
+      margin-top: 20px;
+      padding: 10px;
+      border-radius: 15px;
+      font-size: 1em;
+      transition: background 0.3s ease, color 0.3s ease;
+    }
+    .proxy-status.success {
+      background: #d4edda;
+      color: #155724;
+    }
+    .proxy-status.direct {
+      background: #e9ecef;
+      color: #495057;
+    }
+    .link-box {
+      border-radius: 15px;
+      padding: 15px;
+      margin: 10px 0;
+      font-size: 0.95em;
+      word-break: break-all;
+      background: rgba(255, 240, 245, 0.9);
+      border: 2px dashed #ffb6c1;
+    }
+    .link-box a {
+      color: #ff69b4;
+      text-decoration: none;
+      transition: color 0.3s ease;
+    }
+    .link-box a:hover {
+      color: #ff1493;
+    }
+    .button-group {
+      display: flex;
+      justify-content: center;
+      gap: 15px;
+      flex-wrap: wrap;
+      margin-top: 15px;
+    }
+    .cute-button {
+      padding: 12px 25px;
+      border-radius: 20px;
+      border: none;
+      font-size: 1em;
+      color: white;
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .cute-button:hover {
+      transform: scale(1.05);
+      box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4);
+    }
+    .cute-button:active {
+      transform: scale(0.95);
+    }
+    .clash-btn {
+      background: linear-gradient(to right, #ffb6c1, #ff69b4);
+    }
+    .v2ray-btn {
+      background: linear-gradient(to right, #ffd1dc, #ff85a2);
+    }
+    .logout-btn {
+      background: linear-gradient(to right, #ff9999, #ff6666);
+    }
     @media (max-width: 600px) {
-      .container { padding: 10px; }
-      .card { padding: 15px; max-width: 90%; }
-      .card-title { font-size: 1.3em; }
-      .cute-button, .upload-label, .upload-submit { padding: 10px 20px; font-size: 0.9em; }
-      .link-box { font-size: 0.85em; }
+      .card, .proxy-card { padding: 15px; max-width: 90%; }
+      .card-title, .proxy-card h2 { font-size: 1.3em; }
+      .switch-container { gap: 10px; }
+      .capsule-option { padding: 8px 15px; }
+      .proxy-status { font-size: 0.9em; }
     }
-  `;
-  const 内容 = `
-    <div class="container">
-      <div class="card">
-        <h1 class="card-title">🌸 欢迎来到小仙女订阅站 🌸</h1>
-        <p style="font-size: 1em;">支持 <span style="color: #ff69b4;">${小猫}${咪}</span> 和 <span style="color: #ff85a2;">${歪兔}${蕊蒽}</span> 哦~</p>
-      </div>
-      <div class="card">
-        <h2 class="card-title">🐾 ${小猫}${咪} 订阅</h2>
-        <div class="link-box">
-          <p>订阅链接：<br><a href="https${符号}${hostName}/${订阅路径}/${小猫}${咪}">https${符号}${hostName}/${订阅路径}/${小猫}${咪}</a></p>
-        </div>
-        <div class="button-group">
-          <button class="cute-button clash-btn" onclick="导入小猫咪('${订阅路径}', '${hostName}')">一键导入</button>
-        </div>
-      </div>
-      <div class="card">
-        <h2 class="card-title">🐰 ${歪兔}${蕊蒽} 订阅</h2>
-        <div class="link-box">
-          <p>订阅链接：<br><a href="https${符号}${hostName}/${订阅路径}/${歪兔}${蕊蒽}">https${符号}${hostName}/${订阅路径}/${歪兔}${蕊蒽}</a></p>
-        </div>
-        <div class="button-group">
-          <button class="cute-button v2ray-btn" onclick="导入${歪兔}${蕊蒽}('${订阅路径}', '${hostName}')">一键导入</button>
+  </style>
+</head>
+<body>
+  <img id="backgroundImage" class="background-media" alt="Background">
+  <div class="container">
+    <div class="proxy-card">
+      <h2>🌟 代理设置</h2>
+      <div class="switch-container">
+        <label>代理开关</label>
+        <label class="toggle-switch">
+          <input type="checkbox" id="proxyToggle" onchange="toggleProxy()">
+          <span class="slider"></span>
+        </label>
+        <div class="capsule-switch" id="capsuleSwitch">
+          <div class="capsule-option active" data-type="reverse" onclick="switchCapsule('reverse')">反代</div>
+          <div class="capsule-option" data-type="socks5" onclick="switchCapsule('socks5')">SOCKS5</div>
         </div>
       </div>
-      <div class="card">
-        <h2 class="upload-title">🌟 上传你的魔法 IP</h2>
-        <form id="uploadForm" action="/${订阅路径}/upload" method="POST" enctype="multipart/form-data">
-          <label for="ipFiles" class="upload-label">选择文件</label>
-          <input type="file" id="ipFiles" name="ipFiles" accept=".txt" multiple required onchange="显示文件()" style="display: none;">
-          <div class="file-list" id="fileList"></div>
-          <button type="submit" class="upload-submit" onclick="开始上传(event)">上传</button>
-          <div class="progress-container" id="progressContainer">
-            <div class="progress-bar">
-              <div class="progress-fill" id="progressFill"></div>
-            </div>
-            <div class="progress-text" id="progressText">0%</div>
-          </div>
-        </form>
+      <div class="proxy-status" id="proxyStatus">直连</div>
+    </div>
+    <div class="card">
+      <h1 class="card-title">🌸 欢迎来到小仙女订阅站 🌸</h1>
+      <p style="font-size: 1em;">支持 <span style="color: #ff69b4;">${小猫}${咪}</span> 和 <span style="color: #ff85a2;">${歪兔}${蕊蒽}</span> 哦~</p>
+    </div>
+    <div class="card">
+      <h2 class="card-title">🐾 ${小猫}${咪} 订阅</h2>
+      <div class="link-box">
+        <p>订阅链接：<br><a href="https${符号}${hostName}/${订阅路径}/${小猫}${咪}">https${符号}${hostName}/${订阅路径}/${小猫}${咪}</a></p>
       </div>
-      <div class="card">
-        <div class="button-group">
-          <a href="/${订阅路径}/logout" class="cute-button logout-btn">退出登录</a>
-        </div>
+      <div class="button-group">
+        <button class="cute-button clash-btn" onclick="导入小猫咪('${订阅路径}', '${hostName}')">一键导入</button>
       </div>
     </div>
-  `;
-  const 脚本 = `
+    <div class="card">
+      <h2 class="card-title">🐰 ${歪兔}${蕊蒽} 订阅</h2>
+      <div class="link-box">
+        <p>订阅链接：<br><a href="https${符号}${hostName}/${订阅路径}/${歪兔}${蕊蒽}">https${符号}${hostName}/${订阅路径}/${歪兔}${蕊蒽}</a></p>
+      </div>
+      <div class="button-group">
+        <button class="cute-button v2ray-btn" onclick="导入${歪兔}${蕊蒽}('${订阅路径}', '${hostName}')">一键导入</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="button-group">
+        <a href="/${订阅路径}/logout" class="cute-button logout-btn">退出登录</a>
+      </div>
+    </div>
+  </div>
+  <script>
+    const lightBg = '${白天背景壁纸}';
+    const darkBg = '${暗黑背景壁纸}';
+    const bgImage = document.getElementById('backgroundImage');
+
+    function updateBackground() {
+      const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      bgImage.src = isDarkMode ? darkBg : lightBg;
+    }
+    updateBackground();
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
+
+    let proxyEnabled = localStorage.getItem('proxyEnabled') === 'true';
+    let proxyType = localStorage.getItem('proxyType') || 'reverse';
+    document.getElementById('proxyToggle').checked = proxyEnabled;
+    updateCapsuleUI();
+    updateProxyStatus();
+
+    function toggleProxy() {
+      proxyEnabled = document.getElementById('proxyToggle').checked;
+      localStorage.setItem('proxyEnabled', proxyEnabled);
+      updateCapsuleUI();
+      saveProxyState();
+      updateProxyStatus();
+    }
+
+    function switchCapsule(type) {
+      proxyType = type;
+      localStorage.setItem('proxyType', proxyType);
+      updateCapsuleUI();
+      saveProxyState();
+      updateProxyStatus();
+    }
+
+    function updateCapsuleUI() {
+      const options = document.querySelectorAll('.capsule-option');
+      options.forEach(opt => {
+        opt.classList.toggle('active', opt.dataset.type === proxyType);
+      });
+      document.getElementById('capsuleSwitch').style.display = proxyEnabled ? 'inline-flex' : 'none';
+    }
+
+    function updateProxyStatus() {
+      const statusElement = document.getElementById('proxyStatus');
+      if (!proxyEnabled) {
+        statusElement.textContent = '直连';
+        statusElement.className = 'proxy-status direct';
+      } else {
+        fetch('/get-proxy-status')
+          .then(response => response.json())
+          .then(data => {
+            statusElement.textContent = data.status;
+            statusElement.className = 'proxy-status ' + (data.status === '直连' ? 'direct' : 'success');
+          })
+          .catch(() => {
+            statusElement.textContent = '直连';
+            statusElement.className = 'proxy-status direct';
+          });
+      }
+    }
+
+    function saveProxyState() {
+      const formData = new FormData();
+      formData.append('proxyEnabled', proxyEnabled);
+      formData.append('proxyType', proxyType);
+      fetch('/set-proxy-state', { method: 'POST', body: formData })
+        .then(() => updateProxyStatus());
+    }
+
     function 导入小猫咪(订阅路径, hostName) {
       window.location.href = '${小猫}${咪}://install-config?url=https://' + hostName + '/${订阅路径}/${小猫}${咪}';
     }
     function 导入${歪兔}${蕊蒽}(订阅路径, hostName) {
       window.location.href = '${歪兔}${蕊蒽}://install-config?url=https://' + hostName + '/${订阅路径}/${歪兔}${蕊蒽}';
     }
-    function 显示文件() {
-      const fileInput = document.getElementById('ipFiles');
-      const fileList = document.getElementById('fileList');
-      fileList.innerHTML = '';
-      Array.from(fileInput.files).forEach((file, index) => {
-        const div = document.createElement('div');
-        div.className = 'file-item';
-        div.innerHTML = \`<span>\${file.name} (\${(file.size / 1024).toFixed(2)} KB)</span><button onclick="移除文件(\${index})">移除</button>\`;
-        fileList.appendChild(div);
-      });
-    }
-    function 移除文件(index) {
-      const fileInput = document.getElementById('ipFiles');
-      const dt = new DataTransfer();
-      Array.from(fileInput.files).forEach((file, i) => { if (i !== index) dt.items.add(file); });
-      fileInput.files = dt.files;
-      显示文件();
-    }
-    function 开始上传(event) {
-      event.preventDefault();
-      const form = document.getElementById('uploadForm');
-      const progressContainer = document.getElementById('progressContainer');
-      const progressFill = document.getElementById('progressFill');
-      const progressText = document.getElementById('progressText');
-      const formData = new FormData(form);
-
-      if (!formData.getAll('ipFiles').length) {
-        alert('小仙女，请先选择文件哦~');
-        return;
-      }
-
-      progressContainer.style.display = 'block';
-      progressFill.style.width = '0%';
-      progressText.textContent = '0%';
-
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', form.action, true);
-
-      xhr.upload.onprogress = function(e) {
-        if (e.lengthComputable) {
-          const percentComplete = (e.loaded / e.total) * 100;
-          progressFill.style.width = percentComplete + '%';
-          progressText.textContent = Math.round(percentComplete) + '%';
-        }
-      };
-
-      xhr.onload = function() {
-        progressFill.style.width = '100%';
-        progressText.textContent = '100%';
-        try {
-          const response = JSON.parse(xhr.responseText);
-          if (xhr.status === 200) {
-            if (response.message) {
-              setTimeout(() => {
-                alert(response.message);
-                window.location.href = response.Location || '/${订阅路径}';
-              }, 500);
-            } else {
-              throw new Error('响应格式错误');
-            }
-          } else {
-            throw new Error(response.error || '未知错误');
-          }
-        } catch (err) {
-          progressContainer.style.display = 'none';
-          alert(\`上传失败啦，状态码: \${xhr.status}，原因: \${err.message}\`);
-        }
-      };
-
-      xhr.onerror = function() {
-        progressContainer.style.display = 'none';
-        alert('网络坏掉了，小仙女请检查一下哦~');
-      };
-
-      xhr.send(formData);
-    }
+  </script>
+</body>
+</html>
   `;
-
-  return 生成公共页面({
-    标题: '',
-    内容,
-    样式,
-    脚本,
-    是订阅页面: true
-  });
 }
 
 function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码 = false, 剩余次数 = 0) {
-  const 样式 = `
-    .login-form { display: flex; flex-direction: column; gap: 15px; width: 100%; max-width: 300px; margin: 0 auto; }
-    .login-form input { padding: 12px; border-radius: 15px; border: 2px solid #ffb6c1; background: #fff; font-size: 1em; color: #ff6f91; width: 100%; box-sizing: border-box; transition: border-color 0.3s ease; }
-    .login-form input:focus { border-color: #ff69b4; outline: none; }
-    .login-form input::placeholder { color: #ffb6c1; }
-    .login-form button { padding: 12px; background: linear-gradient(to right, #ffb6c1, #ff69b4); color: white; border: none; border-radius: 20px; cursor: pointer; font-size: 1em; transition: transform 0.3s ease, box-shadow 0.3s ease; }
-    .login-form button:hover { transform: scale(1.05); box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4); }
-    .error-message { color: #ff6666; margin-top: 15px; font-size: 0.9em; animation: shake 0.5s ease-in-out; }
-    @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-5px); } }
-    .lock-message { color: #ff6666; margin-top: 20px; font-size: 1.1em; animation: pulse 1.5s infinite; }
-    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-    @media (max-width: 600px) { .content { padding: 20px; } h1 { font-size: 1.5em; } .login-form { max-width: 250px; } .login-form input, .login-form button { font-size: 0.9em; padding: 10px; } }
-  `;
-  const 内容 = 锁定状态 ? `
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: 'Comic Sans MS', 'Arial', sans-serif;
+      color: #ff6f91;
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+      overflow: hidden;
+      transition: background 0.5s ease;
+    }
+    @media (prefers-color-scheme: light) {
+      body { background: linear-gradient(135deg, #ffe6f0, #fff0f5); }
+      .content { background: rgba(255, 255, 255, 0.85); box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3); }
+    }
+    @media (prefers-color-scheme: dark) {
+      body { background: linear-gradient(135deg, #1e1e2f, #2a2a3b); }
+      .content { background: rgba(30, 30, 30, 0.9); color: #ffd1dc; box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2); }
+    }
+    .background-media {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: -1;
+      transition: opacity 0.5s ease;
+    }
+    .content {
+      padding: 30px;
+      border-radius: 25px;
+      max-width: 400px;
+      width: 90%;
+      text-align: center;
+    }
+    h1 {
+      font-size: 1.8em;
+      color: #ff69b4;
+      text-shadow: 1px 1px 3px rgba(255, 105, 180, 0.2);
+      margin-bottom: 20px;
+    }
+    .login-form {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      width: 100%;
+      max-width: 300px;
+      margin: 0 auto;
+    }
+    .login-form input {
+      padding: 12px;
+      border-radius: 15px;
+      border: 2px solid #ffb6c1;
+      background: #fff;
+      font-size: 1em;
+      color: #ff6f91;
+      width: 100%;
+      box-sizing: border-box;
+      transition: border-color 0.3s ease;
+    }
+    .login-form input:focus {
+      border-color: #ff69b4;
+      outline: none;
+    }
+    .login-form input::placeholder {
+      color: #ffb6c1;
+    }
+    .login-form button {
+      padding: 12px;
+      background: linear-gradient(to right, #ffb6c1, #ff69b4);
+      color: white;
+      border: none;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 1em;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    .login-form button:hover {
+      transform: scale(1.05);
+      box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4);
+    }
+    .error-message {
+      color: #ff6666;
+      margin-top: 15px;
+      font-size: 0.9em;
+      animation: shake 0.5s ease-in-out;
+    }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-5px); }
+      50% { transform: translateX(5px); }
+      75% { transform: translateX(-5px); }
+    }
+    .lock-message {
+      color: #ff6666;
+      margin-top: 20px;
+      font-size: 1.1em;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    @media (max-width: 600px) {
+      .content { padding: 20px; }
+      h1 { font-size: 1.5em; }
+      .login-form { max-width: 250px; }
+      .login-form input, .login-form button { font-size: 0.9em; padding: 10px; }
+    }
+  </style>
+</head>
+<body>
+  <img id="backgroundImage" class="background-media" alt="Background">
+  <div class="content">
+    <h1>🌷 小仙女登录 🌷</h1>
+    ${锁定状态 ? `
     <div class="lock-message">
       密码输错太多次啦，请等待 <span id="countdown" aria-live="polite">${剩余时间}</span> 秒哦~
     </div>
-  ` : `
+    ` : `
     <form class="login-form" action="/login/submit" method="POST">
       <input type="text" id="username" name="username" placeholder="账号" required>
       <input type="password" id="password" name="password" placeholder="密码" required>
       <button type="submit">登录</button>
     </form>
     ${输错密码 && 剩余次数 > 0 ? `<div class="error-message">密码不对哦，还剩 ${剩余次数} 次机会~</div>` : ''}
-  `;
-  const 脚本 = 锁定状态 ? `
-    const countdownElement = document.getElementById('countdown');
-    const storageKey = 'lockEndTime';
-    let lockEndTime = localStorage.getItem(storageKey) || (Date.now() + ${剩余时间} * 1000);
-    localStorage.setItem(storageKey, lockEndTime);
-    lockEndTime = Number(lockEndTime);
-    function updateCountdown() {
-      const remainingTime = Math.ceil((lockEndTime - Date.now()) / 1000);
-      if (remainingTime > 0) countdownElement.textContent = remainingTime;
-      else {
-        clearInterval(timer);
-        localStorage.removeItem(storageKey);
-        fetch('/reset-login-failures', { method: 'POST' }).then(() => window.location.reload());
-      }
-    }
-    let timer = setInterval(updateCountdown, 1000);
-    updateCountdown();
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') updateCountdown(); });
-    window.addEventListener('load', () => { if (localStorage.getItem(storageKey)) updateCountdown(); });
-  ` : '';
+    `}
+  </div>
+  <script>
+    const lightBg = '${白天背景壁纸}';
+    const darkBg = '${暗黑背景壁纸}';
+    const bgImage = document.getElementById('backgroundImage');
 
-  return 生成公共页面({
-    标题: '🌷 小仙女登录 🌷',
-    内容,
-    样式,
-    脚本
-  });
+    function updateBackground() {
+      const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      bgImage.src = isDarkMode ? darkBg : lightBg;
+    }
+
+    updateBackground();
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
+
+    if (${锁定状态}) {
+      const countdownElement = document.getElementById('countdown');
+      const storageKey = 'lockEndTime';
+      let lockEndTime = localStorage.getItem(storageKey) || (Date.now() + ${剩余时间} * 1000);
+      localStorage.setItem(storageKey, lockEndTime);
+      lockEndTime = Number(lockEndTime);
+
+      function updateCountdown() {
+        const remainingTime = Math.ceil((lockEndTime - Date.now()) / 1000);
+        if (remainingTime > 0) countdownElement.textContent = remainingTime;
+        else {
+          clearInterval(timer);
+          localStorage.removeItem(storageKey);
+          fetch('/reset-login-failures', { method: 'POST' }).then(() => window.location.reload());
+        }
+      }
+
+      let timer = setInterval(updateCountdown, 1000);
+      updateCountdown();
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') updateCountdown(); });
+      window.addEventListener('load', () => { if (localStorage.getItem(storageKey)) updateCountdown(); });
+    }
+  </script>
+</body>
+</html>
+  `;
 }
 
 function 生成KV未绑定提示页面() {
-  const 样式 = `
-    p { font-size: 1.1em; line-height: 1.6; color: #ff85a2; }
-    .highlight { color: #ff1493; font-weight: bold; }
-    .instruction { margin-top: 20px; font-size: 1em; color: #ff69b4; }
-    @media (max-width: 600px) { .content { padding: 20px; } h1 { font-size: 1.5em; } p { font-size: 0.95em; } }
-  `;
-  const 内容 = `
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: 'Comic Sans MS', 'Arial', sans-serif;
+      color: #ff6f91;
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+      overflow: hidden;
+      transition: background 0.5s ease;
+    }
+    @media (prefers-color-scheme: light) {
+      body { background: linear-gradient(135deg, #ffe6f0, #fff0f5); }
+      .content { background: rgba(255, 255, 255, 0.85); box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3); }
+    }
+    @media (prefers-color-scheme: dark) {
+      body { background: linear-gradient(135deg, #1e1e2f, #2a2a3b); }
+      .content { background: rgba(30, 30, 30, 0.9); color: #ffd1dc; box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2); }
+    }
+    .background-media {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: -1;
+      transition: opacity 0.5s ease;
+    }
+    .content {
+      padding: 30px;
+      border-radius: 25px;
+      max-width: 500px;
+      width: 90%;
+      text-align: center;
+    }
+    h1 {
+      font-size: 1.8em;
+      color: #ff69b4;
+      text-shadow: 1px 1px 3px rgba(255, 105, 180, 0.2);
+      margin-bottom: 20px;
+    }
+    p {
+      font-size: 1.1em;
+      line-height: 1.6;
+      color: #ff85a2;
+    }
+    .highlight {
+      color: #ff1493;
+      font-weight: bold;
+    }
+    .instruction {
+      margin-top: 20px;
+      font-size: 1em;
+      color: #ff69b4;
+    }
+    @media (max-width: 600px) {
+      .content { padding: 20px; }
+      h1 { font-size: 1.5em; }
+      p { font-size: 0.95em; }
+    }
+  </style>
+</head>
+<body>
+  <img id="backgroundImage" class="background-media" alt="Background">
+  <div class="content">
+    <h1>💔 哎呀，KV没绑定哦</h1>
     <p>小仙女，你的 <span class="highlight">Cloudflare KV 存储空间</span> 还没绑定呢~<br>快去 <span class="highlight">Cloudflare Workers</span> 设置里绑一个 KV 命名空间（比如 <span class="highlight">LOGIN_STATE</span>），然后重新部署一下吧！</p>
     <div class="instruction">绑定好后，访问 <span class="highlight">/config</span> 就可以进入订阅啦~</div>
-  `;
+  </div>
+  <script>
+    const lightBg = '${白天背景壁纸}';
+    const darkBg = '${暗黑背景壁纸}';
+    const bgImage = document.getElementById('backgroundImage');
 
-  return 生成公共页面({
-    标题: '💔 哎呀，KV没绑定哦',
-    内容,
-    样式
-  });
+    function updateBackground() {
+      const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      bgImage.src = isDarkMode ? darkBg : lightBg;
+    }
+
+    updateBackground();
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
+  </script>
+</body>
+</html>
+  `;
 }
 
 function 生成猫咪配置(hostName) {
