@@ -657,17 +657,22 @@ function 生成订阅页面(订阅路径, hostName) {
     }
     .proxy-status {
       margin-top: 20px;
-      padding: 10px;
+      padding: 15px;
       border-radius: 15px;
-      font-size: 1em;
+      font-size: 0.95em;
+      word-break: break-all;
+      background: rgba(255, 240, 245, 0.9);
+      border: 2px dashed #ffb6c1;
       transition: background 0.3s ease, color 0.3s ease;
+      width: 100%;
+      box-sizing: border-box;
     }
     .proxy-status.success {
-      background: #d4edda;
+      background: rgba(212, 237, 218, 0.9);
       color: #155724;
     }
     .proxy-status.direct {
-      background: #e9ecef;
+      background: rgba(233, 236, 239, 0.9);
       color: #495057;
     }
     .link-box {
@@ -725,7 +730,8 @@ function 生成订阅页面(订阅路径, hostName) {
       .switch-container { gap: 10px; }
       .toggle-row { gap: 10px; }
       .proxy-option { width: 70px; padding: 8px 0; font-size: 0.9em; }
-      .proxy-status { font-size: 0.9em; }
+      .proxy-status { font-size: 0.9em; padding: 12px; }
+      .link-box { font-size: 0.9em; padding: 12px; }
     }
   </style>
 </head>
