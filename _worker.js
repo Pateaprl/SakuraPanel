@@ -27,35 +27,26 @@ let 蕊蒽 = 'rayN';
 let 白天背景壁纸 = 'https://raw.githubusercontent.com/Alien-Et/ips/refs/heads/main/image/day.jpg';
 let 暗黑背景壁纸 = 'https://raw.githubusercontent.com/Alien-Et/ips/refs/heads/main/image/night.jpg';
 
+const 默认头 = { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0" };
+
 function 创建HTML响应(内容, 状态码 = 200) {
   return new Response(内容, {
     status: 状态码,
-    headers: {
-      "Content-Type": "text/html;charset=utf-8",
-      "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"
-    }
+    headers: { "Content-Type": "text/html;charset=utf-8", ...默认头 }
   });
 }
 
 function 创建重定向响应(路径, 额外头 = {}) {
   return new Response(null, {
     status: 302,
-    headers: {
-      "Location": 路径,
-      "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-      ...额外头
-    }
+    headers: { "Location": 路径, ...默认头, ...额外头 }
   });
 }
 
 function 创建JSON响应(数据, 状态码 = 200, 额外头 = {}) {
   return new Response(JSON.stringify(数据), {
     status: 状态码,
-    headers: {
-      "Content-Type": "application/json;charset=utf-8",
-      "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-      ...额外头
-    }
+    headers: { "Content-Type": "application/json;charset=utf-8", ...默认头, ...额外头 }
   });
 }
 
@@ -69,13 +60,10 @@ async function 加密密码(密码) {
 async function 加载节点和配置(env, hostName) {
   try {
     const 手动节点缓存 = await env.LOGIN_STATE.get('manual_preferred_ips');
-    let 手动节点列表 = [];
-    if (手动节点缓存) {
-      手动节点列表 = JSON.parse(手动节点缓存).map(line => line.trim()).filter(Boolean);
-    }
+    let 手动节点列表 = 手动节点缓存 ? JSON.parse(手动节点缓存).map(line => line.trim()).filter(Boolean) : [];
 
     const 响应列表 = await Promise.all(
-      优选TXT路径.map(async (路径) => {
+      优选TXT路径.map(async 路径 => {
         try {
           const 响应 = await fetch(路径);
           if (!响应.ok) throw new Error(`请求 ${路径} 失败，状态码: ${响应.status}`);
@@ -115,17 +103,15 @@ async function 加载节点和配置(env, hostName) {
   }
 }
 
+const 配置键 = { clash: 'config_clash', v2ray: 'config_v2ray' };
 async function 获取配置(env, 类型, hostName) {
-  const 缓存键 = 类型 === 'clash' ? 'config_clash' : 'config_v2ray';
+  const 缓存键 = 配置键[类型];
   const 版本键 = `${缓存键}_version`;
   const 缓存配置 = await env.LOGIN_STATE.get(缓存键);
   const 配置版本 = await env.LOGIN_STATE.get(版本键) || '0';
   const 节点版本 = await env.LOGIN_STATE.get('ip_preferred_ips_version') || '0';
 
-  if (缓存配置 && 配置版本 === 节点版本) {
-    return 缓存配置;
-  }
-
+  if (缓存配置 && 配置版本 === 节点版本) return 缓存配置;
   const 新配置 = 类型 === 'clash' ? 生成猫咪配置(hostName) : 生成备用配置(hostName);
   await env.LOGIN_STATE.put(缓存键, 新配置, { expirationTtl: 86400 });
   await env.LOGIN_STATE.put(版本键, 节点版本);
@@ -136,13 +122,15 @@ async function 检查锁定(env, 设备标识) {
   const 锁定时间戳 = await env.LOGIN_STATE.get(`lock_${设备标识}`);
   const 当前时间 = Date.now();
   const 被锁定 = 锁定时间戳 && 当前时间 < Number(锁定时间戳);
-  return {
-    被锁定,
-    剩余时间: 被锁定 ? Math.ceil((Number(锁定时间戳) - 当前时间) / 1000) : 0
-  };
+  return { 被锁定, 剩余时间: 被锁定 ? Math.ceil((Number(锁定时间戳) - 当前时间) / 1000) : 0 };
 }
 
-// 验证注册输入的辅助函数
+async function 检查是否已注册(env) {
+  const 已存账号 = await env.LOGIN_STATE.get('username');
+  const 已存密码 = await env.LOGIN_STATE.get('password_hash');
+  return 已存账号 && 已存密码;
+}
+
 async function 验证注册输入(账号, 密码, 确认密码) {
   const 错误 = [];
   const 最小账号长度 = 4;
@@ -152,39 +140,20 @@ async function 验证注册输入(账号, 密码, 确认密码) {
   密码 = 密码.trim();
   确认密码 = 确认密码.trim();
 
-  if (!账号 || 账号.length < 最小账号长度) {
-    错误.push(`小仙女说：账号需至少${最小账号长度}个字符哦~`);
-  }
-  if (!密码 || 密码.length < 最小密码长度) {
-    错误.push(`小仙女说：密码需至少${最小密码长度}个字符哦~`);
-  }
-  if (密码 !== 确认密码) {
-    错误.push('小仙女说：两次密码不一致哦~');
-  }
+  if (!账号 || 账号.length < 最小账号长度) 错误.push(`小仙女说：账号需至少${最小账号长度}个字符哦~`);
+  if (!密码 || 密码.length < 最小密码长度) 错误.push(`小仙女说：密码需至少${最小密码长度}个字符哦~`);
+  if (密码 !== 确认密码) 错误.push('小仙女说：两次密码不一致哦~');
 
   return { 有效: 错误.length === 0, 错误: 错误.join('<br>'), 账号 };
 }
 
-// 处理注册请求
 async function 处理注册请求(请求, env) {
-  const 已存账号 = await env.LOGIN_STATE.get('username');
-  const 已存密码 = await env.LOGIN_STATE.get('password_hash');
-
-  if (已存账号 && 已存密码) {
-    return 创建重定向响应('/login');
-  }
-
+  if (await 检查是否已注册(env)) return 创建重定向响应('/login');
   return 创建HTML响应(生成注册界面());
 }
 
-// 处理注册提交
 async function 处理注册提交(请求, env) {
-  const 已存账号 = await env.LOGIN_STATE.get('username');
-  const 已存密码 = await env.LOGIN_STATE.get('password_hash');
-
-  if (已存账号 && 已存密码) {
-    return 创建重定向响应('/login');
-  }
+  if (await 检查是否已注册(env)) return 创建重定向响应('/login');
 
   const formData = await 请求.formData();
   const 提供的账号 = formData.get('username');
@@ -192,9 +161,7 @@ async function 处理注册提交(请求, env) {
   const 确认密码 = formData.get('confirm_password');
 
   const { 有效, 错误, 账号 } = await 验证注册输入(提供的账号, 提供的密码, 确认密码);
-  if (!有效) {
-    return 创建HTML响应(生成注册界面(错误, 账号));
-  }
+  if (!有效) return 创建HTML响应(生成注册界面(错误, 账号));
 
   try {
     const 加密后的密码 = await 加密密码(提供的密码);
@@ -210,9 +177,7 @@ async function 处理注册提交(请求, env) {
 export default {
   async fetch(请求, env) {
     try {
-      if (!env.LOGIN_STATE) {
-        return 创建HTML响应(生成KV未绑定提示页面());
-      }
+      if (!env.LOGIN_STATE) return 创建HTML响应(生成KV未绑定提示页面());
 
       const 请求头 = 请求.headers.get('Upgrade');
       const url = new URL(请求.url);
@@ -244,14 +209,9 @@ export default {
           case '/login':
             const 锁定状态 = await 检查锁定(env, 设备标识);
             if (锁定状态.被锁定) return 创建HTML响应(生成登录界面(true, 锁定状态.剩余时间));
-            
-            const 已存账号登录 = await env.LOGIN_STATE.get('username');
-            const 已存密码登录 = await env.LOGIN_STATE.get('password_hash');
-            const 失败次数 = Number(await env.LOGIN_STATE.get(`fail_${设备标识}`) || 0);
 
-            if (!已存账号登录 || !已存密码登录) {
-              return 创建重定向响应('/register');
-            }
+            if (!await 检查是否已注册(env)) return 创建重定向响应('/register');
+            const 失败次数 = Number(await env.LOGIN_STATE.get(`fail_${设备标识}`) || 0);
 
             if (请求.headers.get('Cookie')?.split('=')[1] === await env.LOGIN_STATE.get('current_token')) {
               return 创建重定向响应(`/${订阅路径}`);
@@ -261,19 +221,16 @@ export default {
           case '/login/submit':
             const 锁定 = await 检查锁定(env, 设备标识);
             if (锁定.被锁定) return 创建重定向响应('/login');
-            
+
             formData = await 请求.formData();
             const 提供的账号 = formData.get('username');
             const 提供的密码 = formData.get('password');
-            
+            if (!await 检查是否已注册(env)) return 创建重定向响应('/register');
+
             const 已存账号提交 = await env.LOGIN_STATE.get('username');
             const 已存密码提交 = await env.LOGIN_STATE.get('password_hash');
-
-            if (!已存账号提交 || !已存密码提交) {
-              return 创建重定向响应('/register');
-            }
-
             const 加密后的提供的密码 = await 加密密码(提供的密码);
+
             if (提供的账号 === 已存账号提交 && 加密后的提供的密码 === 已存密码提交) {
               const 新Token = Math.random().toString(36).substring(2);
               await env.LOGIN_STATE.put('current_token', 新Token, { expirationTtl: 300 });
@@ -299,18 +256,14 @@ export default {
             const 新密码 = formData.get('new_password');
             const 确认新密码 = formData.get('confirm_new_password');
 
+            if (!await 检查是否已注册(env)) return 创建重定向响应('/register');
             const 已存账号重置 = await env.LOGIN_STATE.get('username');
             const 已存密码重置 = await env.LOGIN_STATE.get('password_hash');
-
-            if (!已存账号重置 || !已存密码重置) {
-              return 创建重定向响应('/register');
-            }
-
             const 加密后的旧密码 = await 加密密码(旧密码);
+
             if (重置账号 !== 已存账号重置 || 加密后的旧密码 !== 已存密码重置) {
               return 创建HTML响应(生成重置密码页面('小仙女说：原账号或密码不对哦~', 重置账号));
             }
-
             if (!新密码 || 新密码.length < 6) {
               return 创建HTML响应(生成重置密码页面('小仙女说：新密码需至少6个字符哦~', 重置账号));
             }
@@ -344,29 +297,23 @@ export default {
             }
             formData = await 请求.formData();
             const ipFiles = formData.getAll('ipFiles');
-            if (!ipFiles || ipFiles.length === 0) {
-              return 创建JSON响应({ error: '未选择任何文件' }, 400);
-            }
+            if (!ipFiles || ipFiles.length === 0) return 创建JSON响应({ error: '未选择任何文件' }, 400);
+
             let allIpList = [];
             try {
               for (const ipFile of ipFiles) {
                 if (!ipFile || !ipFile.text) throw new Error(`文件 ${ipFile.name} 无效`);
                 const ipText = await ipFile.text();
                 const ipList = ipText.split('\n').map(line => line.trim()).filter(Boolean);
-                if (ipList.length === 0) console.warn(`文件 ${ipFile.name} 内容为空`);
                 allIpList = allIpList.concat(ipList);
               }
-              if (allIpList.length === 0) {
-                return 创建JSON响应({ error: '所有上传文件内容为空' }, 400);
-              }
+              if (allIpList.length === 0) return 创建JSON响应({ error: '所有上传文件内容为空' }, 400);
               const uniqueIpList = [...new Set(allIpList)];
 
               const 当前手动节点 = await env.LOGIN_STATE.get('manual_preferred_ips');
               const 当前节点列表 = 当前手动节点 ? JSON.parse(当前手动节点) : [];
               const 是重复上传 = JSON.stringify(当前节点列表.sort()) === JSON.stringify(uniqueIpList.sort());
-              if (是重复上传) {
-                return 创建JSON响应({ message: '上传内容与现有节点相同，无需更新' }, 200);
-              }
+              if (是重复上传) return 创建JSON响应({ message: '上传内容与现有节点相同，无需更新' }, 200);
 
               await env.LOGIN_STATE.put('manual_preferred_ips', JSON.stringify(uniqueIpList), { expirationTtl: 86400 });
               const 新版本 = String(Date.now());
@@ -537,6 +484,62 @@ async function 解析SOCKS5账号(SOCKS5) {
   return { username, password, hostname, port };
 }
 
+// 提取公共样式
+const 公共样式 = `
+  body {
+    font-family: 'Comic Sans MS', 'Arial', sans-serif;
+    color: #ff6f91;
+    margin: 0;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    overflow: hidden;
+    transition: background 0.5s ease;
+  }
+  @media (prefers-color-scheme: light) {
+    body { background: linear-gradient(135deg, #ffe6f0, #fff0f5); }
+    .content { background: rgba(255, 255, 255, 0.85); box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3); }
+  }
+  @media (prefers-color-scheme: dark) {
+    body { background: linear-gradient(135deg, #1e1e2f, #2a2a3b); }
+    .content { background: rgba(30, 30, 30, 0.9); color: #ffd1dc; box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2); }
+  }
+  .background-media {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: -1;
+    transition: opacity 0.5s ease;
+  }
+  .content {
+    padding: 30px;
+    border-radius: 25px;
+    max-width: 400px;
+    width: 90%;
+    text-align: center;
+  }
+`;
+
+// 提取背景切换脚本
+function 生成背景脚本() {
+  return `
+    const lightBg = '${白天背景壁纸}';
+    const darkBg = '${暗黑背景壁纸}';
+    const bgImage = document.getElementById('backgroundImage');
+    function updateBackground() {
+      const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      bgImage.src = isDarkMode ? darkBg : lightBg;
+    }
+    updateBackground();
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
+  `;
+}
+
 function 生成订阅页面(订阅路径, hostName) {
   return `
 <!DOCTYPE html>
@@ -544,19 +547,9 @@ function 生成订阅页面(订阅路径, hostName) {
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body {
-      font-family: 'Comic Sans MS', 'Arial', sans-serif;
-      color: #ff6f91;
-      margin: 0;
-      padding: 20px;
-      min-height: 100vh;
-      display: flex;
-      justify-content: center;
-      align-items: flex-start;
-      transition: background 0.5s ease;
-    }
+    ${公共样式}
+    body { align-items: flex-start; padding: 20px; min-height: 100vh; }
     @media (prefers-color-scheme: light) {
-      body { background: linear-gradient(135deg, #ffe6f0, #fff0f5); }
       .card { background: rgba(255, 245, 247, 0.9); box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3); }
       .card::before { border: 2px dashed #ffb6c1; }
       .card:hover { box-shadow: 0 10px 25px rgba(255, 182, 193, 0.5); }
@@ -564,7 +557,6 @@ function 生成订阅页面(订阅路径, hostName) {
       .file-item { background: rgba(255, 245, 247, 0.9); }
     }
     @media (prefers-color-scheme: dark) {
-      body { background: linear-gradient(135deg, #1e1e2f, #2a2a3b); }
       .card { background: rgba(30, 30, 30, 0.9); color: #ffd1dc; box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2); }
       .card::before { border: 2px dashed #ff85a2; }
       .card:hover { box-shadow: 0 10px 25px rgba(255, 133, 162, 0.4); }
@@ -572,16 +564,6 @@ function 生成订阅页面(订阅路径, hostName) {
       .link-box a { color: #ff85a2; }
       .link-box a:hover { color: #ff1493; }
       .file-item { background: rgba(50, 50, 50, 0.9); color: #ffd1dc; }
-    }
-    .background-media {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      z-index: -1;
-      transition: opacity 0.5s ease;
     }
     .container {
       max-width: 900px;
@@ -599,7 +581,6 @@ function 生成订阅页面(订阅路径, hostName) {
       padding: 25px;
       width: 100%;
       max-width: 500px;
-      text-align: center;
       transition: transform 0.3s ease, box-shadow 0.3s ease;
       position: relative;
       overflow: hidden;
@@ -658,8 +639,6 @@ function 生成订阅页面(订阅路径, hostName) {
       color: white;
       cursor: pointer;
       transition: transform 0.2s ease, box-shadow 0.2s ease;
-      text-align: center;
-      display: inline-block;
     }
     .cute-button:hover {
       transform: scale(1.05);
@@ -798,18 +777,7 @@ function 生成订阅页面(订阅路径, hostName) {
     </div>
   </div>
   <script>
-    const lightBg = '${白天背景壁纸}';
-    const darkBg = '${暗黑背景壁纸}';
-    const bgImage = document.getElementById('backgroundImage');
-
-    function updateBackground() {
-      const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      bgImage.src = isDarkMode ? darkBg : lightBg;
-    }
-
-    updateBackground();
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
-
+    ${生成背景脚本()}
     function 导入小猫咪(订阅路径, hostName) {
       window.location.href = '${小猫}${咪}://install-config?url=https://' + hostName + '/${订阅路径}/${小猫}${咪}';
     }
@@ -905,43 +873,7 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body {
-      font-family: 'Comic Sans MS', 'Arial', sans-serif;
-      color: #ff6f91;
-      margin: 0;
-      height: 100vh;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      position: relative;
-      overflow: hidden;
-      transition: background 0.5s ease;
-    }
-    @media (prefers-color-scheme: light) {
-      body { background: linear-gradient(135deg, #ffe6f0, #fff0f5); }
-      .content { background: rgba(255, 255, 255, 0.85); box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3); }
-    }
-    @media (prefers-color-scheme: dark) {
-      body { background: linear-gradient(135deg, #1e1e2f, #2a2a3b); }
-      .content { background: rgba(30, 30, 30, 0.9); color: #ffd1dc; box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2); }
-    }
-    .background-media {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      z-index: -1;
-      transition: opacity 0.5s ease;
-    }
-    .content {
-      padding: 30px;
-      border-radius: 25px;
-      max-width: 400px;
-      width: 90%;
-      text-align: center;
-    }
+    ${公共样式}
     h1 {
       font-size: 1.8em;
       color: #ff69b4;
@@ -1039,18 +971,7 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
     `}
   </div>
   <script>
-    const lightBg = '${白天背景壁纸}';
-    const darkBg = '${暗黑背景壁纸}';
-    const bgImage = document.getElementById('backgroundImage');
-
-    function updateBackground() {
-      const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      bgImage.src = isDarkMode ? darkBg : lightBg;
-    }
-
-    updateBackground();
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
-
+    ${生成背景脚本()}
     if (${锁定状态}) {
       const countdownElement = document.getElementById('countdown');
       const storageKey = 'lockEndTime';
@@ -1084,43 +1005,7 @@ function 生成注册界面(提示消息 = '', 上次账号 = '') {
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body {
-      font-family: 'Comic Sans MS', 'Arial', sans-serif;
-      color: #ff6f91;
-      margin: 0;
-      height: 100vh;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      position: relative;
-      overflow: hidden;
-      transition: background 0.5s ease;
-    }
-    @media (prefers-color-scheme: light) {
-      body { background: linear-gradient(135deg, #ffe6f0, #fff0f5); }
-      .content { background: rgba(255, 255, 255, 0.85); box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3); }
-    }
-    @media (prefers-color-scheme: dark) {
-      body { background: linear-gradient(135deg, #1e1e2f, #2a2a3b); }
-      .content { background: rgba(30, 30, 30, 0.9); color: #ffd1dc; box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2); }
-    }
-    .background-media {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      z-index: -1;
-      transition: opacity 0.5s ease;
-    }
-    .content {
-      padding: 30px;
-      border-radius: 25px;
-      max-width: 400px;
-      width: 90%;
-      text-align: center;
-    }
+    ${公共样式}
     h1 {
       font-size: 1.8em;
       color: #ff69b4;
@@ -1203,18 +1088,7 @@ function 生成注册界面(提示消息 = '', 上次账号 = '') {
     ${提示消息 ? `<div class="error-message">${提示消息}</div>` : ''}
   </div>
   <script>
-    const lightBg = '${白天背景壁纸}';
-    const darkBg = '${暗黑背景壁纸}';
-    const bgImage = document.getElementById('backgroundImage');
-
-    function updateBackground() {
-      const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      bgImage.src = isDarkMode ? darkBg : lightBg;
-    }
-
-    updateBackground();
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
-
+    ${生成背景脚本()}
     const form = document.getElementById('registerForm');
     const submitBtn = document.getElementById('submitBtn');
 
@@ -1274,43 +1148,7 @@ function 生成注册成功页面() {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="refresh" content="2;url=/login">
   <style>
-    body {
-      font-family: 'Comic Sans MS', 'Arial', sans-serif;
-      color: #ff6f91;
-      margin: 0;
-      height: 100vh;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      position: relative;
-      overflow: hidden;
-      transition: background 0.5s ease;
-    }
-    @media (prefers-color-scheme: light) {
-      body { background: linear-gradient(135deg, #ffe6f0, #fff0f5); }
-      .content { background: rgba(255, 255, 255, 0.85); box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3); }
-    }
-    @media (prefers-color-scheme: dark) {
-      body { background: linear-gradient(135deg, #1e1e2f, #2a2a3b); }
-      .content { background: rgba(30, 30, 30, 0.9); color: #ffd1dc; box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2); }
-    }
-    .background-media {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      z-index: -1;
-      transition: opacity 0.5s ease;
-    }
-    .content {
-      padding: 30px;
-      border-radius: 25px;
-      max-width: 400px;
-      width: 90%;
-      text-align: center;
-    }
+    ${公共样式}
     h1 {
       font-size: 1.8em;
       color: #ff69b4;
@@ -1352,21 +1190,8 @@ function 生成注册成功页面() {
     <button class="cute-button" onclick="window.location.href='/login'">立即登录</button>
   </div>
   <script>
-    const lightBg = '${白天背景壁纸}';
-    const darkBg = '${暗黑背景壁纸}';
-    const bgImage = document.getElementById('backgroundImage');
-
-    function updateBackground() {
-      const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      bgImage.src = isDarkMode ? darkBg : lightBg;
-    }
-
-    updateBackground();
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
-
-    setTimeout(() => {
-      window.location.href = '/login';
-    }, 2000);
+    ${生成背景脚本()}
+    setTimeout(() => window.location.href = '/login', 2000);
   </script>
 </body>
 </html>
@@ -1380,43 +1205,7 @@ function 生成重置密码页面(提示消息 = '', 上次账号 = '') {
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body {
-      font-family: 'Comic Sans MS', 'Arial', sans-serif;
-      color: #ff6f91;
-      margin: 0;
-      height: 100vh;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      position: relative;
-      overflow: hidden;
-      transition: background 0.5s ease;
-    }
-    @media (prefers-color-scheme: light) {
-      body { background: linear-gradient(135deg, #ffe6f0, #fff0f5); }
-      .content { background: rgba(255, 255, 255, 0.85); box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3); }
-    }
-    @media (prefers-color-scheme: dark) {
-      body { background: linear-gradient(135deg, #1e1e2f, #2a2a3b); }
-      .content { background: rgba(30, 30, 30, 0.9); color: #ffd1dc; box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2); }
-    }
-    .background-media {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      z-index: -1;
-      transition: opacity 0.5s ease;
-    }
-    .content {
-      padding: 30px;
-      border-radius: 25px;
-      max-width: 400px;
-      width: 90%;
-      text-align: center;
-    }
+    ${公共样式}
     h1 {
       font-size: 1.8em;
       color: #ff69b4;
@@ -1496,17 +1285,7 @@ function 生成重置密码页面(提示消息 = '', 上次账号 = '') {
     ${提示消息 ? `<div class="error-message">${提示消息}</div>` : ''}
   </div>
   <script>
-    const lightBg = '${白天背景壁纸}';
-    const darkBg = '${暗黑背景壁纸}';
-    const bgImage = document.getElementById('backgroundImage');
-
-    function updateBackground() {
-      const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      bgImage.src = isDarkMode ? darkBg : lightBg;
-    }
-
-    updateBackground();
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
+    ${生成背景脚本()}
   </script>
 </body>
 </html>
@@ -1520,43 +1299,8 @@ function 生成KV未绑定提示页面() {
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body {
-      font-family: 'Comic Sans MS', 'Arial', sans-serif;
-      color: #ff6f91;
-      margin: 0;
-      height: 100vh;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      position: relative;
-      overflow: hidden;
-      transition: background 0.5s ease;
-    }
-    @media (prefers-color-scheme: light) {
-      body { background: linear-gradient(135deg, #ffe6f0, #fff0f5); }
-      .content { background: rgba(255, 255, 255, 0.85); box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3); }
-    }
-    @media (prefers-color-scheme: dark) {
-      body { background: linear-gradient(135deg, #1e1e2f, #2a2a3b); }
-      .content { background: rgba(30, 30, 30, 0.9); color: #ffd1dc; box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2); }
-    }
-    .background-media {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      z-index: -1;
-      transition: opacity 0.5s ease;
-    }
-    .content {
-      padding: 30px;
-      border-radius: 25px;
-      max-width: 500px;
-      width: 90%;
-      text-align: center;
-    }
+    ${公共样式}
+    .content { max-width: 500px; }
     h1 {
       font-size: 1.8em;
       color: #ff69b4;
@@ -1592,17 +1336,7 @@ function 生成KV未绑定提示页面() {
     <div class="instruction">绑定好后，访问 <span class="highlight">/config</span> 就可以进入订阅啦~</div>
   </div>
   <script>
-    const lightBg = '${白天背景壁纸}';
-    const darkBg = '${暗黑背景壁纸}';
-    const bgImage = document.getElementById('backgroundImage');
-
-    function updateBackground() {
-      const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      bgImage.src = isDarkMode ? darkBg : lightBg;
-    }
-
-    updateBackground();
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
+    ${生成背景脚本()}
   </script>
 </body>
 </html>
