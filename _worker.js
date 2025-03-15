@@ -59,7 +59,6 @@ function 创建JSON响应(数据, 状态码 = 200, 额外头 = {}) {
   });
 }
 
-// 密码加密函数（SHA-256）
 async function 加密密码(密码) {
   const encoder = new TextEncoder();
   const data = encoder.encode(密码);
@@ -180,7 +179,7 @@ export default {
             const 失败次数 = Number(await env.LOGIN_STATE.get(`fail_${设备标识}`) || 0);
 
             if (!已存账号 || !已存密码) {
-              return 创建HTML响应(生成注册界面(失败次数 > 0, 最大失败次数 - 失败次数));
+              return 创建HTML响应(生成注册界面());
             }
 
             if (请求.headers.get('Cookie')?.split('=')[1] === await env.LOGIN_STATE.get('current_token')) {
@@ -195,7 +194,7 @@ export default {
             formData = await 请求.formData();
             const 提供的账号 = formData.get('username');
             const 提供的密码 = formData.get('password');
-            const 确认密码 = formData.get('confirm_password'); // 仅在注册时使用
+            const 确认密码 = formData.get('confirm_password');
             
             const 已存账号提交 = await env.LOGIN_STATE.get('username');
             const 已存密码提交 = await env.LOGIN_STATE.get('password_hash');
@@ -203,22 +202,19 @@ export default {
             if (!已存账号提交 || !已存密码提交) {
               // 注册逻辑
               if (!提供的账号 || 提供的账号.length < 4) {
-                return 创建HTML响应(生成注册界面(true, 最大失败次数, '账号需至少4个字符哦~'));
+                return 创建HTML响应(生成注册界面('小仙女说：账号需至少4个字符哦~', 提供的账号));
               }
               if (!提供的密码 || 提供的密码.length < 6) {
-                return 创建HTML响应(生成注册界面(true, 最大失败次数, '密码需至少6个字符哦~'));
+                return 创建HTML响应(生成注册界面('小仙女说：密码需至少6个字符哦~', 提供的账号));
               }
               if (提供的密码 !== 确认密码) {
-                return 创建HTML响应(生成注册界面(true, 最大失败次数, '两次密码不一致哦~'));
+                return 创建HTML响应(生成注册界面('小仙女说：两次密码不一致哦~', 提供的账号));
               }
 
               const 加密后的密码 = await 加密密码(提供的密码);
               await env.LOGIN_STATE.put('username', 提供的账号, { expirationTtl: 0 });
               await env.LOGIN_STATE.put('password_hash', 加密后的密码, { expirationTtl: 0 });
-              const 新Token = Math.random().toString(36).substring(2);
-              await env.LOGIN_STATE.put('current_token', 新Token, { expirationTtl: 300 });
-              await env.LOGIN_STATE.put(`fail_${设备标识}`, '0');
-              return 创建重定向响应(`/${订阅路径}`, { 'Set-Cookie': `token=${新Token}; Path=/; HttpOnly; SameSite=Strict` });
+              return 创建HTML响应(生成注册成功页面());
             } else {
               // 登录逻辑
               const 加密后的提供的密码 = await 加密密码(提供的密码);
@@ -237,6 +233,36 @@ export default {
                 return 创建HTML响应(生成登录界面(false, 0, true, 最大失败次数 - 失败次数));
               }
             }
+
+          case '/reset-password':
+            formData = await 请求.formData();
+            const 重置账号 = formData.get('username');
+            const 旧密码 = formData.get('old_password');
+            const 新密码 = formData.get('new_password');
+            const 确认新密码 = formData.get('confirm_new_password');
+
+            const 已存账号重置 = await env.LOGIN_STATE.get('username');
+            const 已存密码重置 = await env.LOGIN_STATE.get('password_hash');
+
+            if (!已存账号重置 || !已存密码重置) {
+              return 创建重定向响应('/login');
+            }
+
+            const 加密后的旧密码 = await 加密密码(旧密码);
+            if (重置账号 !== 已存账号重置 || 加密后的旧密码 !== 已存密码重置) {
+              return 创建HTML响应(生成重置密码页面('小仙女说：原账号或密码不对哦~', 重置账号));
+            }
+
+            if (!新密码 || 新密码.length < 6) {
+              return 创建HTML响应(生成重置密码页面('小仙女说：新密码需至少6个字符哦~', 重置账号));
+            }
+            if (新密码 !== 确认新密码) {
+              return 创建HTML响应(生成重置密码页面('小仙女说：两次新密码不一致哦~', 重置账号));
+            }
+
+            const 加密后的新密码 = await 加密密码(新密码);
+            await env.LOGIN_STATE.put('password_hash', 加密后的新密码, { expirationTtl: 0 });
+            return 创建重定向响应('/login');
 
           case `/${订阅路径}/logout`:
             await env.LOGIN_STATE.delete('current_token');
@@ -471,60 +497,23 @@ function 生成订阅页面(订阅路径, hostName) {
       align-items: flex-start;
       transition: background 0.5s ease;
     }
-    /* 白天模式 */
     @media (prefers-color-scheme: light) {
-      body {
-        background: linear-gradient(135deg, #ffe6f0, #fff0f5);
-      }
-      .card {
-        background: rgba(255, 245, 247, 0.9);
-        box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3);
-      }
-      .card::before {
-        border: 2px dashed #ffb6c1;
-      }
-      .card:hover {
-        box-shadow: 0 10px 25px rgba(255, 182, 193, 0.5);
-      }
-      .link-box {
-        background: rgba(255, 240, 245, 0.9);
-        border: 2px dashed #ffb6c1;
-      }
-      .file-item {
-        background: rgba(255, 245, 247, 0.9);
-      }
+      body { background: linear-gradient(135deg, #ffe6f0, #fff0f5); }
+      .card { background: rgba(255, 245, 247, 0.9); box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3); }
+      .card::before { border: 2px dashed #ffb6c1; }
+      .card:hover { box-shadow: 0 10px 25px rgba(255, 182, 193, 0.5); }
+      .link-box { background: rgba(255, 240, 245, 0.9); border: 2px dashed #ffb6c1; }
+      .file-item { background: rgba(255, 245, 247, 0.9); }
     }
-    /* 暗黑模式 */
     @media (prefers-color-scheme: dark) {
-      body {
-        background: linear-gradient(135deg, #1e1e2f, #2a2a3b);
-      }
-      .card {
-        background: rgba(30, 30, 30, 0.9);
-        color: #ffd1dc;
-        box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2);
-      }
-      .card::before {
-        border: 2px dashed #ff85a2;
-      }
-      .card:hover {
-        box-shadow: 0 10px 25px rgba(255, 133, 162, 0.4);
-      }
-      .link-box {
-        background: rgba(40, 40, 40, 0.9);
-        border: 2px dashed #ff85a2;
-        color: #ffd1dc;
-      }
-      .link-box a {
-        color: #ff85a2;
-      }
-      .link-box a:hover {
-        color: #ff1493;
-      }
-      .file-item {
-        background: rgba(50, 50, 50, 0.9);
-        color: #ffd1dc;
-      }
+      body { background: linear-gradient(135deg, #1e1e2f, #2a2a3b); }
+      .card { background: rgba(30, 30, 30, 0.9); color: #ffd1dc; box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2); }
+      .card::before { border: 2px dashed #ff85a2; }
+      .card:hover { box-shadow: 0 10px 25px rgba(255, 133, 162, 0.4); }
+      .link-box { background: rgba(40, 40, 40, 0.9); border: 2px dashed #ff85a2; color: #ffd1dc; }
+      .link-box a { color: #ff85a2; }
+      .link-box a:hover { color: #ff1493; }
+      .file-item { background: rgba(50, 50, 50, 0.9); color: #ffd1dc; }
     }
     .background-media {
       position: fixed;
@@ -567,9 +556,7 @@ function 生成订阅页面(订阅路径, hostName) {
       border-radius: 20px;
       z-index: -1;
     }
-    .card:hover {
-      transform: scale(1.03);
-    }
+    .card:hover { transform: scale(1.03); }
     .card::after {
       content: '✨';
       position: absolute;
@@ -597,9 +584,7 @@ function 生成订阅页面(订阅路径, hostName) {
       text-decoration: none;
       transition: color 0.3s ease;
     }
-    .link-box a:hover {
-      color: #ff1493;
-    }
+    .link-box a:hover { color: #ff1493; }
     .button-group {
       display: flex;
       justify-content: center;
@@ -622,23 +607,11 @@ function 生成订阅页面(订阅路径, hostName) {
       transform: scale(1.05);
       box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4);
     }
-    .cute-button:active {
-      transform: scale(0.95);
-    }
-    .clash-btn {
-      background: linear-gradient(to right, #ffb6c1, #ff69b4);
-    }
-    .v2ray-btn {
-      background: linear-gradient(to right, #ffd1dc, #ff85a2);
-    }
-    .logout-btn {
-      background: linear-gradient(to right, #ff9999, #ff6666);
-    }
-    .upload-title {
-      font-size: 1.4em;
-      color: #ff85a2;
-      margin-bottom: 15px;
-    }
+    .cute-button:active { transform: scale(0.95); }
+    .clash-btn { background: linear-gradient(to right, #ffb6c1, #ff69b4); }
+    .v2ray-btn { background: linear-gradient(to right, #ffd1dc, #ff85a2); }
+    .logout-btn { background: linear-gradient(to right, #ff9999, #ff6666); }
+    .upload-title { font-size: 1.4em; color: #ff85a2; margin-bottom: 15px; }
     .upload-label {
       padding: 10px 20px;
       background: linear-gradient(to right, #ffb6c1, #ff69b4);
@@ -676,9 +649,7 @@ function 生成订阅页面(订阅路径, hostName) {
       cursor: pointer;
       transition: background 0.3s ease;
     }
-    .file-item button:hover {
-      background: #ff6666;
-    }
+    .file-item button:hover { background: #ff6666; }
     .upload-submit {
       background: linear-gradient(to right, #ffdead, #ff85a2);
       padding: 12px 25px;
@@ -692,10 +663,7 @@ function 生成订阅页面(订阅路径, hostName) {
       transform: scale(1.05);
       box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4);
     }
-    .progress-container {
-      display: none;
-      margin-top: 15px;
-    }
+    .progress-container { display: none; margin-top: 15px; }
     .progress-bar {
       width: 100%;
       height: 15px;
@@ -892,23 +860,12 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
       transition: background 0.5s ease;
     }
     @media (prefers-color-scheme: light) {
-      body {
-        background: linear-gradient(135deg, #ffe6f0, #fff0f5);
-      }
-      .content {
-        background: rgba(255, 255, 255, 0.85);
-        box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3);
-      }
+      body { background: linear-gradient(135deg, #ffe6f0, #fff0f5); }
+      .content { background: rgba(255, 255, 255, 0.85); box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3); }
     }
     @media (prefers-color-scheme: dark) {
-      body {
-        background: linear-gradient(135deg, #1e1e2f, #2a2a3b);
-      }
-      .content {
-        background: rgba(30, 30, 30, 0.9);
-        color: #ffd1dc;
-        box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2);
-      }
+      body { background: linear-gradient(135deg, #1e1e2f, #2a2a3b); }
+      .content { background: rgba(30, 30, 30, 0.9); color: #ffd1dc; box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2); }
     }
     .background-media {
       position: fixed;
@@ -956,9 +913,7 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
       border-color: #ff69b4;
       outline: none;
     }
-    .login-form input::placeholder {
-      color: #ffb6c1;
-    }
+    .login-form input::placeholder { color: #ffb6c1; }
     .login-form button {
       padding: 12px;
       background: linear-gradient(to right, #ffb6c1, #ff69b4);
@@ -972,6 +927,10 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
     .login-form button:hover {
       transform: scale(1.05);
       box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4);
+    }
+    .reset-btn {
+      background: linear-gradient(to right, #ff9999, #ff6666);
+      margin-top: 10px;
     }
     .error-message {
       color: #ff6666;
@@ -1016,8 +975,9 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
       <input type="text" id="username" name="username" placeholder="账号" required>
       <input type="password" id="password" name="password" placeholder="密码" required>
       <button type="submit">登录</button>
+      <button type="button" class="reset-btn" onclick="显示重置密码()">重置密码</button>
     </form>
-    ${输错密码 && 剩余次数 > 0 ? `<div class="error-message">密码不对哦，还剩 ${剩余次数} 次机会~</div>` : ''}
+    ${输错密码 && 剩余次数 > 0 ? `<div class="error-message">小仙女说：密码不对哦，还剩 ${剩余次数} 次机会~</div>` : ''}
     `}
   </div>
   <script>
@@ -1055,13 +1015,17 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
       document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') updateCountdown(); });
       window.addEventListener('load', () => { if (localStorage.getItem(storageKey)) updateCountdown(); });
     }
+
+    function 显示重置密码() {
+      window.location.href = '/reset-password-form';
+    }
   </script>
 </body>
 </html>
   `;
 }
 
-function 生成注册界面(有错误 = false, 剩余次数 = 0, 错误消息 = '') {
+function 生成注册界面(提示消息 = '', 上次账号 = '') {
   return `
 <!DOCTYPE html>
 <html>
@@ -1081,23 +1045,12 @@ function 生成注册界面(有错误 = false, 剩余次数 = 0, 错误消息 = 
       transition: background 0.5s ease;
     }
     @media (prefers-color-scheme: light) {
-      body {
-        background: linear-gradient(135deg, #ffe6f0, #fff0f5);
-      }
-      .content {
-        background: rgba(255, 255, 255, 0.85);
-        box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3);
-      }
+      body { background: linear-gradient(135deg, #ffe6f0, #fff0f5); }
+      .content { background: rgba(255, 255, 255, 0.85); box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3); }
     }
     @media (prefers-color-scheme: dark) {
-      body {
-        background: linear-gradient(135deg, #1e1e2f, #2a2a3b);
-      }
-      .content {
-        background: rgba(30, 30, 30, 0.9);
-        color: #ffd1dc;
-        box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2);
-      }
+      body { background: linear-gradient(135deg, #1e1e2f, #2a2a3b); }
+      .content { background: rgba(30, 30, 30, 0.9); color: #ffd1dc; box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2); }
     }
     .background-media {
       position: fixed;
@@ -1145,9 +1098,7 @@ function 生成注册界面(有错误 = false, 剩余次数 = 0, 错误消息 = 
       border-color: #ff69b4;
       outline: none;
     }
-    .login-form input::placeholder {
-      color: #ffb6c1;
-    }
+    .login-form input::placeholder { color: #ffb6c1; }
     .login-form button {
       padding: 12px;
       background: linear-gradient(to right, #ffb6c1, #ff69b4);
@@ -1188,12 +1139,254 @@ function 生成注册界面(有错误 = false, 剩余次数 = 0, 错误消息 = 
     <h1>🌟 小仙女初次注册 🌟</h1>
     <p style="font-size: 1em; color: #ff85a2;">第一次使用哦，请设置你的账号和密码吧~</p>
     <form class="login-form" action="/login/submit" method="POST">
-      <input type="text" id="username" name="username" placeholder="设置账号（至少4个字符）" required>
+      <input type="text" id="username" name="username" placeholder="设置账号（至少4个字符）" required value="${上次账号}">
       <input type="password" id="password" name="password" placeholder="设置密码（至少6个字符）" required>
       <input type="password" id="confirm_password" name="confirm_password" placeholder="确认密码" required>
       <button type="submit">注册</button>
     </form>
-    ${有错误 && 错误消息 ? `<div class="error-message">${错误消息}</div>` : ''}
+    ${提示消息 ? `<div class="error-message">${提示消息}</div>` : ''}
+  </div>
+  <script>
+    const lightBg = '${白天背景壁纸}';
+    const darkBg = '${暗黑背景壁纸}';
+    const bgImage = document.getElementById('backgroundImage');
+
+    function updateBackground() {
+      const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      bgImage.src = isDarkMode ? darkBg : lightBg;
+    }
+
+    updateBackground();
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
+  </script>
+</body>
+</html>
+  `;
+}
+
+function 生成注册成功页面() {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: 'Comic Sans MS', 'Arial', sans-serif;
+      color: #ff6f91;
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+      overflow: hidden;
+      transition: background 0.5s ease;
+    }
+    @media (prefers-color-scheme: light) {
+      body { background: linear-gradient(135deg, #ffe6f0, #fff0f5); }
+      .content { background: rgba(255, 255, 255, 0.85); box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3); }
+    }
+    @media (prefers-color-scheme: dark) {
+      body { background: linear-gradient(135deg, #1e1e2f, #2a2a3b); }
+      .content { background: rgba(30, 30, 30, 0.9); color: #ffd1dc; box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2); }
+    }
+    .background-media {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: -1;
+      transition: opacity 0.5s ease;
+    }
+    .content {
+      padding: 30px;
+      border-radius: 25px;
+      max-width: 400px;
+      width: 90%;
+      text-align: center;
+    }
+    h1 {
+      font-size: 1.8em;
+      color: #ff69b4;
+      text-shadow: 1px 1px 3px rgba(255, 105, 180, 0.2);
+      margin-bottom: 20px;
+    }
+    p {
+      font-size: 1.1em;
+      color: #ff85a2;
+    }
+    .cute-button {
+      padding: 12px 25px;
+      background: linear-gradient(to right, #ffb6c1, #ff69b4);
+      color: white;
+      border: none;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 1em;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+      margin-top: 20px;
+    }
+    .cute-button:hover {
+      transform: scale(1.05);
+      box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4);
+    }
+    @media (max-width: 600px) {
+      .content { padding: 20px; }
+      h1 { font-size: 1.5em; }
+      p { font-size: 0.95em; }
+      .cute-button { padding: 10px 20px; font-size: 0.9em; }
+    }
+  </style>
+</head>
+<body>
+  <img id="backgroundImage" class="background-media" alt="Background">
+  <div class="content">
+    <h1>🎉 注册成功啦！</h1>
+    <p>小仙女说：账号设置好啦，快去登录吧~</p>
+    <button class="cute-button" onclick="window.location.href='/login'">去登录</button>
+  </div>
+  <script>
+    const lightBg = '${白天背景壁纸}';
+    const darkBg = '${暗黑背景壁纸}';
+    const bgImage = document.getElementById('backgroundImage');
+
+    function updateBackground() {
+      const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      bgImage.src = isDarkMode ? darkBg : lightBg;
+    }
+
+    updateBackground();
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
+  </script>
+</body>
+</html>
+  `;
+}
+
+function 生成重置密码页面(提示消息 = '', 上次账号 = '') {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: 'Comic Sans MS', 'Arial', sans-serif;
+      color: #ff6f91;
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+      overflow: hidden;
+      transition: background 0.5s ease;
+    }
+    @media (prefers-color-scheme: light) {
+      body { background: linear-gradient(135deg, #ffe6f0, #fff0f5); }
+      .content { background: rgba(255, 255, 255, 0.85); box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3); }
+    }
+    @media (prefers-color-scheme: dark) {
+      body { background: linear-gradient(135deg, #1e1e2f, #2a2a3b); }
+      .content { background: rgba(30, 30, 30, 0.9); color: #ffd1dc; box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2); }
+    }
+    .background-media {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: -1;
+      transition: opacity 0.5s ease;
+    }
+    .content {
+      padding: 30px;
+      border-radius: 25px;
+      max-width: 400px;
+      width: 90%;
+      text-align: center;
+    }
+    h1 {
+      font-size: 1.8em;
+      color: #ff69b4;
+      text-shadow: 1px 1px 3px rgba(255, 105, 180, 0.2);
+      margin-bottom: 20px;
+    }
+    .login-form {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      width: 100%;
+      max-width: 300px;
+      margin: 0 auto;
+    }
+    .login-form input {
+      padding: 12px;
+      border-radius: 15px;
+      border: 2px solid #ffb6c1;
+      background: #fff;
+      font-size: 1em;
+      color: #ff6f91;
+      width: 100%;
+      box-sizing: border-box;
+      transition: border-color 0.3s ease;
+    }
+    .login-form input:focus {
+      border-color: #ff69b4;
+      outline: none;
+    }
+    .login-form input::placeholder { color: #ffb6c1; }
+    .login-form button {
+      padding: 12px;
+      background: linear-gradient(to right, #ffb6c1, #ff69b4);
+      color: white;
+      border: none;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 1em;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    .login-form button:hover {
+      transform: scale(1.05);
+      box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4);
+    }
+    .error-message {
+      color: #ff6666;
+      margin-top: 15px;
+      font-size: 0.9em;
+      animation: shake 0.5s ease-in-out;
+    }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-5px); }
+      50% { transform: translateX(5px); }
+      75% { transform: translateX(-5px); }
+    }
+    @media (max-width: 600px) {
+      .content { padding: 20px; }
+      h1 { font-size: 1.5em; }
+      .login-form { max-width: 250px; }
+      .login-form input, .login-form button { font-size: 0.9em; padding: 10px; }
+    }
+  </style>
+</head>
+<body>
+  <img id="backgroundImage" class="background-media" alt="Background">
+  <div class="content">
+    <h1>🔑 小仙女重置密码 🔑</h1>
+    <p style="font-size: 1em; color: #ff85a2;">请输入原账号密码和新密码哦~</p>
+    <form class="login-form" action="/reset-password" method="POST">
+      <input type="text" id="username" name="username" placeholder="原账号" required value="${上次账号}">
+      <input type="password" id="old_password" name="old_password" placeholder="原密码" required>
+      <input type="password" id="new_password" name="new_password" placeholder="新密码（至少6个字符）" required>
+      <input type="password" id="confirm_new_password" name="confirm_new_password" placeholder="确认新密码" required>
+      <button type="submit">提交</button>
+    </form>
+    ${提示消息 ? `<div class="error-message">${提示消息}</div>` : ''}
   </div>
   <script>
     const lightBg = '${白天背景壁纸}';
@@ -1233,23 +1426,12 @@ function 生成KV未绑定提示页面() {
       transition: background 0.5s ease;
     }
     @media (prefers-color-scheme: light) {
-      body {
-        background: linear-gradient(135deg, #ffe6f0, #fff0f5);
-      }
-      .content {
-        background: rgba(255, 255, 255, 0.85);
-        box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3);
-      }
+      body { background: linear-gradient(135deg, #ffe6f0, #fff0f5); }
+      .content { background: rgba(255, 255, 255, 0.85); box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3); }
     }
     @media (prefers-color-scheme: dark) {
-      body {
-        background: linear-gradient(135deg, #1e1e2f, #2a2a3b);
-      }
-      .content {
-        background: rgba(30, 30, 30, 0.9);
-        color: #ffd1dc;
-        box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2);
-      }
+      body { background: linear-gradient(135deg, #1e1e2f, #2a2a3b); }
+      .content { background: rgba(30, 30, 30, 0.9); color: #ffd1dc; box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2); }
     }
     .background-media {
       position: fixed;
