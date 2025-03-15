@@ -12,8 +12,8 @@ let 反代地址 = 'ts.hpc.tw';
 let SOCKS5账号 = '';
 let 节点名称 = '小仙女';
 let 伪装域名 = 'lkssite.vip';
-let 账号 = 'andypan';
-let 密码 = 'Yyds@2023';
+let 账号 = '你的账号';
+let 密码 = '你的密码';
 let 最大失败次数 = 5;
 let 锁定时间 = 5 * 60 * 1000;
 let 小猫 = 'cla';
@@ -484,14 +484,14 @@ function 生成订阅页面(订阅路径, hostName) {
       body {
         background: linear-gradient(135deg, #ffe6f0, #fff0f5);
       }
-      .card, .proxy-card {
+      .card {
         background: rgba(255, 245, 247, 0.9);
         box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3);
       }
-      .card::before, .proxy-card::before {
+      .card::before {
         border: 2px dashed #ffb6c1;
       }
-      .card:hover, .proxy-card:hover {
+      .card:hover {
         box-shadow: 0 10px 25px rgba(255, 182, 193, 0.5);
       }
     }
@@ -499,15 +499,15 @@ function 生成订阅页面(订阅路径, hostName) {
       body {
         background: linear-gradient(135deg, #1e1e2f, #2a2a3b);
       }
-      .card, .proxy-card {
+      .card {
         background: rgba(30, 30, 30, 0.9);
         color: #ffd1dc;
         box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2);
       }
-      .card::before, .proxy-card::before {
+      .card::before {
         border: 2px dashed #ff85a2;
       }
-      .card:hover, .proxy-card:hover {
+      .card:hover {
         box-shadow: 0 10px 25px rgba(255, 133, 162, 0.4);
       }
     }
@@ -532,7 +532,7 @@ function 生成订阅页面(订阅路径, hostName) {
       z-index: 1;
       padding-bottom: 20px;
     }
-    .card, .proxy-card {
+    .card {
       border-radius: 25px;
       padding: 25px;
       width: 100%;
@@ -542,7 +542,7 @@ function 生成订阅页面(订阅路径, hostName) {
       position: relative;
       overflow: hidden;
     }
-    .card::before, .proxy-card::before {
+    .card::before {
       content: '';
       position: absolute;
       top: 10px;
@@ -552,10 +552,10 @@ function 生成订阅页面(订阅路径, hostName) {
       border-radius: 20px;
       z-index: -1;
     }
-    .card:hover, .proxy-card:hover {
+    .card:hover {
       transform: scale(1.03);
     }
-    .card-title, .proxy-card h2 {
+    .card-title {
       font-size: 1.6em;
       color: #ff69b4;
       margin-bottom: 15px;
@@ -607,23 +607,43 @@ function 生成订阅页面(订阅路径, hostName) {
     input:checked + .slider:before {
       transform: translateX(26px);
     }
-    .capsule-switch {
-      display: inline-flex;
-      background: #ffe6f0;
-      border-radius: 25px;
+    .proxy-toggle-btn {
+      padding: 10px 20px;
+      background: linear-gradient(to right, #ffb6c1, #ff69b4);
+      color: white;
+      border: none;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 1em;
+      transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.3s ease;
+      position: relative;
       overflow: hidden;
     }
-    .capsule-option {
-      padding: 10px 20px;
-      cursor: pointer;
-      transition: background 0.3s ease;
+    .proxy-toggle-btn:hover {
+      transform: scale(1.05);
+      box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4);
     }
-    .capsule-option.active {
-      background: #ff69b4;
-      color: white;
+    .proxy-toggle-btn:active {
+      transform: scale(0.95);
     }
-    .capsule-option:not(.active):hover {
-      background: #ffd1dc;
+    .proxy-toggle-btn.socks5 {
+      background: linear-gradient(to right, #ffd1dc, #ff85a2);
+    }
+    .proxy-toggle-btn::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: rgba(255, 255, 255, 0.2);
+      transform: rotate(30deg);
+      transition: all 0.5s ease;
+      pointer-events: none;
+    }
+    .proxy-toggle-btn:hover::before {
+      top: 100%;
+      left: 100%;
     }
     .proxy-status {
       margin-top: 20px;
@@ -690,10 +710,10 @@ function 生成订阅页面(订阅路径, hostName) {
       background: linear-gradient(to right, #ff9999, #ff6666);
     }
     @media (max-width: 600px) {
-      .card, .proxy-card { padding: 15px; max-width: 90%; }
-      .card-title, .proxy-card h2 { font-size: 1.3em; }
+      .card { padding: 15px; max-width: 90%; }
+      .card-title { font-size: 1.3em; }
       .switch-container { gap: 10px; }
-      .capsule-option { padding: 8px 15px; }
+      .proxy-toggle-btn { padding: 8px 15px; }
       .proxy-status { font-size: 0.9em; }
     }
   </style>
@@ -701,24 +721,21 @@ function 生成订阅页面(订阅路径, hostName) {
 <body>
   <img id="backgroundImage" class="background-media" alt="Background">
   <div class="container">
-    <div class="proxy-card">
-      <h2>🌟 代理设置</h2>
+    <div class="card">
+      <h1 class="card-title">🌸 欢迎来到小仙女订阅站 🌸</h1>
+      <p style="font-size: 1em;">支持 <span style="color: #ff69b4;">${小猫}${咪}</span> 和 <span style="color: #ff85a2;">${歪兔}${蕊蒽}</span> 哦~</p>
+    </div>
+    <div class="card">
+      <h2 class="card-title">🌟 代理设置</h2>
       <div class="switch-container">
         <label>代理开关</label>
         <label class="toggle-switch">
           <input type="checkbox" id="proxyToggle" onchange="toggleProxy()">
           <span class="slider"></span>
         </label>
-        <div class="capsule-switch" id="capsuleSwitch">
-          <div class="capsule-option active" data-type="reverse" onclick="switchCapsule('reverse')">反代</div>
-          <div class="capsule-option" data-type="socks5" onclick="switchCapsule('socks5')">SOCKS5</div>
-        </div>
+        <button class="proxy-toggle-btn" id="proxyTypeBtn" onclick="switchProxyType()">反代</button>
       </div>
       <div class="proxy-status" id="proxyStatus">直连</div>
-    </div>
-    <div class="card">
-      <h1 class="card-title">🌸 欢迎来到小仙女订阅站 🌸</h1>
-      <p style="font-size: 1em;">支持 <span style="color: #ff69b4;">${小猫}${咪}</span> 和 <span style="color: #ff85a2;">${歪兔}${蕊蒽}</span> 哦~</p>
     </div>
     <div class="card">
       <h2 class="card-title">🐾 ${小猫}${咪} 订阅</h2>
@@ -759,31 +776,30 @@ function 生成订阅页面(订阅路径, hostName) {
     let proxyEnabled = localStorage.getItem('proxyEnabled') === 'true';
     let proxyType = localStorage.getItem('proxyType') || 'reverse';
     document.getElementById('proxyToggle').checked = proxyEnabled;
-    updateCapsuleUI();
+    updateProxyTypeUI();
     updateProxyStatus();
 
     function toggleProxy() {
       proxyEnabled = document.getElementById('proxyToggle').checked;
       localStorage.setItem('proxyEnabled', proxyEnabled);
-      updateCapsuleUI();
+      updateProxyTypeUI();
       saveProxyState();
       updateProxyStatus();
     }
 
-    function switchCapsule(type) {
-      proxyType = type;
+    function switchProxyType() {
+      proxyType = proxyType === 'reverse' ? 'socks5' : 'reverse';
       localStorage.setItem('proxyType', proxyType);
-      updateCapsuleUI();
+      updateProxyTypeUI();
       saveProxyState();
       updateProxyStatus();
     }
 
-    function updateCapsuleUI() {
-      const options = document.querySelectorAll('.capsule-option');
-      options.forEach(opt => {
-        opt.classList.toggle('active', opt.dataset.type === proxyType);
-      });
-      document.getElementById('capsuleSwitch').style.display = proxyEnabled ? 'inline-flex' : 'none';
+    function updateProxyTypeUI() {
+      const btn = document.getElementById('proxyTypeBtn');
+      btn.textContent = proxyType === 'reverse' ? '反代' : 'SOCKS5';
+      btn.className = 'proxy-toggle-btn' + (proxyType === 'socks5' ? ' socks5' : '');
+      btn.style.display = proxyEnabled ? 'inline-block' : 'none';
     }
 
     function updateProxyStatus() {
