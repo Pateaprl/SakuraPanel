@@ -1,3 +1,4 @@
+```javascript
 import { connect } from 'cloudflare:sockets';
 
 let 订阅路径 = "config";
@@ -485,14 +486,29 @@ function 生成订阅页面(订阅路径, hostName) {
         background: linear-gradient(135deg, #ffe6f0, #fff0f5);
       }
       .card {
-        background: rgba(255, 245, 247, 0.9);
-        box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3);
+        background: linear-gradient(135deg, rgba(255, 245, 247, 0.9), rgba(255, 182, 193, 0.7));
+        animation: gradientFlow 8s ease infinite;
+        background-size: 200% 200%;
       }
       .card::before {
         border: 2px dashed #ffb6c1;
+        box-shadow: inset 0 0 10px rgba(255, 182, 193, 0.5);
+      }
+      .card::after {
+        color: #ff69b4;
+        text-shadow: 2px 2px 5px rgba(255, 105, 180, 0.5);
       }
       .card:hover {
         box-shadow: 0 10px 25px rgba(255, 182, 193, 0.5);
+      }
+      .card-title {
+        background: linear-gradient(to right, #ff69b4, #ff1493);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+      .card-title::after {
+        background: linear-gradient(to right, #ffb6c1, #ff69b4);
       }
       .link-box, .proxy-status {
         background: rgba(255, 240, 245, 0.9);
@@ -507,15 +523,30 @@ function 生成订阅页面(订阅路径, hostName) {
         background: linear-gradient(135deg, #1e1e2f, #2a2a3b);
       }
       .card {
-        background: rgba(30, 30, 30, 0.9);
-        color: #ffd1dc;
+        background: linear-gradient(135deg, rgba(30, 30, 30, 0.9), rgba(255, 133, 162, 0.5));
         box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2);
+        animation: gradientFlow 8s ease infinite;
+        background-size: 200% 200%;
       }
       .card::before {
         border: 2px dashed #ff85a2;
+        box-shadow: inset 0 0 10px rgba(255, 133, 162, 0.5);
+      }
+      .card::after {
+        color: #ff85a2;
+        text-shadow: 2px 2px 5px rgba(255, 133, 162, 0.5);
       }
       .card:hover {
         box-shadow: 0 10px 25px rgba(255, 133, 162, 0.4);
+      }
+      .card-title {
+        background: linear-gradient(to right, #ff85a2, #ff1493);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+      .card-title::after {
+        background: linear-gradient(to right, #ffd1dc, #ff85a2);
       }
       .link-box, .proxy-status {
         background: rgba(40, 40, 40, 0.9);
@@ -572,16 +603,38 @@ function 生成订阅页面(订阅路径, hostName) {
       right: 10px;
       bottom: 10px;
       border-radius: 20px;
-      z-index: -1;
+    }
+    .card::after {
+      content: '🎀';
+      position: absolute;
+      top: -15px;
+      right: -15px;
+      font-size: 2.5em;
+      transform: rotate(45deg);
+      z-index: 1;
     }
     .card:hover {
-      transform: scale(1.03);
+      transform: scale(1.03) rotate(1deg);
     }
     .card-title {
       font-size: 1.6em;
-      color: #ff69b4;
       margin-bottom: 15px;
-      text-shadow: 1px 1px 3px rgba(255, 105, 180, 0.2);
+      position: relative;
+    }
+    .card-title::after {
+      content: '';
+      position: absolute;
+      bottom: -5px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 50%;
+      height: 2px;
+      border-radius: 2px;
+    }
+    @keyframes gradientFlow {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
     }
     .switch-container {
       display: flex;
@@ -827,6 +880,8 @@ function 生成订阅页面(订阅路径, hostName) {
     @media (max-width: 600px) {
       .card { padding: 15px; max-width: 90%; }
       .card-title { font-size: 1.3em; }
+      .card::before { top: 8px; left: 8px; right: 8px; bottom: 8px; }
+      .card::after { font-size: 2em; top: -10px; right: -10px; }
       .switch-container { gap: 10px; }
       .toggle-row { gap: 10px; }
       .proxy-option { width: 70px; padding: 8px 0; font-size: 0.9em; }
@@ -1460,3 +1515,4 @@ function 生成备用配置(hostName) {
   return `# Generated at: ${new Date().toISOString()}
 ${配置列表.length ? 配置列表.join("\n") : `${歪啦}${伊埃斯}://${开门锁匙}@${hostName}:443?encryption=none&security=tls&type=ws&host=${hostName}&path=${encodeURIComponent('/?ed=2560')}&sni=${hostName}#默认节点`}`;
 }
+```
