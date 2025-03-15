@@ -1,5 +1,6 @@
 import { connect } from 'cloudflare:sockets';
 
+// 原有变量保持不变
 let 订阅路径 = "config";
 let 开门锁匙 = "03978e2f-2129-4c0c-8f15-22175dd0aba6";
 let 优选TXT路径 = [
@@ -26,8 +27,10 @@ let 歪啦 = 'vl';
 let 伊埃斯 = 'ess';
 let 歪兔 = 'v2';
 let 蕊蒽 = 'rayN';
-let 背景壁纸 = 'https://raw.githubusercontent.com/Alien-Et/ips/refs/heads/main/image/day.jpg'; // 你的静态壁纸链接
+let 白天壁纸 = 'https://raw.githubusercontent.com/Alien-Et/ips/refs/heads/main/image/day.jpg';
+let 黑夜壁纸 = 'https://raw.githubusercontent.com/Alien-Et/ips/refs/heads/main/image/night.jpg';
 
+// 以下是原有的函数定义保持不变直到生成订阅页面
 function 创建HTML响应(内容, 状态码 = 200) {
   return new Response(内容, {
     status: 状态码,
@@ -61,6 +64,7 @@ function 创建JSON响应(数据, 状态码 = 200, 额外头 = {}) {
 }
 
 async function 加载节点和配置(env, hostName) {
+  // 原有实现保持不变
   try {
     const 手动节点缓存 = await env.LOGIN_STATE.get('manual_preferred_ips');
     let 手动节点列表 = [];
@@ -110,6 +114,7 @@ async function 加载节点和配置(env, hostName) {
 }
 
 async function 获取配置(env, 类型, hostName) {
+  // 原有实现保持不变
   const 缓存键 = 类型 === 'clash' ? 'config_clash' : 'config_v2ray';
   const 版本键 = `${缓存键}_version`;
   const 缓存配置 = await env.LOGIN_STATE.get(缓存键);
@@ -127,6 +132,7 @@ async function 获取配置(env, 类型, hostName) {
 }
 
 async function 检查锁定(env, 设备标识) {
+  // 原有实现保持不变
   const 锁定时间戳 = await env.LOGIN_STATE.get(`lock_${设备标识}`);
   const 当前时间 = Date.now();
   const 被锁定 = 锁定时间戳 && 当前时间 < Number(锁定时间戳);
@@ -138,6 +144,7 @@ async function 检查锁定(env, 设备标识) {
 
 export default {
   async fetch(请求, env) {
+    // 原有实现保持不变
     try {
       if (!env.LOGIN_STATE) {
         return 创建HTML响应(生成KV未绑定提示页面());
@@ -264,6 +271,7 @@ export default {
   }
 };
 
+// WebSocket相关函数保持不变
 async function 升级请求(请求) {
   const 创建接口 = new WebSocketPair();
   const [客户端, 服务端] = Object.values(创建接口);
@@ -408,16 +416,37 @@ function 生成订阅页面(订阅路径, hostName) {
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
+    :root {
+      --light-bg: linear-gradient(135deg, #ffe6f0, #fff0f5);
+      --light-text: #ff6f91;
+      --light-title: #ff69b4;
+      --light-shadow: rgba(255, 182, 193, 0.3);
+      --light-card-bg: rgba(0, 0, 0, 0.7);
+      --light-link-bg: rgba(255, 240, 245, 0.9);
+      --light-btn-gradient: linear-gradient(to right, #ffb6c1, #ff69b4);
+      --dark-bg: linear-gradient(135deg, #2b2d42, #1d3557);
+      --dark-text: #e5e5e5;
+      --dark-title: #a8dadc;
+      --dark-shadow: rgba(168, 218, 220, 0.3);
+      --dark-card-bg: rgba(33, 37, 41, 0.9);
+      --dark-link-bg: rgba(43, 45, 66, 0.9);
+      --dark-btn-gradient: linear-gradient(to right, #a8dadc, #457b9d);
+    }
     body {
-      background: linear-gradient(135deg, #ffe6f0, #fff0f5);
+      background: var(--light-bg);
       font-family: 'Comic Sans MS', 'Arial', sans-serif;
-      color: #ff6f91;
+      color: var(--light-text);
       margin: 0;
       padding: 20px;
       min-height: 100vh;
       display: flex;
       justify-content: center;
-      align-items: flex-start; /* 支持滚动 */
+      align-items: flex-start;
+      transition: all 0.3s ease;
+    }
+    body.dark {
+      background: var(--dark-bg);
+      color: var(--dark-text);
     }
     .background-media {
       position: fixed;
@@ -427,6 +456,7 @@ function 生成订阅页面(订阅路径, hostName) {
       height: 100%;
       object-fit: cover;
       z-index: -1;
+      transition: opacity 0.3s ease;
     }
     .container {
       max-width: 900px;
@@ -440,17 +470,20 @@ function 生成订阅页面(订阅路径, hostName) {
       padding-bottom: 20px;
     }
     .card {
-      background: rgba(0, 0, 0, 0.7); /* 改为与图片类似的深色透明背景 */
+      background: var(--light-card-bg);
       border-radius: 25px;
       padding: 25px;
-      box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3);
+      box-shadow: 0 8px 20px var(--light-shadow);
       width: 100%;
       max-width: 500px;
       text-align: center;
-      transition: transform 0.3s ease, box-shadow 0.3s ease;
+      transition: transform 0.3s ease, box-shadow 0.3s ease, background 0.3s ease;
       position: relative;
       overflow: hidden;
-      position: relative; /* 确保内部虚线定位 */
+    }
+    body.dark .card {
+      background: var(--dark-card-bg);
+      box-shadow: 0 8px 20px var(--dark-shadow);
     }
     .card::before {
       content: '';
@@ -459,13 +492,19 @@ function 生成订阅页面(订阅路径, hostName) {
       left: 10px;
       right: 10px;
       bottom: 10px;
-      border: 2px dashed #ffb6c1; /* 虚线框放在内部 */
-      border-radius: 20px; /* 与卡片圆角一致 */
-      z-index: -1; /* 置于内容下方 */
+      border: 2px dashed #ffb6c1;
+      border-radius: 20px;
+      z-index: -1;
+    }
+    body.dark .card::before {
+      border-color: #a8dadc;
     }
     .card:hover {
       transform: scale(1.03);
-      box-shadow: 0 10px 25px rgba(255, 182, 193, 0.5);
+      box-shadow: 0 10px 25px var(--light-shadow);
+    }
+    body.dark .card:hover {
+      box-shadow: 0 10px 25px var(--dark-shadow);
     }
     .card::after {
       content: '✨';
@@ -476,29 +515,47 @@ function 生成订阅页面(订阅路径, hostName) {
       color: #ffb6c1;
       opacity: 0.7;
     }
+    body.dark .card::after {
+      color: #a8dadc;
+    }
     .card-title {
       font-size: 1.6em;
-      color: #ff69b4;
+      color: var(--light-title);
       margin-bottom: 15px;
       text-shadow: 1px 1px 3px rgba(255, 105, 180, 0.2);
     }
+    body.dark .card-title {
+      color: var(--dark-title);
+      text-shadow: 1px 1px 3px rgba(168, 218, 220, 0.2);
+    }
     .link-box {
-      background: rgba(255, 240, 245, 0.9); /* 调整为半透明效果 */
+      background: var(--light-link-bg);
       border-radius: 15px;
       padding: 15px;
       margin: 10px 0;
       font-size: 0.95em;
-      color: #ff85a2;
+      color: var(--light-text);
       word-break: break-all;
       border: 2px dashed #ffb6c1;
     }
+    body.dark .link-box {
+      background: var(--dark-link-bg);
+      color: var(--dark-text);
+      border-color: #a8dadc;
+    }
     .link-box a {
-      color: #ff69b4;
+      color: var(--light-title);
       text-decoration: none;
       transition: color 0.3s ease;
     }
+    body.dark .link-box a {
+      color: var(--dark-title);
+    }
     .link-box a:hover {
       color: #ff1493;
+    }
+    body.dark .link-box a:hover {
+      color: #f1faee;
     }
     .button-group {
       display: flex;
@@ -515,43 +572,67 @@ function 生成订阅页面(订阅路径, hostName) {
       color: white;
       cursor: pointer;
       transition: transform 0.2s ease, box-shadow 0.2s ease;
-      background: linear-gradient(to right, #ffb6c1, #ff69b4); /* 统一粉色渐变 */
+      background: var(--light-btn-gradient);
       text-align: center;
       display: inline-block;
+    }
+    body.dark .cute-button {
+      background: var(--dark-btn-gradient);
     }
     .cute-button:hover {
       transform: scale(1.05);
       box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4);
     }
+    body.dark .cute-button:hover {
+      box-shadow: 0 5px 15px rgba(168, 218, 220, 0.4);
+    }
     .cute-button:active {
       transform: scale(0.95);
     }
     .clash-btn {
-      background: linear-gradient(to right, #ffb6c1, #ff69b4);
+      background: var(--light-btn-gradient);
+    }
+    body.dark .clash-btn {
+      background: var(--dark-btn-gradient);
     }
     .v2ray-btn {
       background: linear-gradient(to right, #ffd1dc, #ff85a2);
     }
+    body.dark .v2ray-btn {
+      background: linear-gradient(to right, #e5e5e5, #a8dadc);
+    }
     .logout-btn {
       background: linear-gradient(to right, #ff9999, #ff6666);
+    }
+    body.dark .logout-btn {
+      background: linear-gradient(to right, #e63946, #a4161a);
     }
     .upload-title {
       font-size: 1.4em;
       color: #ff85a2;
       margin-bottom: 15px;
     }
+    body.dark .upload-title {
+      color: #e5e5e5;
+    }
     .upload-label {
       padding: 10px 20px;
-      background: linear-gradient(to right, #ffb6c1, #ff69b4);
+      background: var(--light-btn-gradient);
       color: white;
       border-radius: 20px;
       cursor: pointer;
       display: inline-block;
       transition: all 0.3s ease;
     }
+    body.dark .upload-label {
+      background: var(--dark-btn-gradient);
+    }
     .upload-label:hover {
       transform: scale(1.05);
       box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4);
+    }
+    body.dark .upload-label:hover {
+      box-shadow: 0 5px 15px rgba(168, 218, 220, 0.4);
     }
     .file-list {
       margin: 15px 0;
@@ -568,7 +649,11 @@ function 生成订阅页面(订阅路径, hostName) {
       border-radius: 10px;
       margin: 5px 0;
       font-size: 0.9em;
-      color: #ff6f91;
+      color: var(--light-text);
+    }
+    body.dark .file-item {
+      background: rgba(43, 45, 66, 0.9);
+      color: var(--dark-text);
     }
     .file-item button {
       background: #ff9999;
@@ -579,8 +664,14 @@ function 生成订阅页面(订阅路径, hostName) {
       cursor: pointer;
       transition: background 0.3s ease;
     }
+    body.dark .file-item button {
+      background: #e63946;
+    }
     .file-item button:hover {
       background: #ff6666;
+    }
+    body.dark .file-item button:hover {
+      background: #a4161a;
     }
     .upload-submit {
       background: linear-gradient(to right, #ffdead, #ff85a2);
@@ -591,9 +682,15 @@ function 生成订阅页面(订阅路径, hostName) {
       cursor: pointer;
       transition: all 0.3s ease;
     }
+    body.dark .upload-submit {
+      background: linear-gradient(to right, #f1faee, #a8dadc);
+    }
     .upload-submit:hover {
       transform: scale(1.05);
       box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4);
+    }
+    body.dark .upload-submit:hover {
+      box-shadow: 0 5px 15px rgba(168, 218, 220, 0.4);
     }
     .progress-container {
       display: none;
@@ -607,17 +704,89 @@ function 生成订阅页面(订阅路径, hostName) {
       overflow: hidden;
       border: 1px solid #ffb6c1;
     }
+    body.dark .progress-bar {
+      background: #2b2d42;
+      border-color: #a8dadc;
+    }
     .progress-fill {
       height: 100%;
       background: linear-gradient(to right, #ff69b4, #ff1493);
       width: 0;
       transition: width 0.3s ease;
     }
+    body.dark .progress-fill {
+      background: linear-gradient(to right, #a8dadc, #457b9d);
+    }
     .progress-text {
       text-align: center;
       font-size: 0.85em;
-      color: #ff6f91;
+      color: var(--light-text);
       margin-top: 5px;
+    }
+    body.dark .progress-text {
+      color: var(--dark-text);
+    }
+    .theme-toggle {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: var(--light-btn-gradient);
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      transition: all 0.3s ease;
+      z-index: 1000;
+    }
+    body.dark .theme-toggle {
+      background: var(--dark-btn-gradient);
+    }
+    .theme-toggle:hover {
+      transform: scale(1.1);
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+    }
+    .theme-icon {
+      font-size: 1.5em;
+      color: white;
+      transition: transform 0.3s ease;
+    }
+    .theme-toggle:hover .theme-icon {
+      transform: rotate(20deg);
+    }
+    .theme-menu {
+      display: none;
+      position: absolute;
+      bottom: 60px;
+      right: 0;
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 15px;
+      padding: 10px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      z-index: 1001;
+    }
+    body.dark .theme-menu {
+      background: rgba(33, 37, 41, 0.95);
+    }
+    .theme-option {
+      padding: 8px 15px;
+      color: var(--light-text);
+      cursor: pointer;
+      border-radius: 10px;
+      transition: background 0.3s ease;
+    }
+    body.dark .theme-option {
+      color: var(--dark-text);
+    }
+    .theme-option:hover {
+      background: rgba(255, 105, 180, 0.2);
+    }
+    body.dark .theme-option:hover {
+      background: rgba(168, 218, 220, 0.2);
     }
     @media (max-width: 600px) {
       .container { padding: 10px; }
@@ -625,21 +794,17 @@ function 生成订阅页面(订阅路径, hostName) {
       .card-title { font-size: 1.3em; }
       .cute-button, .upload-label, .upload-submit { padding: 10px 20px; font-size: 0.9em; }
       .link-box { font-size: 0.85em; }
+      .theme-toggle { width: 40px; height: 40px; }
+      .theme-icon { font-size: 1.2em; }
     }
   </style>
 </head>
 <body>
-  ${背景壁纸.endsWith('.mp4') || 背景壁纸.endsWith('.webm') ? `
-  <video class="background-media" autoplay loop muted playsinline>
-    <source src="${背景壁纸}" type="video/${背景壁纸.endsWith('.mp4') ? 'mp4' : 'webm'}">
-  </video>
-  ` : `
-  <img class="background-media" src="${背景壁纸}" alt="Background">
-  `}
+  <img class="background-media" src="${白天壁纸}" alt="Background" id="backgroundImg">
   <div class="container">
     <div class="card">
       <h1 class="card-title">🌸 欢迎来到小仙女订阅站 🌸</h1>
-      <p style="color: #ff85a2; font-size: 1em;">支持 <span style="color: #ff69b4;">${小猫}${咪}</span> 和 <span style="color: #ff85a2;">${歪兔}${蕊蒽}</span> 哦~</p>
+      <p style="font-size: 1em;">支持 <span style="color: var(--light-title);">${小猫}${咪}</span> 和 <span style="color: #ff85a2;">${歪兔}${蕊蒽}</span> 哦~</p>
     </div>
     <div class="card">
       <h2 class="card-title">🐾 ${小猫}${咪} 订阅</h2>
@@ -680,7 +845,80 @@ function 生成订阅页面(订阅路径, hostName) {
       </div>
     </div>
   </div>
+  <button class="theme-toggle" id="themeToggle">
+    <span class="theme-icon" id="themeIcon">☀️</span>
+  </button>
+  <div class="theme-menu" id="themeMenu">
+    <div class="theme-option" data-mode="light">🌞 白天模式</div>
+    <div class="theme-option" data-mode="dark">🌙 黑夜模式</div>
+    <div class="theme-option" data-mode="system">⚙️ 跟随系统</div>
+  </div>
   <script>
+    const backgroundImg = document.getElementById('backgroundImg');
+    const themeToggle = document.getElementById('themeToggle');
+    const themeIcon = document.getElementById('themeIcon');
+    const themeMenu = document.getElementById('themeMenu');
+    const body = document.body;
+
+    function setTheme(mode) {
+      if (mode === 'dark') {
+        body.classList.add('dark');
+        backgroundImg.src = '${黑夜壁纸}';
+        themeIcon.textContent = '🌙';
+        localStorage.setItem('theme', 'dark');
+      } else if (mode === 'light') {
+        body.classList.remove('dark');
+        backgroundImg.src = '${白天壁纸}';
+        themeIcon.textContent = '☀️';
+        localStorage.setItem('theme', 'light');
+      } else {
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (prefersDark) {
+          body.classList.add('dark');
+          backgroundImg.src = '${黑夜壁纸}';
+          themeIcon.textContent = '🌙';
+        } else {
+          body.classList.remove('dark');
+          backgroundImg.src = '${白天壁纸}';
+          themeIcon.textContent = '☀️';
+        }
+        localStorage.setItem('theme', 'system');
+      }
+    }
+
+    // 初始化主题
+    const savedTheme = localStorage.getItem('theme') || 'system';
+    setTheme(savedTheme);
+
+    // 监听系统主题变化
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+      if (localStorage.getItem('theme') === 'system') {
+        setTheme('system');
+      }
+    });
+
+    // 切换菜单显示
+    themeToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      themeMenu.style.display = themeMenu.style.display === 'block' ? 'none' : 'block';
+    });
+
+    // 点击选项切换主题
+    themeMenu.addEventListener('click', (e) => {
+      const mode = e.target.dataset.mode;
+      if (mode) {
+        setTheme(mode);
+        themeMenu.style.display = 'none';
+      }
+    });
+
+    // 点击页面其他地方关闭菜单
+    document.addEventListener('click', (e) => {
+      if (!themeToggle.contains(e.target) && !themeMenu.contains(e.target)) {
+        themeMenu.style.display = 'none';
+      }
+    });
+
     function 导入小猫咪(订阅路径, hostName) {
       window.location.href = '${小猫}${咪}://install-config?url=https://' + hostName + '/${订阅路径}/${小猫}${咪}';
     }
@@ -776,10 +1014,22 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
+    :root {
+      --light-bg: linear-gradient(135deg, #ffe6f0, #fff0f5);
+      --light-text: #ff6f91;
+      --light-title: #ff69b4;
+      --light-shadow: rgba(255, 182, 193, 0.3);
+      --light-btn-gradient: linear-gradient(to right, #ffb6c1, #ff69b4);
+      --dark-bg: linear-gradient(135deg, #2b2d42, #1d3557);
+      --dark-text: #e5e5e5;
+      --dark-title: #a8dadc;
+      --dark-shadow: rgba(168, 218, 220, 0.3);
+      --dark-btn-gradient: linear-gradient(to right, #a8dadc, #457b9d);
+    }
     body {
-      background: linear-gradient(135deg, #ffe6f0, #fff0f5);
+      background: var(--light-bg);
       font-family: 'Comic Sans MS', 'Arial', sans-serif;
-      color: #ff6f91;
+      color: var(--light-text);
       margin: 0;
       height: 100vh;
       display: flex;
@@ -787,6 +1037,11 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
       align-items: center;
       position: relative;
       overflow: hidden;
+      transition: all 0.3s ease;
+    }
+    body.dark {
+      background: var(--dark-bg);
+      color: var(--dark-text);
     }
     .background-media {
       position: fixed;
@@ -796,6 +1051,7 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
       height: 100%;
       object-fit: cover;
       z-index: -1;
+      transition: opacity 0.3s ease;
     }
     .content {
       background: rgba(255, 255, 255, 0.85);
@@ -803,14 +1059,23 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
       border-radius: 25px;
       max-width: 400px;
       width: 90%;
-      box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3);
+      box-shadow: 0 8px 20px var(--light-shadow);
       text-align: center;
+      transition: background 0.3s ease, box-shadow 0.3s ease;
+    }
+    body.dark .content {
+      background: rgba(33, 37, 41, 0.85);
+      box-shadow: 0 8px 20px var(--dark-shadow);
     }
     h1 {
       font-size: 1.8em;
-      color: #ff69b4;
+      color: var(--light-title);
       text-shadow: 1px 1px 3px rgba(255, 105, 180, 0.2);
       margin-bottom: 20px;
+    }
+    body.dark h1 {
+      color: var(--dark-title);
+      text-shadow: 1px 1px 3px rgba(168, 218, 220, 0.2);
     }
     .login-form {
       display: flex;
@@ -826,21 +1091,32 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
       border: 2px solid #ffb6c1;
       background: #fff;
       font-size: 1em;
-      color: #ff6f91;
+      color: var(--light-text);
       width: 100%;
       box-sizing: border-box;
       transition: border-color 0.3s ease;
     }
+    body.dark .login-form input {
+      border-color: #a8dadc;
+      background: #2b2d42;
+      color: var(--dark-text);
+    }
     .login-form input:focus {
-      border-color: #ff69b4;
+      border-color: var(--light-title);
       outline: none;
+    }
+    body.dark .login-form input:focus {
+      border-color: var(--dark-title);
     }
     .login-form input::placeholder {
       color: #ffb6c1;
     }
+    body.dark .login-form input::placeholder {
+      color: #a8dadc;
+    }
     .login-form button {
       padding: 12px;
-      background: linear-gradient(to right, #ffb6c1, #ff69b4);
+      background: var(--light-btn-gradient);
       color: white;
       border: none;
       border-radius: 20px;
@@ -848,15 +1124,24 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
       font-size: 1em;
       transition: transform 0.3s ease, box-shadow 0.3s ease;
     }
+    body.dark .login-form button {
+      background: var(--dark-btn-gradient);
+    }
     .login-form button:hover {
       transform: scale(1.05);
       box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4);
+    }
+    body.dark .login-form button:hover {
+      box-shadow: 0 5px 15px rgba(168, 218, 220, 0.4);
     }
     .error-message {
       color: #ff6666;
       margin-top: 15px;
       font-size: 0.9em;
       animation: shake 0.5s ease-in-out;
+    }
+    body.dark .error-message {
+      color: #e63946;
     }
     @keyframes shake {
       0%, 100% { transform: translateX(0); }
@@ -870,26 +1155,87 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
       font-size: 1.1em;
       animation: pulse 1.5s infinite;
     }
+    body.dark .lock-message {
+      color: #e63946;
+    }
     @keyframes pulse {
       0%, 100% { opacity: 1; }
       50% { opacity: 0.5; }
+    }
+    .theme-toggle {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: var(--light-btn-gradient);
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      transition: all 0.3s ease;
+      z-index: 1000;
+    }
+    body.dark .theme-toggle {
+      background: var(--dark-btn-gradient);
+    }
+    .theme-toggle:hover {
+      transform: scale(1.1);
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+    }
+    .theme-icon {
+      font-size: 1.5em;
+      color: white;
+      transition: transform 0.3s ease;
+    }
+    .theme-toggle:hover .theme-icon {
+      transform: rotate(20deg);
+    }
+    .theme-menu {
+      display: none;
+      position: absolute;
+      bottom: 60px;
+      right: 0;
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 15px;
+      padding: 10px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      z-index: 1001;
+    }
+    body.dark .theme-menu {
+      background: rgba(33, 37, 41, 0.95);
+    }
+    .theme-option {
+      padding: 8px 15px;
+      color: var(--light-text);
+      cursor: pointer;
+      border-radius: 10px;
+      transition: background 0.3s ease;
+    }
+    body.dark .theme-option {
+      color: var(--dark-text);
+    }
+    .theme-option:hover {
+      background: rgba(255, 105, 180, 0.2);
+    }
+    body.dark .theme-option:hover {
+      background: rgba(168, 218, 220, 0.2);
     }
     @media (max-width: 600px) {
       .content { padding: 20px; }
       h1 { font-size: 1.5em; }
       .login-form { max-width: 250px; }
       .login-form input, .login-form button { font-size: 0.9em; padding: 10px; }
+      .theme-toggle { width: 40px; height: 40px; }
+      .theme-icon { font-size: 1.2em; }
     }
   </style>
 </head>
 <body>
-  ${背景壁纸.endsWith('.mp4') || 背景壁纸.endsWith('.webm') ? `
-  <video class="background-media" autoplay loop muted playsinline>
-    <source src="${背景壁纸}" type="video/${背景壁纸.endsWith('.mp4') ? 'mp4' : 'webm'}">
-  </video>
-  ` : `
-  <img class="background-media" src="${背景壁纸}" alt="Background">
-  `}
+  <img class="background-media" src="${白天壁纸}" alt="Background" id="backgroundImg">
   <div class="content">
     <h1>🌷 小仙女登录 🌷</h1>
     ${锁定状态 ? `
@@ -905,7 +1251,75 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
     ${输错密码 && 剩余次数 > 0 ? `<div class="error-message">密码不对哦，还剩 ${剩余次数} 次机会~</div>` : ''}
     `}
   </div>
+  <button class="theme-toggle" id="themeToggle">
+    <span class="theme-icon" id="themeIcon">☀️</span>
+  </button>
+  <div class="theme-menu" id="themeMenu">
+    <div class="theme-option" data-mode="light">🌞 白天模式</div>
+    <div class="theme-option" data-mode="dark">🌙 黑夜模式</div>
+    <div class="theme-option" data-mode="system">⚙️ 跟随系统</div>
+  </div>
   <script>
+    const backgroundImg = document.getElementById('backgroundImg');
+    const themeToggle = document.getElementById('themeToggle');
+    const themeIcon = document.getElementById('themeIcon');
+    const themeMenu = document.getElementById('themeMenu');
+    const body = document.body;
+
+    function setTheme(mode) {
+      if (mode === 'dark') {
+        body.classList.add('dark');
+        backgroundImg.src = '${黑夜壁纸}';
+        themeIcon.textContent = '🌙';
+        localStorage.setItem('theme', 'dark');
+      } else if (mode === 'light') {
+        body.classList.remove('dark');
+        backgroundImg.src = '${白天壁纸}';
+        themeIcon.textContent = '☀️';
+        localStorage.setItem('theme', 'light');
+      } else {
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (prefersDark) {
+          body.classList.add('dark');
+          backgroundImg.src = '${黑夜壁纸}';
+          themeIcon.textContent = '🌙';
+        } else {
+          body.classList.remove('dark');
+          backgroundImg.src = '${白天壁纸}';
+          themeIcon.textContent = '☀️';
+        }
+        localStorage.setItem('theme', 'system');
+      }
+    }
+
+    const savedTheme = localStorage.getItem('theme') || 'system';
+    setTheme(savedTheme);
+
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+      if (localStorage.getItem('theme') === 'system') {
+        setTheme('system');
+      }
+    });
+
+    themeToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      themeMenu.style.display = themeMenu.style.display === 'block' ? 'none' : 'block';
+    });
+
+    themeMenu.addEventListener('click', (e) => {
+      const mode = e.target.dataset.mode;
+      if (mode) {
+        setTheme(mode);
+        themeMenu.style.display = 'none';
+      }
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!themeToggle.contains(e.target) && !themeMenu.contains(e.target)) {
+        themeMenu.style.display = 'none';
+      }
+    });
+
     if (${锁定状态}) {
       const countdownElement = document.getElementById('countdown');
       const storageKey = 'lockEndTime';
@@ -941,10 +1355,20 @@ function 生成KV未绑定提示页面() {
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
+    :root {
+      --light-bg: linear-gradient(135deg, #ffe6f0, #fff0f5);
+      --light-text: #ff6f91;
+      --light-title: #ff69b4;
+      --light-shadow: rgba(255, 182, 193, 0.3);
+      --dark-bg: linear-gradient(135deg, #2b2d42, #1d3557);
+      --dark-text: #e5e5e5;
+      --dark-title: #a8dadc;
+      --dark-shadow: rgba(168, 218, 220, 0.3);
+    }
     body {
-      background: linear-gradient(135deg, #ffe6f0, #fff0f5);
+      background: var(--light-bg);
       font-family: 'Comic Sans MS', 'Arial', sans-serif;
-      color: #ff6f91;
+      color: var(--light-text);
       margin: 0;
       height: 100vh;
       display: flex;
@@ -952,6 +1376,11 @@ function 生成KV未绑定提示页面() {
       align-items: center;
       position: relative;
       overflow: hidden;
+      transition: all 0.3s ease;
+    }
+    body.dark {
+      background: var(--dark-bg);
+      color: var(--dark-text);
     }
     .background-media {
       position: fixed;
@@ -961,6 +1390,7 @@ function 生成KV未绑定提示页面() {
       height: 100%;
       object-fit: cover;
       z-index: -1;
+      transition: opacity 0.3s ease;
     }
     .content {
       background: rgba(255, 255, 255, 0.85);
@@ -968,55 +1398,201 @@ function 生成KV未绑定提示页面() {
       border-radius: 25px;
       max-width: 500px;
       width: 90%;
-      box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3);
+      box-shadow: 0 8px 20px var(--light-shadow);
       text-align: center;
+      transition: background 0.3s ease, box-shadow 0.3s ease;
+    }
+    body.dark .content {
+      background: rgba(33, 37, 41, 0.85);
+      box-shadow: 0 8px 20px var(--dark-shadow);
     }
     h1 {
       font-size: 1.8em;
-      color: #ff69b4;
+      color: var(--light-title);
       text-shadow: 1px 1px 3px rgba(255, 105, 180, 0.2);
       margin-bottom: 20px;
+    }
+    body.dark h1 {
+      color: var(--dark-title);
+      text-shadow: 1px 1px 3px rgba(168, 218, 220, 0.2);
     }
     p {
       font-size: 1.1em;
       line-height: 1.6;
       color: #ff85a2;
     }
+    body.dark p {
+      color: #e5e5e5;
+    }
     .highlight {
       color: #ff1493;
       font-weight: bold;
     }
+    body.dark .highlight {
+      color: #f1faee;
+    }
     .instruction {
       margin-top: 20px;
       font-size: 1em;
-      color: #ff69b4;
+      color: var(--light-title);
+    }
+    body.dark .instruction {
+      color: var(--dark-title);
+    }
+    .theme-toggle {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: linear-gradient(to right, #ffb6c1, #ff69b4);
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      transition: all 0.3s ease;
+      z-index: 1000;
+    }
+    body.dark .theme-toggle {
+      background: linear-gradient(to right, #a8dadc, #457b9d);
+    }
+    .theme-toggle:hover {
+      transform: scale(1.1);
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+    }
+    .theme-icon {
+      font-size: 1.5em;
+      color: white;
+      transition: transform 0.3s ease;
+    }
+    .theme-toggle:hover .theme-icon {
+      transform: rotate(20deg);
+    }
+    .theme-menu {
+      display: none;
+      position: absolute;
+      bottom: 60px;
+      right: 0;
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 15px;
+      padding: 10px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      z-index: 1001;
+    }
+    body.dark .theme-menu {
+      background: rgba(33, 37, 41, 0.95);
+    }
+    .theme-option {
+      padding: 8px 15px;
+      color: var(--light-text);
+      cursor: pointer;
+      border-radius: 10px;
+      transition: background 0.3s ease;
+    }
+    body.dark .theme-option {
+      color: var(--dark-text);
+    }
+    .theme-option:hover {
+      background: rgba(255, 105, 180, 0.2);
+    }
+    body.dark .theme-option:hover {
+      background: rgba(168, 218, 220, 0.2);
     }
     @media (max-width: 600px) {
       .content { padding: 20px; }
       h1 { font-size: 1.5em; }
       p { font-size: 0.95em; }
+      .theme-toggle { width: 40px; height: 40px; }
+      .theme-icon { font-size: 1.2em; }
     }
   </style>
 </head>
 <body>
-  ${背景壁纸.endsWith('.mp4') || 背景壁纸.endsWith('.webm') ? `
-  <video class="background-media" autoplay loop muted playsinline>
-    <source src="${背景壁纸}" type="video/${背景壁纸.endsWith('.mp4') ? 'mp4' : 'webm'}">
-  </video>
-  ` : `
-  <img class="background-media" src="${背景壁纸}" alt="Background">
-  `}
+  <img class="background-media" src="${白天壁纸}" alt="Background" id="backgroundImg">
   <div class="content">
     <h1>💔 哎呀，KV没绑定哦</h1>
     <p>小仙女，你的 <span class="highlight">Cloudflare KV 存储空间</span> 还没绑定呢~<br>快去 <span class="highlight">Cloudflare Workers</span> 设置里绑一个 KV 命名空间（比如 <span class="highlight">LOGIN_STATE</span>），然后重新部署一下吧！</p>
     <div class="instruction">绑定好后，访问 <span class="highlight">/config</span> 就可以进入订阅啦~</div>
   </div>
+  <button class="theme-toggle" id="themeToggle">
+    <span class="theme-icon" id="themeIcon">☀️</span>
+  </button>
+  <div class="theme-menu" id="themeMenu">
+    <div class="theme-option" data-mode="light">🌞 白天模式</div>
+    <div class="theme-option" data-mode="dark">🌙 黑夜模式</div>
+    <div class="theme-option" data-mode="system">⚙️ 跟随系统</div>
+  </div>
+  <script>
+    const backgroundImg = document.getElementById('backgroundImg');
+    const themeToggle = document.getElementById('themeToggle');
+    const themeIcon = document.getElementById('themeIcon');
+    const themeMenu = document.getElementById('themeMenu');
+    const body = document.body;
+
+    function setTheme(mode) {
+      if (mode === 'dark') {
+        body.classList.add('dark');
+        backgroundImg.src = '${黑夜壁纸}';
+        themeIcon.textContent = '🌙';
+        localStorage.setItem('theme', 'dark');
+      } else if (mode === 'light') {
+        body.classList.remove('dark');
+        backgroundImg.src = '${白天壁纸}';
+        themeIcon.textContent = '☀️';
+        localStorage.setItem('theme', 'light');
+      } else {
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (prefersDark) {
+          body.classList.add('dark');
+          backgroundImg.src = '${黑夜壁纸}';
+          themeIcon.textContent = '🌙';
+        } else {
+          body.classList.remove('dark');
+          backgroundImg.src = '${白天壁纸}';
+          themeIcon.textContent = '☀️';
+        }
+        localStorage.setItem('theme', 'system');
+      }
+    }
+
+    const savedTheme = localStorage.getItem('theme') || 'system';
+    setTheme(savedTheme);
+
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+      if (localStorage.getItem('theme') === 'system') {
+        setTheme('system');
+      }
+    });
+
+    themeToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      themeMenu.style.display = themeMenu.style.display === 'block' ? 'none' : 'block';
+    });
+
+    themeMenu.addEventListener('click', (e) => {
+      const mode = e.target.dataset.mode;
+      if (mode) {
+        setTheme(mode);
+        themeMenu.style.display = 'none';
+      }
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!themeToggle.contains(e.target) && !themeMenu.contains(e.target)) {
+        themeMenu.style.display = 'none';
+      }
+    });
+  </script>
 </body>
 </html>
   `;
 }
 
 function 生成猫咪配置(hostName) {
+  // 原有实现保持不变
   const 节点列表 = 优选节点.length ? 优选节点 : [`${hostName}:443`];
   const 郭嘉分组 = {};
 
