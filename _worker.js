@@ -563,10 +563,14 @@ function 生成订阅页面(订阅路径, hostName) {
     }
     .switch-container {
       display: flex;
+      flex-direction: column;
       align-items: center;
-      justify-content: center;
-      gap: 20px;
-      flex-wrap: wrap;
+      gap: 15px;
+    }
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 15px;
     }
     .toggle-switch {
       position: relative;
@@ -719,6 +723,7 @@ function 生成订阅页面(订阅路径, hostName) {
       .card { padding: 15px; max-width: 90%; }
       .card-title { font-size: 1.3em; }
       .switch-container { gap: 10px; }
+      .toggle-row { gap: 10px; }
       .proxy-option { width: 70px; padding: 8px 0; font-size: 0.9em; }
       .proxy-status { font-size: 0.9em; }
     }
@@ -734,11 +739,13 @@ function 生成订阅页面(订阅路径, hostName) {
     <div class="card">
       <h2 class="card-title">🌟 代理设置</h2>
       <div class="switch-container">
-        <label>代理开关</label>
-        <label class="toggle-switch">
-          <input type="checkbox" id="proxyToggle" onchange="toggleProxy()">
-          <span class="slider"></span>
-        </label>
+        <div class="toggle-row">
+          <label>代理开关</label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="proxyToggle" onchange="toggleProxy()">
+            <span class="slider"></span>
+          </label>
+        </div>
         <div class="proxy-capsule" id="proxyCapsule">
           <div class="proxy-option active" data-type="reverse" onclick="switchProxyType('reverse')">反代</div>
           <div class="proxy-option" data-type="socks5" onclick="switchProxyType('socks5')">SOCKS5</div>
