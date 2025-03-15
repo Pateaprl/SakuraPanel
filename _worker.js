@@ -25,7 +25,7 @@ let 符号 = '://';
 let 歪啦 = 'vl';
 let 伊埃斯 = 'ess';
 let 歪兔 = 'v2';
-let 蕊蒽 = 'rayN';
+let 蕊蒽 = 'rayng';
 let 白天背景壁纸 = 'https://raw.githubusercontent.com/Alien-Et/ips/refs/heads/main/image/day.jpg';
 let 暗黑背景壁纸 = 'https://raw.githubusercontent.com/Alien-Et/ips/refs/heads/main/image/night.jpg';
 
