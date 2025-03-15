@@ -170,16 +170,45 @@ export default {
             if (!Token || Token !== 有效Token) return 创建重定向响应('/login');
             return 创建HTML响应(生成订阅页面(订阅路径, hostName));
 
+          case '/register':
+            const 已存账号 = await env.LOGIN_STATE.get('username');
+            const 已存密码 = await env.LOGIN_STATE.get('password_hash');
+            if (已存账号 && 已存密码) {
+              return 创建重定向响应('/login');
+            }
+            return 创建HTML响应(生成注册界面());
+
+          case '/register/submit':
+            formData = await 请求.formData();
+            const 提供的账号 = formData.get('username');
+            const 提供的密码 = formData.get('password');
+            const 确认密码 = formData.get('confirm_password');
+
+            if (!提供的账号 || 提供的账号.length < 4) {
+              return 创建HTML响应(生成注册界面('小仙女说：账号需至少4个字符哦~', 提供的账号));
+            }
+            if (!提供的密码 || 提供的密码.length < 6) {
+              return 创建HTML响应(生成注册界面('小仙女说：密码需至少6个字符哦~', 提供的账号));
+            }
+            if (提供的密码 !== 确认密码) {
+              return 创建HTML响应(生成注册界面('小仙女说：两次密码不一致哦~', 提供的账号));
+            }
+
+            const 加密后的密码 = await 加密密码(提供的密码);
+            await env.LOGIN_STATE.put('username', 提供的账号, { expirationTtl: 0 });
+            await env.LOGIN_STATE.put('password_hash', 加密后的密码, { expirationTtl: 0 });
+            return 创建HTML响应(生成注册成功页面());
+
           case '/login':
             const 锁定状态 = await 检查锁定(env, 设备标识);
             if (锁定状态.被锁定) return 创建HTML响应(生成登录界面(true, 锁定状态.剩余时间));
             
-            const 已存账号 = await env.LOGIN_STATE.get('username');
-            const 已存密码 = await env.LOGIN_STATE.get('password_hash');
+            const 已存账号登录 = await env.LOGIN_STATE.get('username');
+            const 已存密码登录 = await env.LOGIN_STATE.get('password_hash');
             const 失败次数 = Number(await env.LOGIN_STATE.get(`fail_${设备标识}`) || 0);
 
-            if (!已存账号 || !已存密码) {
-              return 创建HTML响应(生成注册界面());
+            if (!已存账号登录 || !已存密码登录) {
+              return 创建重定向响应('/register');
             }
 
             if (请求.headers.get('Cookie')?.split('=')[1] === await env.LOGIN_STATE.get('current_token')) {
@@ -194,42 +223,28 @@ export default {
             formData = await 请求.formData();
             const 提供的账号 = formData.get('username');
             const 提供的密码 = formData.get('password');
-            const 确认密码 = formData.get('confirm_password');
             
             const 已存账号提交 = await env.LOGIN_STATE.get('username');
             const 已存密码提交 = await env.LOGIN_STATE.get('password_hash');
 
             if (!已存账号提交 || !已存密码提交) {
-              if (!提供的账号 || 提供的账号.length < 4) {
-                return 创建HTML响应(生成注册界面('小仙女说：账号需至少4个字符哦~', 提供的账号));
-              }
-              if (!提供的密码 || 提供的密码.length < 6) {
-                return 创建HTML响应(生成注册界面('小仙女说：密码需至少6个字符哦~', 提供的账号));
-              }
-              if (提供的密码 !== 确认密码) {
-                return 创建HTML响应(生成注册界面('小仙女说：两次密码不一致哦~', 提供的账号));
-              }
+              return 创建重定向响应('/register');
+            }
 
-              const 加密后的密码 = await 加密密码(提供的密码);
-              await env.LOGIN_STATE.put('username', 提供的账号, { expirationTtl: 0 });
-              await env.LOGIN_STATE.put('password_hash', 加密后的密码, { expirationTtl: 0 });
-              return 创建HTML响应(生成注册成功页面());
+            const 加密后的提供的密码 = await 加密密码(提供的密码);
+            if (提供的账号 === 已存账号提交 && 加密后的提供的密码 === 已存密码提交) {
+              const 新Token = Math.random().toString(36).substring(2);
+              await env.LOGIN_STATE.put('current_token', 新Token, { expirationTtl: 300 });
+              await env.LOGIN_STATE.put(`fail_${设备标识}`, '0');
+              return 创建重定向响应(`/${订阅路径}`, { 'Set-Cookie': `token=${新Token}; Path=/; HttpOnly; SameSite=Strict` });
             } else {
-              const 加密后的提供的密码 = await 加密密码(提供的密码);
-              if (提供的账号 === 已存账号提交 && 加密后的提供的密码 === 已存密码提交) {
-                const 新Token = Math.random().toString(36).substring(2);
-                await env.LOGIN_STATE.put('current_token', 新Token, { expirationTtl: 300 });
-                await env.LOGIN_STATE.put(`fail_${设备标识}`, '0');
-                return 创建重定向响应(`/${订阅路径}`, { 'Set-Cookie': `token=${新Token}; Path=/; HttpOnly; SameSite=Strict` });
-              } else {
-                let 失败次数 = Number(await env.LOGIN_STATE.get(`fail_${设备标识}`) || 0) + 1;
-                await env.LOGIN_STATE.put(`fail_${设备标识}`, String(失败次数));
-                if (失败次数 >= 最大失败次数) {
-                  await env.LOGIN_STATE.put(`lock_${设备标识}`, String(Date.now() + 锁定时间), { expirationTtl: 300 });
-                  return 创建HTML响应(生成登录界面(true, 锁定时间 / 1000));
-                }
-                return 创建HTML响应(生成登录界面(false, 0, true, 最大失败次数 - 失败次数));
+              let 失败次数 = Number(await env.LOGIN_STATE.get(`fail_${设备标识}`) || 0) + 1;
+              await env.LOGIN_STATE.put(`fail_${设备标识}`, String(失败次数));
+              if (失败次数 >= 最大失败次数) {
+                await env.LOGIN_STATE.put(`lock_${设备标识}`, String(Date.now() + 锁定时间), { expirationTtl: 300 });
+                return 创建HTML响应(生成登录界面(true, 锁定时间 / 1000));
               }
+              return 创建HTML响应(生成登录界面(false, 0, true, 最大失败次数 - 失败次数));
             }
 
           case '/reset-password-form':
@@ -246,7 +261,7 @@ export default {
             const 已存密码重置 = await env.LOGIN_STATE.get('password_hash');
 
             if (!已存账号重置 || !已存密码重置) {
-              return 创建重定向响应('/login');
+              return 创建重定向响应('/register');
             }
 
             const 加密后的旧密码 = await 加密密码(旧密码);
@@ -1137,7 +1152,7 @@ function 生成注册界面(提示消息 = '', 上次账号 = '') {
   <div class="content">
     <h1>🌟 小仙女初次注册 🌟</h1>
     <p style="font-size: 1em; color: #ff85a2;">第一次使用哦，请设置你的账号和密码吧~</p>
-    <form class="login-form" id="registerForm" action="/login/submit" method="POST">
+    <form class="login-form" id="registerForm" action="/register/submit" method="POST">
       <input type="text" id="username" name="username" placeholder="设置账号（至少4个字符）" required value="${上次账号}">
       <input type="password" id="password" name="password" placeholder="设置密码（至少6个字符）" required>
       <input type="password" id="confirm_password" name="confirm_password" placeholder="确认密码" required>
@@ -1184,7 +1199,7 @@ function 生成注册界面(提示消息 = '', 上次账号 = '') {
       submitBtn.textContent = '注册中...';
 
       try {
-        const response = await fetch('/login/submit', {
+        const response = await fetch('/register/submit', {
           method: 'POST',
           body: new FormData(form)
         });
