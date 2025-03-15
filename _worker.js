@@ -420,6 +420,10 @@ function 生成订阅页面(订阅路径, hostName) {
       align-items: flex-start;
       transition: background 0.5s ease;
     }
+    @keyframes cardFadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
     /* 白天模式 */
     @media (prefers-color-scheme: light) {
       body {
@@ -427,6 +431,8 @@ function 生成订阅页面(订阅路径, hostName) {
       }
       .card {
         background: rgba(255, 245, 247, 0.9);
+        border: 2px solid transparent;
+        border-image: linear-gradient(to right, #ff69b4, #ffb6c1) 1;
         box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3);
       }
       .card::before {
@@ -451,13 +457,15 @@ function 生成订阅页面(订阅路径, hostName) {
       .card {
         background: rgba(30, 30, 30, 0.9);
         color: #ffd1dc;
-        box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2);
+        border: 2px solid transparent;
+        border-image: linear-gradient(to right, #ff85a2, #ffd1dc) 1;
+        box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2), inset 0 0 10px rgba(255, 133, 162, 0.3);
       }
       .card::before {
         border: 2px dashed #ff85a2;
       }
       .card:hover {
-        box-shadow: 0 10px 25px rgba(255, 133, 162, 0.4);
+        box-shadow: 0 10px 25px rgba(255, 133, 162, 0.4), inset 0 0 10px rgba(255, 133, 162, 0.5);
       }
       .link-box {
         background: rgba(40, 40, 40, 0.9);
@@ -505,6 +513,7 @@ function 生成订阅页面(订阅路径, hostName) {
       transition: transform 0.3s ease, box-shadow 0.3s ease;
       position: relative;
       overflow: hidden;
+      animation: cardFadeIn 0.5s ease-out;
     }
     .card::before {
       content: '';
@@ -563,7 +572,7 @@ function 生成订阅页面(订阅路径, hostName) {
       font-size: 1em;
       color: white;
       cursor: pointer;
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      transition: transform 0.2s ease, box-shadow 0.3s ease;
       text-align: center;
       display: inline-block;
     }
@@ -840,12 +849,18 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
       overflow: hidden;
       transition: background 0.5s ease;
     }
+    @keyframes cardFadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
     @media (prefers-color-scheme: light) {
       body {
         background: linear-gradient(135deg, #ffe6f0, #fff0f5);
       }
       .content {
         background: rgba(255, 255, 255, 0.85);
+        border: 2px solid transparent;
+        border-image: linear-gradient(to right, #ff69b4, #ffb6c1) 1;
         box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3);
       }
     }
@@ -856,7 +871,9 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
       .content {
         background: rgba(30, 30, 30, 0.9);
         color: #ffd1dc;
-        box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2);
+        border: 2px solid transparent;
+        border-image: linear-gradient(to right, #ff85a2, #ffd1dc) 1;
+        box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2), inset 0 0 10px rgba(255, 133, 162, 0.3);
       }
     }
     .background-media {
@@ -875,6 +892,7 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
       max-width: 400px;
       width: 90%;
       text-align: center;
+      animation: cardFadeIn 0.5s ease-out;
     }
     h1 {
       font-size: 1.8em;
@@ -1029,12 +1047,18 @@ function 生成KV未绑定提示页面() {
       overflow: hidden;
       transition: background 0.5s ease;
     }
+    @keyframes cardFadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
     @media (prefers-color-scheme: light) {
       body {
         background: linear-gradient(135deg, #ffe6f0, #fff0f5);
       }
       .content {
         background: rgba(255, 255, 255, 0.85);
+        border: 2px solid transparent;
+        border-image: linear-gradient(to right, #ff69b4, #ffb6c1) 1;
         box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3);
       }
     }
@@ -1045,7 +1069,9 @@ function 生成KV未绑定提示页面() {
       .content {
         background: rgba(30, 30, 30, 0.9);
         color: #ffd1dc;
-        box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2);
+        border: 2px solid transparent;
+        border-image: linear-gradient(to right, #ff85a2, #ffd1dc) 1;
+        box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2), inset 0 0 10px rgba(255, 133, 162, 0.3);
       }
     }
     .background-media {
@@ -1064,6 +1090,7 @@ function 生成KV未绑定提示页面() {
       max-width: 500px;
       width: 90%;
       text-align: center;
+      animation: cardFadeIn 0.5s ease-out;
     }
     h1 {
       font-size: 1.8em;
