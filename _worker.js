@@ -562,7 +562,7 @@ function 生成订阅页面(订阅路径, hostName) {
       text-align: center;
       transition: transform 0.3s ease, box-shadow 0.3s ease;
       position: relative;
-      overflow: hidden; /* 保持卡片内容不溢出 */
+      overflow: visible; /* 改为 visible 以允许蝴蝶结超出边界 */
     }
     .card::before {
       content: '';
@@ -572,32 +572,28 @@ function 生成订阅页面(订阅路径, hostName) {
       right: 10px;
       bottom: 10px;
       border-radius: 20px;
-      border: 2px dashed; /* 保留虚线框的原始样式 */
-      z-index: 0; /* 虚线框在卡片内容下方 */
-    }
-    /* 添加🎀蝴蝶结效果，放入虚线框右上角内侧 */
-    .card::after {
-      content: '🎀'; /* 使用指定的蝴蝶结表情符号 */
-      position: absolute;
-      top: 15px; /* 虚线框top为10px，蝴蝶结在虚线内5px处 */
-      right: 15px; /* 虚线框right为10px，蝴蝶结在虚线内5px处 */
-      font-size: 40px; /* 增大蝴蝶结大小 */
-      color: #ff69b4; /* 亮色模式下的颜色 */
-      text-shadow: 1px 1px 3px rgba(255, 105, 180, 0.3); /* 添加阴影增强立体感 */
-      z-index: 1; /* 蝴蝶结在虚线框上方但在内容下方 */
-      transform: rotate(15deg); /* 轻微旋转，模拟“别”在卡片上的效果 */
+      z-index: -1;
     }
     .card:hover {
       transform: scale(1.03);
     }
-    .card:hover::after {
-      transform: rotate(15deg) scale(1.1); /* 鼠标悬停时放大蝴蝶结 */
-      transition: transform 0.3s ease;
+    /* 添加蝴蝶结样式 */
+    .card::after {
+      content: '🎀';
+      position: absolute;
+      top: -20px;
+      right: -20px;
+      font-size: 60px; /* 增大蝴蝶结 */
+      color: #ff69b4;
+      transform: rotate(20deg);
+      z-index: 1; /* 确保蝴蝶结在卡片内容之上 */
+      text-shadow: 2px 2px 4px rgba(255, 105, 180, 0.3);
+      pointer-events: none; /* 防止蝴蝶结干扰交互 */
     }
     @media (prefers-color-scheme: dark) {
       .card::after {
-        color: #ff85a2; /* 暗色模式下的颜色 */
-        text-shadow: 1px 1px 3px rgba(255, 133, 162, 0.4);
+        color: #ff85a2;
+        text-shadow: 2px 2px 4px rgba(255, 133, 162, 0.3);
       }
     }
     .card-title {
@@ -605,16 +601,12 @@ function 生成订阅页面(订阅路径, hostName) {
       color: #ff69b4;
       margin-bottom: 15px;
       text-shadow: 1px 1px 3px rgba(255, 105, 180, 0.2);
-      position: relative;
-      z-index: 2; /* 确保标题在蝴蝶结上方 */
     }
     .switch-container {
       display: flex;
       flex-direction: column;
       align-items: center;
       gap: 15px;
-      position: relative;
-      z-index: 2; /* 确保内容在蝴蝶结上方 */
     }
     .toggle-row {
       display: flex;
@@ -713,8 +705,6 @@ function 生成订阅页面(订阅路径, hostName) {
       transition: background 0.3s ease, color 0.3s ease;
       width: 100%;
       box-sizing: border-box;
-      position: relative;
-      z-index: 2; /* 确保内容在蝴蝶结上方 */
     }
     .proxy-status.success {
       background: rgba(212, 237, 218, 0.9);
@@ -730,8 +720,6 @@ function 生成订阅页面(订阅路径, hostName) {
       margin: 10px 0;
       font-size: 0.95em;
       word-break: break-all;
-      position: relative;
-      z-index: 2; /* 确保内容在蝴蝶结上方 */
     }
     .link-box a {
       color: #ff69b4;
@@ -747,8 +735,6 @@ function 生成订阅页面(订阅路径, hostName) {
       gap: 15px;
       flex-wrap: wrap;
       margin-top: 15px;
-      position: relative;
-      z-index: 2; /* 确保按钮在蝴蝶结上方 */
     }
     .cute-button {
       padding: 12px 25px;
@@ -779,8 +765,6 @@ function 生成订阅页面(订阅路径, hostName) {
       font-size: 1.4em;
       color: #ff85a2;
       margin-bottom: 15px;
-      position: relative;
-      z-index: 2; /* 确保标题在蝴蝶结上方 */
     }
     .upload-label {
       padding: 10px 20px;
@@ -800,8 +784,6 @@ function 生成订阅页面(订阅路径, hostName) {
       max-height: 120px;
       overflow-y: auto;
       text-align: left;
-      position: relative;
-      z-index: 2; /* 确保文件列表在蝴蝶结上方 */
     }
     .file-item {
       display: flex;
@@ -832,8 +814,6 @@ function 生成订阅页面(订阅路径, hostName) {
       color: white;
       cursor: pointer;
       transition: all 0.3s ease;
-      position: relative;
-      z-index: 2; /* 确保按钮在蝴蝶结上方 */
     }
     .upload-submit:hover {
       transform: scale(1.05);
@@ -842,8 +822,6 @@ function 生成订阅页面(订阅路径, hostName) {
     .progress-container {
       display: none;
       margin-top: 15px;
-      position: relative;
-      z-index: 2; /* 确保进度条在蝴蝶结上方 */
     }
     .progress-bar {
       width: 100%;
@@ -874,7 +852,7 @@ function 生成订阅页面(订阅路径, hostName) {
       .proxy-status { font-size: 0.9em; padding: 12px; }
       .link-box { font-size: 0.9em; padding: 12px; }
       .cute-button, .upload-label, .upload-submit { padding: 10px 20px; font-size: 0.9em; }
-      .card::after { font-size: 35px; top: 12px; right: 12px; } /* 小屏幕调整蝴蝶结大小和位置 */
+      .card::after { font-size: 50px; top: -15px; right: -15px; }
     }
   </style>
 </head>
