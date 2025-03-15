@@ -607,29 +607,35 @@ function 生成订阅页面(订阅路径, hostName) {
     input:checked + .slider:before {
       transform: translateX(26px);
     }
-    .proxy-toggle-btn {
-      padding: 10px 20px;
+    .proxy-capsule {
+      display: flex;
+      border-radius: 20px;
+      overflow: hidden;
+      background: #ffe6f0;
+      box-shadow: 0 4px 10px rgba(255, 182, 193, 0.2);
+    }
+    .proxy-option {
+      width: 80px;
+      padding: 10px 0;
+      text-align: center;
+      cursor: pointer;
+      color: #ff6f91;
+      transition: all 0.3s ease;
+      position: relative;
+      font-size: 1em;
+    }
+    .proxy-option.active {
       background: linear-gradient(to right, #ffb6c1, #ff69b4);
       color: white;
-      border: none;
-      border-radius: 20px;
-      cursor: pointer;
-      font-size: 1em;
-      transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.3s ease;
-      position: relative;
-      overflow: hidden;
+      box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.1);
     }
-    .proxy-toggle-btn:hover {
-      transform: scale(1.05);
-      box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4);
+    .proxy-option:not(.active):hover {
+      background: #ffd1dc;
     }
-    .proxy-toggle-btn:active {
-      transform: scale(0.95);
-    }
-    .proxy-toggle-btn.socks5 {
+    .proxy-option[data-type="socks5"].active {
       background: linear-gradient(to right, #ffd1dc, #ff85a2);
     }
-    .proxy-toggle-btn::before {
+    .proxy-option::before {
       content: '';
       position: absolute;
       top: -50%;
@@ -641,7 +647,7 @@ function 生成订阅页面(订阅路径, hostName) {
       transition: all 0.5s ease;
       pointer-events: none;
     }
-    .proxy-toggle-btn:hover::before {
+    .proxy-option:hover::before {
       top: 100%;
       left: 100%;
     }
@@ -713,7 +719,7 @@ function 生成订阅页面(订阅路径, hostName) {
       .card { padding: 15px; max-width: 90%; }
       .card-title { font-size: 1.3em; }
       .switch-container { gap: 10px; }
-      .proxy-toggle-btn { padding: 8px 15px; }
+      .proxy-option { width: 70px; padding: 8px 0; font-size: 0.9em; }
       .proxy-status { font-size: 0.9em; }
     }
   </style>
@@ -733,7 +739,10 @@ function 生成订阅页面(订阅路径, hostName) {
           <input type="checkbox" id="proxyToggle" onchange="toggleProxy()">
           <span class="slider"></span>
         </label>
-        <button class="proxy-toggle-btn" id="proxyTypeBtn" onclick="switchProxyType()">反代</button>
+        <div class="proxy-capsule" id="proxyCapsule">
+          <div class="proxy-option active" data-type="reverse" onclick="switchProxyType('reverse')">反代</div>
+          <div class="proxy-option" data-type="socks5" onclick="switchProxyType('socks5')">SOCKS5</div>
+        </div>
       </div>
       <div class="proxy-status" id="proxyStatus">直连</div>
     </div>
@@ -776,30 +785,31 @@ function 生成订阅页面(订阅路径, hostName) {
     let proxyEnabled = localStorage.getItem('proxyEnabled') === 'true';
     let proxyType = localStorage.getItem('proxyType') || 'reverse';
     document.getElementById('proxyToggle').checked = proxyEnabled;
-    updateProxyTypeUI();
+    updateProxyCapsuleUI();
     updateProxyStatus();
 
     function toggleProxy() {
       proxyEnabled = document.getElementById('proxyToggle').checked;
       localStorage.setItem('proxyEnabled', proxyEnabled);
-      updateProxyTypeUI();
+      updateProxyCapsuleUI();
       saveProxyState();
       updateProxyStatus();
     }
 
-    function switchProxyType() {
-      proxyType = proxyType === 'reverse' ? 'socks5' : 'reverse';
+    function switchProxyType(type) {
+      proxyType = type;
       localStorage.setItem('proxyType', proxyType);
-      updateProxyTypeUI();
+      updateProxyCapsuleUI();
       saveProxyState();
       updateProxyStatus();
     }
 
-    function updateProxyTypeUI() {
-      const btn = document.getElementById('proxyTypeBtn');
-      btn.textContent = proxyType === 'reverse' ? '反代' : 'SOCKS5';
-      btn.className = 'proxy-toggle-btn' + (proxyType === 'socks5' ? ' socks5' : '');
-      btn.style.display = proxyEnabled ? 'inline-block' : 'none';
+    function updateProxyCapsuleUI() {
+      const options = document.querySelectorAll('.proxy-option');
+      options.forEach(opt => {
+        opt.classList.toggle('active', opt.dataset.type === proxyType);
+      });
+      document.getElementById('proxyCapsule').style.display = proxyEnabled ? 'flex' : 'none';
     }
 
     function updateProxyStatus() {
