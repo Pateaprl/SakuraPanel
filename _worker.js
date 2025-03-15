@@ -1,3 +1,4 @@
+```javascript
 import { connect } from 'cloudflare:sockets';
 
 let 订阅路径 = "config";
@@ -200,7 +201,6 @@ export default {
             const 已存密码提交 = await env.LOGIN_STATE.get('password_hash');
 
             if (!已存账号提交 || !已存密码提交) {
-              // 注册逻辑
               if (!提供的账号 || 提供的账号.length < 4) {
                 return 创建HTML响应(生成注册界面('小仙女说：账号需至少4个字符哦~', 提供的账号));
               }
@@ -216,7 +216,6 @@ export default {
               await env.LOGIN_STATE.put('password_hash', 加密后的密码, { expirationTtl: 0 });
               return 创建HTML响应(生成注册成功页面());
             } else {
-              // 登录逻辑
               const 加密后的提供的密码 = await 加密密码(提供的密码);
               if (提供的账号 === 已存账号提交 && 加密后的提供的密码 === 已存密码提交) {
                 const 新Token = Math.random().toString(36).substring(2);
@@ -233,6 +232,9 @@ export default {
                 return 创建HTML响应(生成登录界面(false, 0, true, 最大失败次数 - 失败次数));
               }
             }
+
+          case '/reset-password-form':
+            return 创建HTML响应(生成重置密码页面());
 
           case '/reset-password':
             formData = await 请求.formData();
@@ -975,7 +977,7 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
       <input type="text" id="username" name="username" placeholder="账号" required>
       <input type="password" id="password" name="password" placeholder="密码" required>
       <button type="submit">登录</button>
-      <button type="button" class="reset-btn" onclick="显示重置密码()">重置密码</button>
+      <button type="button" class="reset-btn" onclick="window.location.href='/reset-password-form'">重置密码</button>
     </form>
     ${输错密码 && 剩余次数 > 0 ? `<div class="error-message">小仙女说：密码不对哦，还剩 ${剩余次数} 次机会~</div>` : ''}
     `}
@@ -1012,12 +1014,6 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
 
       let timer = setInterval(updateCountdown, 1000);
       updateCountdown();
-      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') updateCountdown(); });
-      window.addEventListener('load', () => { if (localStorage.getItem(storageKey)) updateCountdown(); });
-    }
-
-    function 显示重置密码() {
-      window.location.href = '/reset-password-form';
     }
   </script>
 </body>
@@ -1109,7 +1105,11 @@ function 生成注册界面(提示消息 = '', 上次账号 = '') {
       font-size: 1em;
       transition: transform 0.3s ease, box-shadow 0.3s ease;
     }
-    .login-form button:hover {
+    .login-form button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    .login-form button:hover:not(:disabled) {
       transform: scale(1.05);
       box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4);
     }
@@ -1138,11 +1138,11 @@ function 生成注册界面(提示消息 = '', 上次账号 = '') {
   <div class="content">
     <h1>🌟 小仙女初次注册 🌟</h1>
     <p style="font-size: 1em; color: #ff85a2;">第一次使用哦，请设置你的账号和密码吧~</p>
-    <form class="login-form" action="/login/submit" method="POST">
+    <form class="login-form" id="registerForm" action="/login/submit" method="POST">
       <input type="text" id="username" name="username" placeholder="设置账号（至少4个字符）" required value="${上次账号}">
       <input type="password" id="password" name="password" placeholder="设置密码（至少6个字符）" required>
       <input type="password" id="confirm_password" name="confirm_password" placeholder="确认密码" required>
-      <button type="submit">注册</button>
+      <button type="submit" id="submitBtn">注册</button>
     </form>
     ${提示消息 ? `<div class="error-message">${提示消息}</div>` : ''}
   </div>
@@ -1158,6 +1158,52 @@ function 生成注册界面(提示消息 = '', 上次账号 = '') {
 
     updateBackground();
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
+
+    const form = document.getElementById('registerForm');
+    const submitBtn = document.getElementById('submitBtn');
+    const password = document.getElementById('password');
+    const confirmPassword = document.getElementById('confirm_password');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('username').value;
+      
+      if (username.length < 4) {
+        alert('小仙女说：账号需至少4个字符哦~');
+        return;
+      }
+      if (password.value.length < 6) {
+        alert('小仙女说：密码需至少6个字符哦~');
+        return;
+      }
+      if (password.value !== confirmPassword.value) {
+        alert('小仙女说：两次密码不一致哦~');
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = '注册中...';
+
+      try {
+        const response = await fetch('/login/submit', {
+          method: 'POST',
+          body: new FormData(form)
+        });
+        
+        if (response.ok) {
+          const html = await response.text();
+          document.open();
+          document.write(html);
+          document.close();
+        } else {
+          throw new Error('注册失败');
+        }
+      } catch (error) {
+        alert('小仙女说：注册出错啦，请稍后再试~');
+        submitBtn.disabled = false;
+        submitBtn.textContent = '注册';
+      }
+    });
   </script>
 </body>
 </html>
@@ -1170,6 +1216,7 @@ function 生成注册成功页面() {
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="refresh" content="2;url=/login">
   <style>
     body {
       font-family: 'Comic Sans MS', 'Arial', sans-serif;
@@ -1245,8 +1292,8 @@ function 生成注册成功页面() {
   <img id="backgroundImage" class="background-media" alt="Background">
   <div class="content">
     <h1>🎉 注册成功啦！</h1>
-    <p>小仙女说：账号设置好啦，快去登录吧~</p>
-    <button class="cute-button" onclick="window.location.href='/login'">去登录</button>
+    <p>小仙女说：账号设置好啦，2秒后跳转到登录页面~</p>
+    <button class="cute-button" onclick="window.location.href='/login'">立即登录</button>
   </div>
   <script>
     const lightBg = '${白天背景壁纸}';
@@ -1260,6 +1307,10 @@ function 生成注册成功页面() {
 
     updateBackground();
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
+
+    setTimeout(() => {
+      window.location.href = '/login';
+    }, 2000);
   </script>
 </body>
 </html>
