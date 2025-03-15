@@ -15,8 +15,6 @@ let 启用全局SOCKS5 = false;
 let SOCKS5账号 = '';
 let 节点名称 = '小仙女';
 let 伪装域名 = 'lkssite.vip';
-let 账号 = 'andypan';
-let 密码 = 'Yyds@2023';
 let 最大失败次数 = 5;
 let 锁定时间 = 5 * 60 * 1000;
 let 小猫 = 'cla';
@@ -25,7 +23,7 @@ let 符号 = '://';
 let 歪啦 = 'vl';
 let 伊埃斯 = 'ess';
 let 歪兔 = 'v2';
-let 蕊蒽 = 'rayng';
+let 蕊蒽 = 'rayN';
 let 白天背景壁纸 = 'https://raw.githubusercontent.com/Alien-Et/ips/refs/heads/main/image/day.jpg';
 let 暗黑背景壁纸 = 'https://raw.githubusercontent.com/Alien-Et/ips/refs/heads/main/image/night.jpg';
 
@@ -59,6 +57,14 @@ function 创建JSON响应(数据, 状态码 = 200, 额外头 = {}) {
       ...额外头
     }
   });
+}
+
+// 密码加密函数（SHA-256）
+async function 加密密码(密码) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(密码);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 async function 加载节点和配置(env, hostName) {
@@ -158,50 +164,94 @@ export default {
             await env.LOGIN_STATE.put(`fail_${设备标识}`, '0');
             await env.LOGIN_STATE.delete(`lock_${设备标识}`);
             return new Response(null, { status: 200 });
+
           case `/${订阅路径}`:
             const Token = 请求.headers.get('Cookie')?.split('=')[1];
             const 有效Token = await env.LOGIN_STATE.get('current_token');
             if (!Token || Token !== 有效Token) return 创建重定向响应('/login');
             return 创建HTML响应(生成订阅页面(订阅路径, hostName));
+
           case '/login':
             const 锁定状态 = await 检查锁定(env, 设备标识);
             if (锁定状态.被锁定) return 创建HTML响应(生成登录界面(true, 锁定状态.剩余时间));
+            
+            const 已存账号 = await env.LOGIN_STATE.get('username');
+            const 已存密码 = await env.LOGIN_STATE.get('password_hash');
+            const 失败次数 = Number(await env.LOGIN_STATE.get(`fail_${设备标识}`) || 0);
+
+            if (!已存账号 || !已存密码) {
+              return 创建HTML响应(生成注册界面(失败次数 > 0, 最大失败次数 - 失败次数));
+            }
+
             if (请求.headers.get('Cookie')?.split('=')[1] === await env.LOGIN_STATE.get('current_token')) {
               return 创建重定向响应(`/${订阅路径}`);
             }
-            const 失败次数 = Number(await env.LOGIN_STATE.get(`fail_${设备标识}`) || 0);
             return 创建HTML响应(生成登录界面(false, 0, 失败次数 > 0, 最大失败次数 - 失败次数));
+
           case '/login/submit':
             const 锁定 = await 检查锁定(env, 设备标识);
             if (锁定.被锁定) return 创建重定向响应('/login');
+            
             formData = await 请求.formData();
             const 提供的账号 = formData.get('username');
             const 提供的密码 = formData.get('password');
-            if (提供的账号 === 账号 && 提供的密码 === 密码) {
+            const 确认密码 = formData.get('confirm_password'); // 仅在注册时使用
+            
+            const 已存账号提交 = await env.LOGIN_STATE.get('username');
+            const 已存密码提交 = await env.LOGIN_STATE.get('password_hash');
+
+            if (!已存账号提交 || !已存密码提交) {
+              // 注册逻辑
+              if (!提供的账号 || 提供的账号.length < 4) {
+                return 创建HTML响应(生成注册界面(true, 最大失败次数, '账号需至少4个字符哦~'));
+              }
+              if (!提供的密码 || 提供的密码.length < 6) {
+                return 创建HTML响应(生成注册界面(true, 最大失败次数, '密码需至少6个字符哦~'));
+              }
+              if (提供的密码 !== 确认密码) {
+                return 创建HTML响应(生成注册界面(true, 最大失败次数, '两次密码不一致哦~'));
+              }
+
+              const 加密后的密码 = await 加密密码(提供的密码);
+              await env.LOGIN_STATE.put('username', 提供的账号, { expirationTtl: 0 });
+              await env.LOGIN_STATE.put('password_hash', 加密后的密码, { expirationTtl: 0 });
               const 新Token = Math.random().toString(36).substring(2);
               await env.LOGIN_STATE.put('current_token', 新Token, { expirationTtl: 300 });
               await env.LOGIN_STATE.put(`fail_${设备标识}`, '0');
               return 创建重定向响应(`/${订阅路径}`, { 'Set-Cookie': `token=${新Token}; Path=/; HttpOnly; SameSite=Strict` });
             } else {
-              let 失败次数 = Number(await env.LOGIN_STATE.get(`fail_${设备标识}`) || 0) + 1;
-              await env.LOGIN_STATE.put(`fail_${设备标识}`, String(失败次数));
-              if (失败次数 >= 最大失败次数) {
-                await env.LOGIN_STATE.put(`lock_${设备标识}`, String(Date.now() + 锁定时间), { expirationTtl: 300 });
-                return 创建HTML响应(生成登录界面(true, 锁定时间 / 1000));
+              // 登录逻辑
+              const 加密后的提供的密码 = await 加密密码(提供的密码);
+              if (提供的账号 === 已存账号提交 && 加密后的提供的密码 === 已存密码提交) {
+                const 新Token = Math.random().toString(36).substring(2);
+                await env.LOGIN_STATE.put('current_token', 新Token, { expirationTtl: 300 });
+                await env.LOGIN_STATE.put(`fail_${设备标识}`, '0');
+                return 创建重定向响应(`/${订阅路径}`, { 'Set-Cookie': `token=${新Token}; Path=/; HttpOnly; SameSite=Strict` });
+              } else {
+                let 失败次数 = Number(await env.LOGIN_STATE.get(`fail_${设备标识}`) || 0) + 1;
+                await env.LOGIN_STATE.put(`fail_${设备标识}`, String(失败次数));
+                if (失败次数 >= 最大失败次数) {
+                  await env.LOGIN_STATE.put(`lock_${设备标识}`, String(Date.now() + 锁定时间), { expirationTtl: 300 });
+                  return 创建HTML响应(生成登录界面(true, 锁定时间 / 1000));
+                }
+                return 创建HTML响应(生成登录界面(false, 0, true, 最大失败次数 - 失败次数));
               }
-              return 创建HTML响应(生成登录界面(false, 0, true, 最大失败次数 - 失败次数));
             }
+
           case `/${订阅路径}/logout`:
             await env.LOGIN_STATE.delete('current_token');
             return 创建重定向响应('/login', { 'Set-Cookie': 'token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Strict' });
+
           case `/${订阅路径}/${小猫}${咪}`:
             await 加载节点和配置(env, hostName);
             const clashConfig = await 获取配置(env, 'clash', hostName);
             return new Response(clashConfig, { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8" } });
+
           case `/${订阅路径}/${歪兔}${蕊蒽}`:
             await 加载节点和配置(env, hostName);
             const v2rayConfig = await 获取配置(env, 'v2ray', hostName);
             return new Response(v2rayConfig, { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8" } });
+
           case `/${订阅路径}/upload`:
             const uploadToken = 请求.headers.get('Cookie')?.split('=')[1];
             const 有效UploadToken = await env.LOGIN_STATE.get('current_token');
@@ -246,6 +296,7 @@ export default {
               console.error(`上传处理失败: ${错误.message}`);
               return 创建JSON响应({ error: `上传处理失败: ${错误.message}` }, 500);
             }
+
           default:
             url.hostname = 伪装域名;
             url.protocol = 'https:';
@@ -1004,6 +1055,158 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
       document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') updateCountdown(); });
       window.addEventListener('load', () => { if (localStorage.getItem(storageKey)) updateCountdown(); });
     }
+  </script>
+</body>
+</html>
+  `;
+}
+
+function 生成注册界面(有错误 = false, 剩余次数 = 0, 错误消息 = '') {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: 'Comic Sans MS', 'Arial', sans-serif;
+      color: #ff6f91;
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+      overflow: hidden;
+      transition: background 0.5s ease;
+    }
+    @media (prefers-color-scheme: light) {
+      body {
+        background: linear-gradient(135deg, #ffe6f0, #fff0f5);
+      }
+      .content {
+        background: rgba(255, 255, 255, 0.85);
+        box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3);
+      }
+    }
+    @media (prefers-color-scheme: dark) {
+      body {
+        background: linear-gradient(135deg, #1e1e2f, #2a2a3b);
+      }
+      .content {
+        background: rgba(30, 30, 30, 0.9);
+        color: #ffd1dc;
+        box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2);
+      }
+    }
+    .background-media {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: -1;
+      transition: opacity 0.5s ease;
+    }
+    .content {
+      padding: 30px;
+      border-radius: 25px;
+      max-width: 400px;
+      width: 90%;
+      text-align: center;
+    }
+    h1 {
+      font-size: 1.8em;
+      color: #ff69b4;
+      text-shadow: 1px 1px 3px rgba(255, 105, 180, 0.2);
+      margin-bottom: 20px;
+    }
+    .login-form {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      width: 100%;
+      max-width: 300px;
+      margin: 0 auto;
+    }
+    .login-form input {
+      padding: 12px;
+      border-radius: 15px;
+      border: 2px solid #ffb6c1;
+      background: #fff;
+      font-size: 1em;
+      color: #ff6f91;
+      width: 100%;
+      box-sizing: border-box;
+      transition: border-color 0.3s ease;
+    }
+    .login-form input:focus {
+      border-color: #ff69b4;
+      outline: none;
+    }
+    .login-form input::placeholder {
+      color: #ffb6c1;
+    }
+    .login-form button {
+      padding: 12px;
+      background: linear-gradient(to right, #ffb6c1, #ff69b4);
+      color: white;
+      border: none;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 1em;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    .login-form button:hover {
+      transform: scale(1.05);
+      box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4);
+    }
+    .error-message {
+      color: #ff6666;
+      margin-top: 15px;
+      font-size: 0.9em;
+      animation: shake 0.5s ease-in-out;
+    }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-5px); }
+      50% { transform: translateX(5px); }
+      75% { transform: translateX(-5px); }
+    }
+    @media (max-width: 600px) {
+      .content { padding: 20px; }
+      h1 { font-size: 1.5em; }
+      .login-form { max-width: 250px; }
+      .login-form input, .login-form button { font-size: 0.9em; padding: 10px; }
+    }
+  </style>
+</head>
+<body>
+  <img id="backgroundImage" class="background-media" alt="Background">
+  <div class="content">
+    <h1>🌟 小仙女初次注册 🌟</h1>
+    <p style="font-size: 1em; color: #ff85a2;">第一次使用哦，请设置你的账号和密码吧~</p>
+    <form class="login-form" action="/login/submit" method="POST">
+      <input type="text" id="username" name="username" placeholder="设置账号（至少4个字符）" required>
+      <input type="password" id="password" name="password" placeholder="设置密码（至少6个字符）" required>
+      <input type="password" id="confirm_password" name="confirm_password" placeholder="确认密码" required>
+      <button type="submit">注册</button>
+    </form>
+    ${有错误 && 错误消息 ? `<div class="error-message">${错误消息}</div>` : ''}
+  </div>
+  <script>
+    const lightBg = '${白天背景壁纸}';
+    const darkBg = '${暗黑背景壁纸}';
+    const bgImage = document.getElementById('backgroundImage');
+
+    function updateBackground() {
+      const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      bgImage.src = isDarkMode ? darkBg : lightBg;
+    }
+
+    updateBackground();
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
   </script>
 </body>
 </html>
