@@ -562,7 +562,7 @@ function 生成订阅页面(订阅路径, hostName) {
       text-align: center;
       transition: transform 0.3s ease, box-shadow 0.3s ease;
       position: relative;
-      overflow: hidden; /* 恢复为hidden，因为蝴蝶结现在在虚线内 */
+      overflow: hidden; /* 保持卡片内容不溢出 */
     }
     .card::before {
       content: '';
@@ -572,18 +572,19 @@ function 生成订阅页面(订阅路径, hostName) {
       right: 10px;
       bottom: 10px;
       border-radius: 20px;
+      border: 2px dashed; /* 保留虚线框的原始样式 */
       z-index: 0; /* 虚线框在卡片内容下方 */
     }
     /* 添加🎀蝴蝶结效果，放入虚线框右上角内侧 */
     .card::after {
       content: '🎀'; /* 使用指定的蝴蝶结表情符号 */
       position: absolute;
-      top: 5px; /* 调整到虚线框内，距离顶部10px虚线内5px */
-      right: 5px; /* 调整到虚线框内，距离右侧10px虚线内5px */
+      top: 15px; /* 虚线框top为10px，蝴蝶结在虚线内5px处 */
+      right: 15px; /* 虚线框right为10px，蝴蝶结在虚线内5px处 */
       font-size: 40px; /* 增大蝴蝶结大小 */
       color: #ff69b4; /* 亮色模式下的颜色 */
       text-shadow: 1px 1px 3px rgba(255, 105, 180, 0.3); /* 添加阴影增强立体感 */
-      z-index: 1; /* 确保蝴蝶结在虚线框和内容上方 */
+      z-index: 1; /* 蝴蝶结在虚线框上方但在内容下方 */
       transform: rotate(15deg); /* 轻微旋转，模拟“别”在卡片上的效果 */
     }
     .card:hover {
@@ -873,7 +874,7 @@ function 生成订阅页面(订阅路径, hostName) {
       .proxy-status { font-size: 0.9em; padding: 12px; }
       .link-box { font-size: 0.9em; padding: 12px; }
       .cute-button, .upload-label, .upload-submit { padding: 10px 20px; font-size: 0.9em; }
-      .card::after { font-size: 35px; } /* 小屏幕时稍微减小蝴蝶结 */
+      .card::after { font-size: 35px; top: 12px; right: 12px; } /* 小屏幕调整蝴蝶结大小和位置 */
     }
   </style>
 </head>
