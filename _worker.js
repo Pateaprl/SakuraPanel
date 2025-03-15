@@ -1512,4 +1512,3 @@ function 生成备用配置(hostName) {
   return `# Generated at: ${new Date().toISOString()}
 ${配置列表.length ? 配置列表.join("\n") : `${歪啦}${伊埃斯}://${开门锁匙}@${hostName}:443?encryption=none&security=tls&type=ws&host=${hostName}&path=${encodeURIComponent('/?ed=2560')}&sni=${hostName}#默认节点`}`;
 }
-```
