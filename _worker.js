@@ -10,7 +10,7 @@ let 优选TXT路径 = [
 let 优选节点 = [];
 let 反代地址 = 'ts.hpc.tw';
 let SOCKS5账号 = '';
-let 节点名称 = '小仙女';
+let 节点名称 = '🌸樱花';
 let 伪装域名 = 'lkssite.vip';
 let 账号 = 'andypan';
 let 密码 = 'Yyds@2023';
@@ -860,7 +860,7 @@ function 生成订阅页面(订阅路径, hostName) {
   <img id="backgroundImage" class="background-media" alt="Background">
   <div class="container">
     <div class="card">
-      <h1 class="card-title">🌸 欢迎来到小仙女订阅站 🌸</h1>
+      <h1 class="card-title">🌸 欢迎来到樱花订阅站 🌸</h1>
       <p style="font-size: 1em;">支持 <span style="color: #ff69b4;">${小猫}${咪}</span> 和 <span style="color: #ff85a2;">${歪兔}${蕊蒽}</span> 哦~</p>
     </div>
     <div class="card">
@@ -1202,7 +1202,7 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
 <body>
   <img id="backgroundImage" class="background-media" alt="Background">
   <div class="content">
-    <h1>🌷 小仙女登录 🌷</h1>
+    <h1>🌸樱花面板🌸</h1>
     ${锁定状态 ? `
     <div class="lock-message">
       密码输错太多次啦，请等待 <span id="countdown" aria-live="polite">${剩余时间}</span> 秒哦~
