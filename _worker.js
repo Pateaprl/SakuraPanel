@@ -1,4 +1,3 @@
-```javascript
 import { connect } from 'cloudflare:sockets';
 
 let 订阅路径 = "config";
