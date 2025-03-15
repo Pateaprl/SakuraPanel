@@ -142,6 +142,71 @@ async function 检查锁定(env, 设备标识) {
   };
 }
 
+// 验证注册输入的辅助函数
+async function 验证注册输入(账号, 密码, 确认密码) {
+  const 错误 = [];
+  const 最小账号长度 = 4;
+  const 最小密码长度 = 6;
+
+  账号 = 账号.trim();
+  密码 = 密码.trim();
+  确认密码 = 确认密码.trim();
+
+  if (!账号 || 账号.length < 最小账号长度) {
+    错误.push(`小仙女说：账号需至少${最小账号长度}个字符哦~`);
+  }
+  if (!密码 || 密码.length < 最小密码长度) {
+    错误.push(`小仙女说：密码需至少${最小密码长度}个字符哦~`);
+  }
+  if (密码 !== 确认密码) {
+    错误.push('小仙女说：两次密码不一致哦~');
+  }
+
+  return { 有效: 错误.length === 0, 错误: 错误.join('<br>'), 账号 };
+}
+
+// 处理注册请求
+async function 处理注册请求(请求, env) {
+  const 已存账号 = await env.LOGIN_STATE.get('username');
+  const 已存密码 = await env.LOGIN_STATE.get('password_hash');
+
+  if (已存账号 && 已存密码) {
+    return 创建重定向响应('/login');
+  }
+
+  return 创建HTML响应(生成注册界面());
+}
+
+// 处理注册提交
+async function 处理注册提交(请求, env) {
+  const 已存账号 = await env.LOGIN_STATE.get('username');
+  const 已存密码 = await env.LOGIN_STATE.get('password_hash');
+
+  if (已存账号 && 已存密码) {
+    return 创建重定向响应('/login');
+  }
+
+  const formData = await 请求.formData();
+  const 提供的账号 = formData.get('username');
+  const 提供的密码 = formData.get('password');
+  const 确认密码 = formData.get('confirm_password');
+
+  const { 有效, 错误, 账号 } = await 验证注册输入(提供的账号, 提供的密码, 确认密码);
+  if (!有效) {
+    return 创建HTML响应(生成注册界面(错误, 账号));
+  }
+
+  try {
+    const 加密后的密码 = await 加密密码(提供的密码);
+    await env.LOGIN_STATE.put('username', 账号, { expirationTtl: 0 });
+    await env.LOGIN_STATE.put('password_hash', 加密后的密码, { expirationTtl: 0 });
+    return 创建HTML响应(生成注册成功页面());
+  } catch (错误) {
+    console.error(`注册失败: ${错误.message}`);
+    return 创建HTML响应(生成注册界面('小仙女说：注册出错啦，请稍后再试~', 账号));
+  }
+}
+
 export default {
   async fetch(请求, env) {
     try {
@@ -171,33 +236,10 @@ export default {
             return 创建HTML响应(生成订阅页面(订阅路径, hostName));
 
           case '/register':
-            const 已存账号 = await env.LOGIN_STATE.get('username');
-            const 已存密码 = await env.LOGIN_STATE.get('password_hash');
-            if (已存账号 && 已存密码) {
-              return 创建重定向响应('/login');
-            }
-            return 创建HTML响应(生成注册界面());
+            return await 处理注册请求(请求, env);
 
           case '/register/submit':
-            formData = await 请求.formData();
-            const 提供的账号 = formData.get('username');
-            const 提供的密码 = formData.get('password');
-            const 确认密码 = formData.get('confirm_password');
-
-            if (!提供的账号 || 提供的账号.length < 4) {
-              return 创建HTML响应(生成注册界面('小仙女说：账号需至少4个字符哦~', 提供的账号));
-            }
-            if (!提供的密码 || 提供的密码.length < 6) {
-              return 创建HTML响应(生成注册界面('小仙女说：密码需至少6个字符哦~', 提供的账号));
-            }
-            if (提供的密码 !== 确认密码) {
-              return 创建HTML响应(生成注册界面('小仙女说：两次密码不一致哦~', 提供的账号));
-            }
-
-            const 加密后的密码 = await 加密密码(提供的密码);
-            await env.LOGIN_STATE.put('username', 提供的账号, { expirationTtl: 0 });
-            await env.LOGIN_STATE.put('password_hash', 加密后的密码, { expirationTtl: 0 });
-            return 创建HTML响应(生成注册成功页面());
+            return await 处理注册提交(请求, env);
 
           case '/login':
             const 锁定状态 = await 检查锁定(env, 设备标识);
@@ -1175,22 +1217,22 @@ function 生成注册界面(提示消息 = '', 上次账号 = '') {
 
     const form = document.getElementById('registerForm');
     const submitBtn = document.getElementById('submitBtn');
-    const password = document.getElementById('password');
-    const confirmPassword = document.getElementById('confirm_password');
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const username = document.getElementById('username').value;
-      
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value.trim();
+      const confirmPassword = document.getElementById('confirm_password').value.trim();
+
       if (username.length < 4) {
         alert('小仙女说：账号需至少4个字符哦~');
         return;
       }
-      if (password.value.length < 6) {
+      if (password.length < 6) {
         alert('小仙女说：密码需至少6个字符哦~');
         return;
       }
-      if (password.value !== confirmPassword.value) {
+      if (password !== confirmPassword) {
         alert('小仙女说：两次密码不一致哦~');
         return;
       }
@@ -1203,7 +1245,6 @@ function 生成注册界面(提示消息 = '', 上次账号 = '') {
           method: 'POST',
           body: new FormData(form)
         });
-        
         if (response.ok) {
           const html = await response.text();
           document.open();
@@ -1214,6 +1255,7 @@ function 生成注册界面(提示消息 = '', 上次账号 = '') {
         }
       } catch (error) {
         alert('小仙女说：注册出错啦，请稍后再试~');
+      } finally {
         submitBtn.disabled = false;
         submitBtn.textContent = '注册';
       }
