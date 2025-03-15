@@ -500,15 +500,6 @@ function 生成订阅页面(订阅路径, hostName) {
       .card:hover {
         box-shadow: 0 10px 25px rgba(255, 182, 193, 0.5);
       }
-      .card-title {
-        background: linear-gradient(to right, #ff69b4, #ff1493);
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
-      }
-      .card-title::after {
-        background: linear-gradient(to right, #ffb6c1, #ff69b4);
-      }
       .link-box, .proxy-status {
         background: rgba(255, 240, 245, 0.9);
         border: 2px dashed #ffb6c1;
@@ -537,15 +528,6 @@ function 生成订阅页面(订阅路径, hostName) {
       }
       .card:hover {
         box-shadow: 0 10px 25px rgba(255, 133, 162, 0.4);
-      }
-      .card-title {
-        background: linear-gradient(to right, #ff85a2, #ff1493);
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
-      }
-      .card-title::after {
-        background: linear-gradient(to right, #ffd1dc, #ff85a2);
       }
       .link-box, .proxy-status {
         background: rgba(40, 40, 40, 0.9);
@@ -619,6 +601,10 @@ function 生成订阅页面(订阅路径, hostName) {
       font-size: 1.6em;
       margin-bottom: 15px;
       position: relative;
+      background: linear-gradient(to right, #ff69b4, #ff1493);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
     }
     .card-title::after {
       content: '';
@@ -628,7 +614,19 @@ function 生成订阅页面(订阅路径, hostName) {
       transform: translateX(-50%);
       width: 50%;
       height: 2px;
+      background: linear-gradient(to right, #ffb6c1, #ff69b4);
       border-radius: 2px;
+    }
+    @media (prefers-color-scheme: dark) {
+      .card-title {
+        background: linear-gradient(to right, #ff85a2, #ff1493);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+      .card-title::after {
+        background: linear-gradient(to right, #ffd1dc, #ff85a2);
+      }
     }
     @keyframes gradientFlow {
       0% { background-position: 0% 50%; }
