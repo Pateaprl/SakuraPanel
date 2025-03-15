@@ -562,7 +562,7 @@ function 生成订阅页面(订阅路径, hostName) {
       text-align: center;
       transition: transform 0.3s ease, box-shadow 0.3s ease;
       position: relative;
-      overflow: visible; /* 改为visible以允许蝴蝶结超出边界 */
+      overflow: visible; /* 允许蝴蝶结超出边界 */
     }
     .card::before {
       content: '';
@@ -574,44 +574,29 @@ function 生成订阅页面(订阅路径, hostName) {
       border-radius: 20px;
       z-index: -1;
     }
-    /* 添加蝴蝶结效果 */
+    /* 添加🎀蝴蝶结效果 */
     .card::after {
-      content: '';
+      content: '🎀'; /* 使用指定的蝴蝶结表情符号 */
       position: absolute;
-      top: -15px; /* 向上偏移，使蝴蝶结超出卡片顶部 */
-      right: -15px; /* 向右偏移，使蝴蝶结超出卡片右边界 */
-      width: 40px; /* 蝴蝶结宽度 */
-      height: 40px; /* 蝴蝶结高度 */
-      background: radial-gradient(circle at 50% 50%, #ff69b4, #ffb6c1); /* 蝴蝶结渐变颜色 */
-      clip-path: polygon(
-        50% 0%,  /* 上中点 */
-        70% 20%, /* 右上翼 */
-        100% 0%, /* 右顶点 */
-        70% 50%, /* 右中点 */
-        100% 100%, /* 右下点 */
-        70% 80%, /* 右下翼 */
-        50% 100%, /* 下中点 */
-        30% 80%, /* 左下翼 */
-        0% 100%, /* 左下点 */
-        30% 50%, /* 左中点 */
-        0% 0%,   /* 左顶点 */
-        30% 20%  /* 左上翼 */
-      ); /* 使用clip-path绘制蝴蝶结形状 */
-      transform: rotate(45deg); /* 旋转45度增加立体感 */
+      top: -15px; /* 向上偏移，超出卡片顶部 */
+      right: -15px; /* 向右偏移，超出卡片右边界 */
+      font-size: 30px; /* 调整蝴蝶结大小 */
+      color: #ff69b4; /* 亮色模式下的颜色 */
+      text-shadow: 1px 1px 3px rgba(255, 105, 180, 0.3); /* 添加阴影增强立体感 */
       z-index: 1; /* 确保蝴蝶结在卡片上方 */
-      box-shadow: 2px 2px 5px rgba(255, 105, 180, 0.3); /* 添加阴影 */
+      transform: rotate(15deg); /* 轻微旋转，模拟“别”在卡片上的效果 */
     }
     .card:hover {
       transform: scale(1.03);
     }
     .card:hover::after {
-      transform: rotate(45deg) scale(1.1); /* 鼠标悬停时放大蝴蝶结 */
+      transform: rotate(15deg) scale(1.1); /* 鼠标悬停时放大蝴蝶结 */
       transition: transform 0.3s ease;
     }
     @media (prefers-color-scheme: dark) {
       .card::after {
-        background: radial-gradient(circle at 50% 50%, #ff85a2, #ffd1dc); /* 暗色模式下的蝴蝶结颜色 */
-        box-shadow: 2px 2px 5px rgba(255, 133, 162, 0.4);
+        color: #ff85a2; /* 暗色模式下的颜色 */
+        text-shadow: 1px 1px 3px rgba(255, 133, 162, 0.4);
       }
     }
     .card-title {
