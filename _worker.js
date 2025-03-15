@@ -26,7 +26,7 @@ let 歪啦 = 'vl';
 let 伊埃斯 = 'ess';
 let 歪兔 = 'v2';
 let 蕊蒽 = 'rayN';
-let 背景壁纸 = 'https://raw.githubusercontent.com/Alien-Et/ips/refs/heads/main/image/day.jpg';
+let 背景壁纸 = 'https://raw.githubusercontent.com/Alien-Et/ips/refs/heads/main/image/day.jpg'; // 你的静态壁纸链接
 
 function 创建HTML响应(内容, 状态码 = 200) {
   return new Response(内容, {
@@ -143,12 +143,6 @@ export default {
         return 创建HTML响应(生成KV未绑定提示页面());
       }
 
-      // 记录请求次数
-      const stats = await env.LOGIN_STATE.get('cf_request_stats');
-      let used = stats ? JSON.parse(stats).used : 0;
-      used += 1;
-      await env.LOGIN_STATE.put('cf_request_stats', JSON.stringify({ used: used }), { expirationTtl: 86400 });
-
       const 请求头 = 请求.headers.get('Upgrade');
       const url = new URL(请求.url);
       const hostName = 请求.headers.get('Host');
@@ -251,20 +245,6 @@ export default {
               console.error(`上传处理失败: ${错误.message}`);
               return 创建JSON响应({ error: `上传处理失败: ${错误.message}` }, 500);
             }
-          case `/${订阅路径}/request-stats`:
-            const requestToken = 请求.headers.get('Cookie')?.split('=')[1];
-            const 有效RequestToken = await env.LOGIN_STATE.get('current_token');
-            if (!requestToken || requestToken !== 有效RequestToken) {
-              return 创建JSON响应({ error: '未登录或Token无效' }, 401);
-            }
-            const requestStats = await env.LOGIN_STATE.get('cf_request_stats');
-            const total = 100000; // 假设每日限额为 100,000
-            const usedRequests = requestStats ? JSON.parse(requestStats).used : 0;
-            return 创建JSON响应({
-              total: total,
-              used: usedRequests,
-              remaining: total - usedRequests
-            });
           default:
             url.hostname = 伪装域名;
             url.protocol = 'https:';
@@ -437,7 +417,7 @@ function 生成订阅页面(订阅路径, hostName) {
       min-height: 100vh;
       display: flex;
       justify-content: center;
-      align-items: flex-start;
+      align-items: flex-start; /* 支持滚动 */
     }
     .background-media {
       position: fixed;
@@ -460,7 +440,7 @@ function 生成订阅页面(订阅路径, hostName) {
       padding-bottom: 20px;
     }
     .card {
-      background: rgba(0, 0, 0, 0.7);
+      background: rgba(0, 0, 0, 0.7); /* 改为与图片类似的深色透明背景 */
       border-radius: 25px;
       padding: 25px;
       box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3);
@@ -470,6 +450,7 @@ function 生成订阅页面(订阅路径, hostName) {
       transition: transform 0.3s ease, box-shadow 0.3s ease;
       position: relative;
       overflow: hidden;
+      position: relative; /* 确保内部虚线定位 */
     }
     .card::before {
       content: '';
@@ -478,9 +459,9 @@ function 生成订阅页面(订阅路径, hostName) {
       left: 10px;
       right: 10px;
       bottom: 10px;
-      border: 2px dashed #ffb6c1;
-      border-radius: 20px;
-      z-index: -1;
+      border: 2px dashed #ffb6c1; /* 虚线框放在内部 */
+      border-radius: 20px; /* 与卡片圆角一致 */
+      z-index: -1; /* 置于内容下方 */
     }
     .card:hover {
       transform: scale(1.03);
@@ -502,7 +483,7 @@ function 生成订阅页面(订阅路径, hostName) {
       text-shadow: 1px 1px 3px rgba(255, 105, 180, 0.2);
     }
     .link-box {
-      background: rgba(255, 240, 245, 0.9);
+      background: rgba(255, 240, 245, 0.9); /* 调整为半透明效果 */
       border-radius: 15px;
       padding: 15px;
       margin: 10px 0;
@@ -534,7 +515,7 @@ function 生成订阅页面(订阅路径, hostName) {
       color: white;
       cursor: pointer;
       transition: transform 0.2s ease, box-shadow 0.2s ease;
-      background: linear-gradient(to right, #ffb6c1, #ff69b4);
+      background: linear-gradient(to right, #ffb6c1, #ff69b4); /* 统一粉色渐变 */
       text-align: center;
       display: inline-block;
     }
@@ -545,9 +526,15 @@ function 生成订阅页面(订阅路径, hostName) {
     .cute-button:active {
       transform: scale(0.95);
     }
-    .clash-btn { background: linear-gradient(to right, #ffb6c1, #ff69b4); }
-    .v2ray-btn { background: linear-gradient(to right, #ffd1dc, #ff85a2); }
-    .logout-btn { background: linear-gradient(to right, #ff9999, #ff6666); }
+    .clash-btn {
+      background: linear-gradient(to right, #ffb6c1, #ff69b4);
+    }
+    .v2ray-btn {
+      background: linear-gradient(to right, #ffd1dc, #ff85a2);
+    }
+    .logout-btn {
+      background: linear-gradient(to right, #ff9999, #ff6666);
+    }
     .upload-title {
       font-size: 1.4em;
       color: #ff85a2;
@@ -632,24 +619,12 @@ function 生成订阅页面(订阅路径, hostName) {
       color: #ff6f91;
       margin-top: 5px;
     }
-    .stats-box {
-      background: rgba(255, 240, 245, 0.9);
-      border-radius: 15px;
-      padding: 15px;
-      margin: 10px 0;
-      font-size: 0.95em;
-      color: #ff85a2;
-      border: 2px dashed #ffb6c1;
-    }
-    .stats-item {
-      margin: 5px 0;
-    }
     @media (max-width: 600px) {
       .container { padding: 10px; }
       .card { padding: 15px; max-width: 90%; }
       .card-title { font-size: 1.3em; }
       .cute-button, .upload-label, .upload-submit { padding: 10px 20px; font-size: 0.9em; }
-      .link-box, .stats-box { font-size: 0.85em; }
+      .link-box { font-size: 0.85em; }
     }
   </style>
 </head>
@@ -665,14 +640,6 @@ function 生成订阅页面(订阅路径, hostName) {
     <div class="card">
       <h1 class="card-title">🌸 欢迎来到小仙女订阅站 🌸</h1>
       <p style="color: #ff85a2; font-size: 1em;">支持 <span style="color: #ff69b4;">${小猫}${咪}</span> 和 <span style="color: #ff85a2;">${歪兔}${蕊蒽}</span> 哦~</p>
-    </div>
-    <div class="card">
-      <h2 class="card-title">📊 CF 请求量统计</h2>
-      <div class="stats-box" id="requestStats">
-        <div class="stats-item">每日限额: <span id="totalRequests">加载中...</span></div>
-        <div class="stats-item">已用请求: <span id="usedRequests">加载中...</span></div>
-        <div class="stats-item">剩余请求: <span id="remainingRequests">加载中...</span></div>
-      </div>
     </div>
     <div class="card">
       <h2 class="card-title">🐾 ${小猫}${咪} 订阅</h2>
@@ -796,25 +763,6 @@ function 生成订阅页面(订阅路径, hostName) {
 
       xhr.send(formData);
     }
-
-    // 获取 CF 请求量数据
-    async function 加载请求量() {
-      try {
-        const response = await fetch('/${订阅路径}/request-stats', {
-          headers: { 'Cookie': document.cookie }
-        });
-        if (!response.ok) throw new Error('请求失败');
-        const data = await response.json();
-        document.getElementById('totalRequests').textContent = data.total.toLocaleString();
-        document.getElementById('usedRequests').textContent = data.used.toLocaleString();
-        document.getElementById('remainingRequests').textContent = data.remaining.toLocaleString();
-      } catch (error) {
-        document.getElementById('totalRequests').textContent = '无法加载';
-        document.getElementById('usedRequests').textContent = '无法加载';
-        document.getElementById('remainingRequests').textContent = '无法加载';
-      }
-    }
-    window.addEventListener('load', 加载请求量);
   </script>
 </body>
 </html>
