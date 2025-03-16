@@ -162,14 +162,14 @@ export default {
             formData = await 请求.formData();
             const 提供的邀请码 = formData.get('invite_code');
             if (提供的邀请码 !== 注册邀请码) {
-              return 创建HTML响应(生成注册页面('邀请码错误，请输入正确的邀请码哦~')));
+              return 创建HTML响应(生成注册页面('邀请码错误，请输入正确的邀请码哦~'));
             }
             const 新账号 = formData.get('username');
             const 新密码 = formData.get('password');
             const 确认密码 = formData.get('confirm_password');
 
             if (!新账号 || !新密码 || 新密码 !== 确认密码) {
-              return 创建HTML响应(生成注册页面('账号或密码无效，或密码不匹配')));
+              return 创建HTML响应(生成注册页面('账号或密码无效，或密码不匹配'));
             }
 
             await env.LOGIN_STATE.put('admin_username', 新账号);
@@ -1212,7 +1212,7 @@ function 生成订阅页面(订阅路径, hostName) {
         }
       };
 
-      xhr.onload = function() {
+      xhr.onload  xhr.onload = function() {
         progressFill.style.width = '100%';
         progressText.textContent = '100%';
         try {
