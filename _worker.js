@@ -12,8 +12,6 @@ let 反代地址 = 'ts.hpc.tw';
 let SOCKS5账号 = '';
 let 节点名称 = '🌸樱花';
 let 伪装域名 = 'lkssite.vip';
-let 账号 = 'andypan';
-let 密码 = 'Yyds@2023';
 let 最大失败次数 = 5;
 let 锁定时间 = 5 * 60 * 1000;
 let 小猫 = 'cla';
@@ -141,16 +139,46 @@ export default {
         return 创建HTML响应(生成KV未绑定提示页面());
       }
 
-      const 请求头 = 请求.headers.get('Upgrade');
       const url = new URL(请求.url);
       const hostName = 请求.headers.get('Host');
       const UA = 请求.headers.get('User-Agent') || 'unknown';
       const IP = 请求.headers.get('CF-Connecting-IP') || 'unknown';
       const 设备标识 = `${UA}_${IP}`;
+
+      const adminInitialized = await env.LOGIN_STATE.get('admin_initialized');
+      if (!adminInitialized && url.pathname !== '/register' && url.pathname !== '/register/submit') {
+        return 创建重定向响应('/register');
+      }
+
+      const 请求头 = 请求.headers.get('Upgrade');
       let formData;
 
       if (!请求头 || 请求头 !== 'websocket') {
         switch (url.pathname) {
+          case '/register':
+            const registerKey = 请求.headers.get('X-Register-Key');
+            if (!env.REGISTER_KEY || registerKey !== env.REGISTER_KEY) {
+              return 创建JSON响应({ error: '注册密钥错误，请提供正确的 X-Register-Key' }, 403);
+            }
+            return 创建HTML响应(生成注册页面());
+          case '/register/submit':
+            const providedKey = 请求.headers.get('X-Register-Key');
+            if (!env.REGISTER_KEY || providedKey !== env.REGISTER_KEY) {
+              return 创建JSON响应({ error: '注册密钥错误' }, 403);
+            }
+            formData = await 请求.formData();
+            const 新账号 = formData.get('username');
+            const 新密码 = formData.get('password');
+            const 确认密码 = formData.get('confirm_password');
+
+            if (!新账号 || !新密码 || 新密码 !== 确认密码) {
+              return 创建HTML响应(生成注册页面('账号或密码无效，或密码不匹配'));
+            }
+
+            await env.LOGIN_STATE.put('admin_username', 新账号);
+            await env.LOGIN_STATE.put('admin_password', 新密码);
+            await env.LOGIN_STATE.put('admin_initialized', 'true');
+            return 创建重定向响应('/login');
           case '/reset-login-failures':
             await env.LOGIN_STATE.put(`fail_${设备标识}`, '0');
             await env.LOGIN_STATE.delete(`lock_${设备标识}`);
@@ -174,7 +202,10 @@ export default {
             formData = await 请求.formData();
             const 提供的账号 = formData.get('username');
             const 提供的密码 = formData.get('password');
-            if (提供的账号 === 账号 && 提供的密码 === 密码) {
+            const 存储账号 = await env.LOGIN_STATE.get('admin_username');
+            const 存储密码 = await env.LOGIN_STATE.get('admin_password');
+            if (!存储账号 || !存储密码) return 创建重定向响应('/register');
+            if (提供的账号 === 存储账号 && 提供的密码 === 存储密码) {
               const 新Token = Math.random().toString(36).substring(2);
               await env.LOGIN_STATE.put('current_token', 新Token, { expirationTtl: 300 });
               await env.LOGIN_STATE.put(`fail_${设备标识}`, '0');
@@ -462,6 +493,147 @@ async function 解析SOCKS5账号(SOCKS5) {
   return { username, password, hostname, port };
 }
 
+function 生成注册页面(错误消息 = '') {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: 'Comic Sans MS', 'Arial', sans-serif;
+      color: #ff6f91;
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+      overflow: hidden;
+      transition: background 0.5s ease;
+    }
+    @media (prefers-color-scheme: light) {
+      body { background: linear-gradient(135deg, #ffe6f0, #fff0f5); }
+      .content { background: rgba(255, 255, 255, 0.85); box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3); }
+    }
+    @media (prefers-color-scheme: dark) {
+      body { background: linear-gradient(135deg, #1e1e2f, #2a2a3b); }
+      .content { background: rgba(30, 30, 30, 0.9); color: #ffd1dc; box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2); }
+    }
+    .background-media {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: -1;
+      transition: opacity 0.5s ease;
+    }
+    .content {
+      padding: 30px;
+      border-radius: 25px;
+      max-width: 400px;
+      width: 90%;
+      text-align: center;
+    }
+    h1 {
+      font-size: 1.8em;
+      color: #ff69b4;
+      text-shadow: 1px 1px 3px rgba(255, 105, 180, 0.2);
+      margin-bottom: 20px;
+    }
+    .register-form {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      width: 100%;
+      max-width: 300px;
+      margin: 0 auto;
+    }
+    .register-form input {
+      padding: 12px;
+      border-radius: 15px;
+      border: 2px solid #ffb6c1;
+      background: #fff;
+      font-size: 1em;
+      color: #ff6f91;
+      width: 100%;
+      box-sizing: border-box;
+      transition: border-color 0.3s ease;
+    }
+    .register-form input:focus {
+      border-color: #ff69b4;
+      outline: none;
+    }
+    .register-form input::placeholder {
+      color: #ffb6c1;
+    }
+    .register-form button {
+      padding: 12px;
+      background: linear-gradient(to right, #ffb6c1, #ff69b4);
+      color: white;
+      border: none;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 1em;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    .register-form button:hover {
+      transform: scale(1.05);
+      box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4);
+    }
+    .error-message {
+      color: #ff6666;
+      margin-top: 15px;
+      font-size: 0.9em;
+      animation: shake 0.5s ease-in-out;
+    }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-5px); }
+      50% { transform: translateX(5px); }
+      75% { transform: translateX(-5px); }
+    }
+    @media (max-width: 600px) {
+      .content { padding: 20px; }
+      h1 { font-size: 1.5em; }
+      .register-form { max-width: 250px; }
+      .register-form input, .register-form button { font-size: 0.9em; padding: 10px; }
+    }
+  </style>
+</head>
+<body>
+  <img id="backgroundImage" class="background-media" alt="Background">
+  <div class="content">
+    <h1>🌸 设置管理员账户 🌸</h1>
+    <p>首次使用，请设置你的管理员账号和密码哦~</p>
+    <form class="register-form" action="/register/submit" method="POST">
+      <input type="text" id="username" name="username" placeholder="请输入账号" required>
+      <input type="password" id="password" name="password" placeholder="请输入密码" required>
+      <input type="password" id="confirm_password" name="confirm_password" placeholder="确认密码" required>
+      <button type="submit">注册</button>
+    </form>
+    ${错误消息 ? `<div class="error-message">${错误消息}</div>` : ''}
+  </div>
+  <script>
+    const lightBg = '${白天背景壁纸}';
+    const darkBg = '${暗黑背景壁纸}';
+    const bgImage = document.getElementById('backgroundImage');
+
+    function updateBackground() {
+      const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      bgImage.src = isDarkMode ? darkBg : lightBg;
+    }
+
+    updateBackground();
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
+  </script>
+</body>
+</html>
+  `;
+}
+
 function 生成订阅页面(订阅路径, hostName) {
   return `
 <!DOCTYPE html>
@@ -562,7 +734,7 @@ function 生成订阅页面(订阅路径, hostName) {
       text-align: center;
       transition: transform 0.3s ease, box-shadow 0.3s ease;
       position: relative;
-      overflow: visible; /* 改为 visible 以允许蝴蝶结超出边界 */
+      overflow: visible;
     }
     .card::before {
       content: '';
@@ -577,18 +749,17 @@ function 生成订阅页面(订阅路径, hostName) {
     .card:hover {
       transform: scale(1.03);
     }
-    /* 添加蝴蝶结样式 */
     .card::after {
       content: '🎀';
       position: absolute;
       top: -20px;
       right: -20px;
-      font-size: 60px; /* 增大蝴蝶结 */
+      font-size: 60px;
       color: #ff69b4;
       transform: rotate(20deg);
-      z-index: 1; /* 确保蝴蝶结在卡片内容之上 */
+      z-index: 1;
       text-shadow: 2px 2px 4px rgba(255, 105, 180, 0.3);
-      pointer-events: none; /* 防止蝴蝶结干扰交互 */
+      pointer-events: none;
     }
     @media (prefers-color-scheme: dark) {
       .card::after {
