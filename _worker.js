@@ -2,6 +2,7 @@ import { connect } from 'cloudflare:sockets';
 
 let 订阅路径 = "config";
 let 开门锁匙 = "03978e2f-2129-4c0c-8f15-22175dd0aba6";
+let 注册邀请码 = "sakura2025"; // 硬编码的注册邀请码
 let 优选TXT路径 = [
   'https://v2.i-sweet.us.kg/ips.txt',
   'https://v2.i-sweet.us.kg/url.txt',
@@ -156,23 +157,19 @@ export default {
       if (!请求头 || 请求头 !== 'websocket') {
         switch (url.pathname) {
           case '/register':
-            const registerKey = 请求.headers.get('X-Register-Key');
-            if (!env.REGISTER_KEY || registerKey !== env.REGISTER_KEY) {
-              return 创建JSON响应({ error: '注册密钥错误，请提供正确的 X-Register-Key' }, 403);
-            }
             return 创建HTML响应(生成注册页面());
           case '/register/submit':
-            const providedKey = 请求.headers.get('X-Register-Key');
-            if (!env.REGISTER_KEY || providedKey !== env.REGISTER_KEY) {
-              return 创建JSON响应({ error: '注册密钥错误' }, 403);
-            }
             formData = await 请求.formData();
+            const 提供的邀请码 = formData.get('invite_code');
+            if (提供的邀请码 !== 注册邀请码) {
+              return 创建HTML响应(生成注册页面('邀请码错误，请输入正确的邀请码哦~')));
+            }
             const 新账号 = formData.get('username');
             const 新密码 = formData.get('password');
             const 确认密码 = formData.get('confirm_password');
 
             if (!新账号 || !新密码 || 新密码 !== 确认密码) {
-              return 创建HTML响应(生成注册页面('账号或密码无效，或密码不匹配'));
+              return 创建HTML响应(生成注册页面('账号或密码无效，或密码不匹配')));
             }
 
             await env.LOGIN_STATE.put('admin_username', 新账号);
@@ -607,8 +604,9 @@ function 生成注册页面(错误消息 = '') {
   <img id="backgroundImage" class="background-media" alt="Background">
   <div class="content">
     <h1>🌸 设置管理员账户 🌸</h1>
-    <p>首次使用，请设置你的管理员账号和密码哦~</p>
+    <p>首次使用，请输入邀请码并设置你的管理员账号和密码哦~</p>
     <form class="register-form" action="/register/submit" method="POST">
+      <input type="text" id="invite_code" name="invite_code" placeholder="请输入邀请码" required>
       <input type="text" id="username" name="username" placeholder="请输入账号" required>
       <input type="password" id="password" name="password" placeholder="请输入密码" required>
       <input type="password" id="confirm_password" name="confirm_password" placeholder="确认密码" required>
