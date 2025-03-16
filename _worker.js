@@ -1,4 +1,4 @@
-import { connect } from 'cloudflare:sockets';
+import { SignJWT, jwtVerify } from 'jose';
 
 let 订阅路径 = "config";
 let 开门锁匙 = "03978e2f-2129-4c0c-8f15-22175dd0aba6";
@@ -25,6 +25,7 @@ let 歪兔 = 'v2';
 let 蕊蒽 = 'rayng';
 let 白天背景壁纸 = 'https://raw.githubusercontent.com/Alien-Et/ips/refs/heads/main/image/day.jpg';
 let 暗黑背景壁纸 = 'https://raw.githubusercontent.com/Alien-Et/ips/refs/heads/main/image/night.jpg';
+const SECRET_KEY = new TextEncoder().encode('your-secret-key-here'); // 用于 JWT 的密钥
 
 function 创建HTML响应(内容, 状态码 = 200) {
   return new Response(内容, {
@@ -66,10 +67,14 @@ async function 加载节点和配置(env, hostName) {
       手动节点列表 = JSON.parse(手动节点缓存).map(line => line.trim()).filter(Boolean);
     }
 
+    const cachedETag = await env.LOGIN_STATE.get('txt_etag');
     const 响应列表 = await Promise.all(
       优选TXT路径.map(async (路径) => {
         try {
-          const 响应 = await fetch(路径);
+          const 响应 = await fetch(路径, { headers: cachedETag ? { 'If-None-Match': cachedETag } : {} });
+          if (响应.status === 304) return [];
+          const etag = 响应.headers.get('ETag');
+          if (etag) await env.LOGIN_STATE.put('txt_etag', etag, { expirationTtl: 86400 });
           if (!响应.ok) throw new Error(`请求 ${路径} 失败，状态码: ${响应.status}`);
           const 文本 = await 响应.text();
           return 文本.split('\n').map(line => line.trim()).filter(Boolean);
@@ -103,7 +108,6 @@ async function 加载节点和配置(env, hostName) {
   } catch (错误) {
     const 缓存节点 = await env.LOGIN_STATE.get('ip_preferred_ips');
     优选节点 = 缓存节点 ? JSON.parse(缓存节点) : [`${hostName}:443`];
-    await env.LOGIN_STATE.put('ip_error_log', JSON.stringify({ time: Date.now(), error: '所有路径拉取失败或手动上传为空' }), { expirationTtl: 86400 });
   }
 }
 
@@ -134,12 +138,25 @@ async function 检查锁定(env, 设备标识) {
   };
 }
 
+async function 验证Token(token, env) {
+  try {
+    const { payload } = await jwtVerify(token, SECRET_KEY);
+    const storedToken = await env.LOGIN_STATE.get('current_token');
+    return token === storedToken && payload.user === 账号;
+  } catch {
+    return false;
+  }
+}
+
 export default {
   async fetch(请求, env) {
     try {
       if (!env.LOGIN_STATE) {
         return 创建HTML响应(生成KV未绑定提示页面());
       }
+
+      订阅路径 = await env.LOGIN_STATE.get('sub_path') || 订阅路径;
+      开门锁匙 = await env.LOGIN_STATE.get('uuid') || 开门锁匙;
 
       const 请求头 = 请求.headers.get('Upgrade');
       const url = new URL(请求.url);
@@ -157,13 +174,12 @@ export default {
             return new Response(null, { status: 200 });
           case `/${订阅路径}`:
             const Token = 请求.headers.get('Cookie')?.split('=')[1];
-            const 有效Token = await env.LOGIN_STATE.get('current_token');
-            if (!Token || Token !== 有效Token) return 创建重定向响应('/login');
+            if (!Token || !(await 验证Token(Token, env))) return 创建重定向响应('/login');
             return 创建HTML响应(生成订阅页面(订阅路径, hostName));
           case '/login':
             const 锁定状态 = await 检查锁定(env, 设备标识);
             if (锁定状态.被锁定) return 创建HTML响应(生成登录界面(true, 锁定状态.剩余时间));
-            if (请求.headers.get('Cookie')?.split('=')[1] === await env.LOGIN_STATE.get('current_token')) {
+            if (await 验证Token(请求.headers.get('Cookie')?.split('=')[1], env)) {
               return 创建重定向响应(`/${订阅路径}`);
             }
             const 失败次数 = Number(await env.LOGIN_STATE.get(`fail_${设备标识}`) || 0);
@@ -175,7 +191,10 @@ export default {
             const 提供的账号 = formData.get('username');
             const 提供的密码 = formData.get('password');
             if (提供的账号 === 账号 && 提供的密码 === 密码) {
-              const 新Token = Math.random().toString(36).substring(2);
+              const 新Token = await new SignJWT({ user: 账号 })
+                .setProtectedHeader({ alg: 'HS256' })
+                .setExpirationTime('5m')
+                .sign(SECRET_KEY);
               await env.LOGIN_STATE.put('current_token', 新Token, { expirationTtl: 300 });
               await env.LOGIN_STATE.put(`fail_${设备标识}`, '0');
               return 创建重定向响应(`/${订阅路径}`, { 'Set-Cookie': `token=${新Token}; Path=/; HttpOnly; SameSite=Strict` });
@@ -193,16 +212,19 @@ export default {
             return 创建重定向响应('/login', { 'Set-Cookie': 'token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Strict' });
           case `/${订阅路径}/${小猫}${咪}`:
             await 加载节点和配置(env, hostName);
+            let clashDownloads = Number(await env.LOGIN_STATE.get('clash_downloads') || 0) + 1;
+            await env.LOGIN_STATE.put('clash_downloads', String(clashDownloads));
             const clashConfig = await 获取配置(env, 'clash', hostName);
             return new Response(clashConfig, { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8" } });
           case `/${订阅路径}/${歪兔}${蕊蒽}`:
             await 加载节点和配置(env, hostName);
+            let v2rayDownloads = Number(await env.LOGIN_STATE.get('v2ray_downloads') || 0) + 1;
+            await env.LOGIN_STATE.put('v2ray_downloads', String(v2rayDownloads));
             const v2rayConfig = await 获取配置(env, 'v2ray', hostName);
             return new Response(v2rayConfig, { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8" } });
           case `/${订阅路径}/upload`:
             const uploadToken = 请求.headers.get('Cookie')?.split('=')[1];
-            const 有效UploadToken = await env.LOGIN_STATE.get('current_token');
-            if (!uploadToken || uploadToken !== 有效UploadToken) {
+            if (!uploadToken || !(await 验证Token(uploadToken, env))) {
               return 创建JSON响应({ error: '未登录或Token无效，请重新登录' }, 401);
             }
             formData = await 请求.formData();
@@ -216,28 +238,23 @@ export default {
                 if (!ipFile || !ipFile.text) throw new Error(`文件 ${ipFile.name} 无效`);
                 const ipText = await ipFile.text();
                 const ipList = ipText.split('\n').map(line => line.trim()).filter(Boolean);
-                if (ipList.length === 0) console.warn(`文件 ${ipFile.name} 内容为空`);
                 allIpList = allIpList.concat(ipList);
               }
               if (allIpList.length === 0) {
                 return 创建JSON响应({ error: '所有上传文件内容为空' }, 400);
               }
               const uniqueIpList = [...new Set(allIpList)];
-
               const 当前手动节点 = await env.LOGIN_STATE.get('manual_preferred_ips');
               const 当前节点列表 = 当前手动节点 ? JSON.parse(当前手动节点) : [];
               const 是重复上传 = JSON.stringify(当前节点列表.sort()) === JSON.stringify(uniqueIpList.sort());
               if (是重复上传) {
                 return 创建JSON响应({ message: '上传内容与现有节点相同，无需更新' }, 200);
               }
-
               await env.LOGIN_STATE.put('manual_preferred_ips', JSON.stringify(uniqueIpList), { expirationTtl: 86400 });
               const 新版本 = String(Date.now());
               await env.LOGIN_STATE.put('ip_preferred_ips_version', 新版本);
               await env.LOGIN_STATE.put('config_clash', 生成猫咪配置(hostName), { expirationTtl: 86400 });
-              await env.LOGIN_STATE.put('config_clash_version', 新版本);
               await env.LOGIN_STATE.put('config_v2ray', 生成备用配置(hostName), { expirationTtl: 86400 });
-              await env.LOGIN_STATE.put('config_v2ray_version', 新版本);
               return 创建JSON响应({ message: '上传成功，即将跳转' }, 200, { 'Location': `/${订阅路径}` });
             } catch (错误) {
               console.error(`上传处理失败: ${错误.message}`);
@@ -261,6 +278,60 @@ export default {
               else if (代理类型 === 'socks5' && SOCKS5账号) status = 'SOCKS5';
             }
             return 创建JSON响应({ status });
+          case '/config/nodes':
+            const nodes = await env.LOGIN_STATE.get('manual_preferred_ips');
+            return 创建JSON响应(nodes ? JSON.parse(nodes) : []);
+          case '/config/add-node':
+            const { node } = await 请求.json();
+            let manualNodes = await env.LOGIN_STATE.get('manual_preferred_ips');
+            manualNodes = manualNodes ? JSON.parse(manualNodes) : [];
+            if (!manualNodes.includes(node)) {
+              manualNodes.push(node);
+              await env.LOGIN_STATE.put('manual_preferred_ips', JSON.stringify(manualNodes), { expirationTtl: 86400 });
+              const newVersion = String(Date.now());
+              await env.LOGIN_STATE.put('ip_preferred_ips_version', newVersion);
+              await env.LOGIN_STATE.put('config_clash', 生成猫咪配置(hostName), { expirationTtl: 86400 });
+              await env.LOGIN_STATE.put('config_v2ray', 生成备用配置(hostName), { expirationTtl: 86400 });
+            }
+            return new Response(null, { status: 200 });
+          case '/config/delete-node':
+            const { node: delNode } = await 请求.json();
+            let delNodes = await env.LOGIN_STATE.get('manual_preferred_ips');
+            delNodes = delNodes ? JSON.parse(delNodes) : [];
+            const updatedNodes = delNodes.filter(n => n !== delNode);
+            await env.LOGIN_STATE.put('manual_preferred_ips', JSON.stringify(updatedNodes), { expirationTtl: 86400 });
+            const newDelVersion = String(Date.now());
+            await env.LOGIN_STATE.put('ip_preferred_ips_version', newDelVersion);
+            await env.LOGIN_STATE.put('config_clash', 生成猫咪配置(hostName), { expirationTtl: 86400 });
+            await env.LOGIN_STATE.put('config_v2ray', 生成备用配置(hostName), { expirationTtl: 86400 });
+            return new Response(null, { status: 200 });
+          case '/config/settings':
+            const { subPath, uuid } = await 请求.json();
+            await env.LOGIN_STATE.put('sub_path', subPath, { expirationTtl: 86400 });
+            await env.LOGIN_STATE.put('uuid', uuid, { expirationTtl: 86400 });
+            订阅路径 = subPath;
+            开门锁匙 = uuid;
+            return new Response(null, { status: 200 });
+          case '/config/test-nodes':
+            const testNodes = 优选节点.length ? 优选节点 : [`${hostName}:443`];
+            const results = await Promise.all(testNodes.map(async node => {
+              const start = Date.now();
+              try {
+                const [addrPort] = node.split('#');
+                const [address, port = '443'] = addrPort.split(':');
+                const conn = connect({ hostname: address, port: Number(port) });
+                await conn.opened;
+                conn.close();
+                return { node, delay: Date.now() - start };
+              } catch (e) {
+                return { node, delay: '失败' };
+              }
+            }));
+            return 创建JSON响应(results);
+          case '/config/stats':
+            const clashDownloads = await env.LOGIN_STATE.get('clash_downloads') || '0';
+            const v2rayDownloads = await env.LOGIN_STATE.get('v2ray_downloads') || '0';
+            return 创建JSON响应({ clashDownloads, v2rayDownloads });
           default:
             url.hostname = 伪装域名;
             url.protocol = 'https:';
@@ -481,57 +552,23 @@ function 生成订阅页面(订阅路径, hostName) {
       transition: background 0.5s ease;
     }
     @media (prefers-color-scheme: light) {
-      body {
-        background: linear-gradient(135deg, #ffe6f0, #fff0f5);
-      }
-      .card {
-        background: rgba(255, 245, 247, 0.9);
-        box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3);
-      }
-      .card::before {
-        border: 2px dashed #ffb6c1;
-      }
-      .card:hover {
-        box-shadow: 0 10px 25px rgba(255, 182, 193, 0.5);
-      }
-      .link-box, .proxy-status {
-        background: rgba(255, 240, 245, 0.9);
-        border: 2px dashed #ffb6c1;
-      }
-      .file-item {
-        background: rgba(255, 245, 247, 0.9);
-      }
+      body { background: linear-gradient(135deg, #ffe6f0, #fff0f5); }
+      .card { background: rgba(255, 245, 247, 0.9); box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3); }
+      .card::before { border: 2px dashed #ffb6c1; }
+      .card:hover { box-shadow: 0 10px 25px rgba(255, 182, 193, 0.5); }
+      .link-box, .proxy-status { background: rgba(255, 240, 245, 0.9); border: 2px dashed #ffb6c1; }
+      .file-item { background: rgba(255, 245, 247, 0.9); }
     }
     @media (prefers-color-scheme: dark) {
-      body {
-        background: linear-gradient(135deg, #1e1e2f, #2a2a3b);
-      }
-      .card {
-        background: rgba(30, 30, 30, 0.9);
-        color: #ffd1dc;
-        box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2);
-      }
-      .card::before {
-        border: 2px dashed #ff85a2;
-      }
-      .card:hover {
-        box-shadow: 0 10px 25px rgba(255, 133, 162, 0.4);
-      }
-      .link-box, .proxy-status {
-        background: rgba(40, 40, 40, 0.9);
-        border: 2px dashed #ff85a2;
-        color: #ffd1dc;
-      }
-      .link-box a {
-        color: #ff85a2;
-      }
-      .link-box a:hover {
-        color: #ff1493;
-      }
-      .file-item {
-        background: rgba(50, 50, 50, 0.9);
-        color: #ffd1dc;
-      }
+      body { background: linear-gradient(135deg, #1e1e2f, #2a2a3b); }
+      .card { background: rgba(30, 30, 30, 0.9); color: #ffd1dc; box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2); }
+      .card::before { border: 2px dashed #ff85a2; }
+      .card::after { color: #ff85a2; text-shadow: 2px 2px 4px rgba(255, 133, 162, 0.3); }
+      .card:hover { box-shadow: 0 10px 25px rgba(255, 133, 162, 0.4); }
+      .link-box, .proxy-status { background: rgba(40, 40, 40, 0.9); border: 2px dashed #ff85a2; color: #ffd1dc; }
+      .link-box a { color: #ff85a2; }
+      .link-box a:hover { color: #ff1493; }
+      .file-item { background: rgba(50, 50, 50, 0.9); color: #ffd1dc; }
     }
     .background-media {
       position: fixed;
@@ -562,7 +599,12 @@ function 生成订阅页面(订阅路径, hostName) {
       text-align: center;
       transition: transform 0.3s ease, box-shadow 0.3s ease;
       position: relative;
-      overflow: visible; /* 改为 visible 以允许蝴蝶结超出边界 */
+      overflow: visible;
+      animation: fadeIn 0.5s ease-in;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
     }
     .card::before {
       content: '';
@@ -574,27 +616,20 @@ function 生成订阅页面(订阅路径, hostName) {
       border-radius: 20px;
       z-index: -1;
     }
-    .card:hover {
-      transform: scale(1.03);
-    }
-    /* 添加蝴蝶结样式 */
     .card::after {
       content: '🎀';
       position: absolute;
       top: -20px;
       right: -20px;
-      font-size: 60px; /* 增大蝴蝶结 */
+      font-size: 60px;
       color: #ff69b4;
       transform: rotate(20deg);
-      z-index: 1; /* 确保蝴蝶结在卡片内容之上 */
+      z-index: 1;
       text-shadow: 2px 2px 4px rgba(255, 105, 180, 0.3);
-      pointer-events: none; /* 防止蝴蝶结干扰交互 */
+      pointer-events: none;
     }
-    @media (prefers-color-scheme: dark) {
-      .card::after {
-        color: #ff85a2;
-        text-shadow: 2px 2px 4px rgba(255, 133, 162, 0.3);
-      }
+    .card:hover {
+      transform: scale(1.03);
     }
     .card-title {
       font-size: 1.6em;
@@ -666,35 +701,13 @@ function 生成订阅页面(订阅路径, hostName) {
       cursor: pointer;
       color: #ff6f91;
       transition: all 0.3s ease;
-      position: relative;
-      font-size: 1em;
     }
     .proxy-option.active {
       background: linear-gradient(to right, #ffb6c1, #ff69b4);
       color: white;
-      box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.1);
     }
     .proxy-option:not(.active):hover {
       background: #ffd1dc;
-    }
-    .proxy-option[data-type="socks5"].active {
-      background: linear-gradient(to right, #ffd1dc, #ff85a2);
-    }
-    .proxy-option::before {
-      content: '';
-      position: absolute;
-      top: -50%;
-      left: -50%;
-      width: 200%;
-      height: 200%;
-      background: rgba(255, 255, 255, 0.2);
-      transform: rotate(30deg);
-      transition: all 0.5s ease;
-      pointer-events: none;
-    }
-    .proxy-option:hover::before {
-      top: 100%;
-      left: 100%;
     }
     .proxy-status {
       margin-top: 20px;
@@ -702,9 +715,6 @@ function 生成订阅页面(订阅路径, hostName) {
       border-radius: 15px;
       font-size: 0.95em;
       word-break: break-all;
-      transition: background 0.3s ease, color 0.3s ease;
-      width: 100%;
-      box-sizing: border-box;
     }
     .proxy-status.success {
       background: rgba(212, 237, 218, 0.9);
@@ -743,6 +753,7 @@ function 生成订阅页面(订阅路径, hostName) {
       font-size: 1em;
       color: white;
       cursor: pointer;
+      background: linear-gradient(to right, #ffb6c1, #ff69b4);
       transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
     .cute-button:hover {
@@ -752,20 +763,9 @@ function 生成订阅页面(订阅路径, hostName) {
     .cute-button:active {
       transform: scale(0.95);
     }
-    .clash-btn {
-      background: linear-gradient(to right, #ffb6c1, #ff69b4);
-    }
-    .v2ray-btn {
-      background: linear-gradient(to right, #ffd1dc, #ff85a2);
-    }
-    .logout-btn {
-      background: linear-gradient(to right, #ff9999, #ff6666);
-    }
-    .upload-title {
-      font-size: 1.4em;
-      color: #ff85a2;
-      margin-bottom: 15px;
-    }
+    .clash-btn { background: linear-gradient(to right, #ffb6c1, #ff69b4); }
+    .v2ray-btn { background: linear-gradient(to right, #ffd1dc, #ff85a2); }
+    .logout-btn { background: linear-gradient(to right, #ff9999, #ff6666); }
     .upload-label {
       padding: 10px 20px;
       background: linear-gradient(to right, #ffb6c1, #ff69b4);
@@ -843,14 +843,26 @@ function 生成订阅页面(订阅路径, hostName) {
       color: #ff6f91;
       margin-top: 5px;
     }
+    .input-field {
+      padding: 12px;
+      border-radius: 15px;
+      border: 2px solid #ffb6c1;
+      background: #fff;
+      font-size: 1em;
+      color: #ff6f91;
+      width: 100%;
+      max-width: 300px;
+      box-sizing: border-box;
+      margin: 10px 0;
+      transition: border-color 0.3s ease;
+    }
+    .input-field:focus {
+      border-color: #ff69b4;
+      outline: none;
+    }
     @media (max-width: 600px) {
       .card { padding: 15px; max-width: 90%; }
       .card-title { font-size: 1.3em; }
-      .switch-container { gap: 10px; }
-      .toggle-row { gap: 10px; }
-      .proxy-option { width: 70px; padding: 8px 0; font-size: 0.9em; }
-      .proxy-status { font-size: 0.9em; padding: 12px; }
-      .link-box { font-size: 0.9em; padding: 12px; }
       .cute-button, .upload-label, .upload-submit { padding: 10px 20px; font-size: 0.9em; }
       .card::after { font-size: 50px; top: -15px; right: -15px; }
     }
@@ -860,11 +872,15 @@ function 生成订阅页面(订阅路径, hostName) {
   <img id="backgroundImage" class="background-media" alt="Background">
   <div class="container">
     <div class="card">
-      <h1 class="card-title">🌸 欢迎来到樱花订阅站 🌸</h1>
-      <p style="font-size: 1em;">支持 <span style="color: #ff69b4;">${小猫}${咪}</span> 和 <span style="color: #ff85a2;">${歪兔}${蕊蒽}</span> 哦~</p>
+      <h1 class="card-title" id="welcomeTitle">🌸 欢迎来到樱花订阅站 🌸</h1>
+      <p>支持 <span style="color: #ff69b4;">${小猫}${咪}</span> 和 <span style="color: #ff85a2;">${歪兔}${蕊蒽}</span> 哦~</p>
+      <select id="langSwitch" onchange="switchLang(this.value)" style="margin-top: 10px;">
+        <option value="zh">中文</option>
+        <option value="en">English</option>
+      </select>
     </div>
     <div class="card">
-      <h2 class="card-title">🌟 代理设置</h2>
+      <h2 class="card-title" id="proxyTitle">🌟 代理设置</h2>
       <div class="switch-container">
         <div class="toggle-row">
           <label>代理开关</label>
@@ -899,7 +915,7 @@ function 生成订阅页面(订阅路径, hostName) {
       </div>
     </div>
     <div class="card">
-      <h2 class="upload-title">🌟 上传你的魔法 IP</h2>
+      <h2 class="card-title">🌟 上传你的魔法 IP</h2>
       <form id="uploadForm" action="/${订阅路径}/upload" method="POST" enctype="multipart/form-data">
         <label for="ipFiles" class="upload-label">选择文件</label>
         <input type="file" id="ipFiles" name="ipFiles" accept=".txt" multiple required onchange="显示文件()" style="display: none;">
@@ -912,6 +928,27 @@ function 生成订阅页面(订阅路径, hostName) {
           <div class="progress-text" id="progressText">0%</div>
         </div>
       </form>
+    </div>
+    <div class="card">
+      <h2 class="card-title">🌟 当前节点</h2>
+      <div id="nodeList" style="text-align: left; max-height: 150px; overflow-y: auto;"></div>
+      <input type="text" id="newNode" class="input-field" placeholder="输入节点 (如 host:port#name)">
+      <button class="cute-button" onclick="addNode()">添加节点</button>
+    </div>
+    <div class="card">
+      <h2 class="card-title">⚙️ 订阅设置</h2>
+      <input type="text" id="subPath" class="input-field" value="${订阅路径}" placeholder="订阅路径">
+      <input type="text" id="uuid" class="input-field" value="${开门锁匙}" placeholder="UUID">
+      <button class="cute-button" onclick="saveSettings()">保存</button>
+    </div>
+    <div class="card">
+      <h2 class="card-title">📡 节点测试</h2>
+      <button class="cute-button" onclick="testNodes()">开始测试</button>
+      <div id="testResults" style="text-align: left; margin-top: 15px;"></div>
+    </div>
+    <div class="card">
+      <h2 class="card-title">📊 统计</h2>
+      <div id="stats">Clash 下载: <span id="clashDownloads">0</span> | V2Ray 下载: <span id="v2rayDownloads">0</span></div>
     </div>
     <div class="card">
       <div class="button-group">
@@ -930,6 +967,22 @@ function 生成订阅页面(订阅路径, hostName) {
     }
     updateBackground();
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
+
+    const lang = {
+      zh: { welcome: '🌸 欢迎来到樱花订阅站 🌸', proxy: '🌟 代理设置', upload: '🌟 上传你的魔法 IP', nodes: '🌟 当前节点', settings: '⚙️ 订阅设置', test: '📡 节点测试', stats: '📊 统计' },
+      en: { welcome: '🌸 Welcome to Sakura Subscription 🌸', proxy: '🌟 Proxy Settings', upload: '🌟 Upload Your Magic IPs', nodes: '🌟 Current Nodes', settings: '⚙️ Subscription Settings', test: '📡 Node Test', stats: '📊 Statistics' }
+    };
+    let currentLang = 'zh';
+    function switchLang(l) {
+      currentLang = l;
+      document.getElementById('welcomeTitle').textContent = lang[l].welcome;
+      document.querySelectorAll('.card-title')[1].textContent = lang[l].proxy;
+      document.querySelectorAll('.card-title')[4].textContent = lang[l].upload;
+      document.querySelectorAll('.card-title')[5].textContent = lang[l].nodes;
+      document.querySelectorAll('.card-title')[6].textContent = lang[l].settings;
+      document.querySelectorAll('.card-title')[7].textContent = lang[l].test;
+      document.querySelectorAll('.card-title')[8].textContent = lang[l].stats;
+    }
 
     let proxyEnabled = localStorage.getItem('proxyEnabled') === 'true';
     let proxyType = localStorage.getItem('proxyType') || 'reverse';
@@ -955,27 +1008,21 @@ function 生成订阅页面(订阅路径, hostName) {
 
     function updateProxyCapsuleUI() {
       const options = document.querySelectorAll('.proxy-option');
-      options.forEach(opt => {
-        opt.classList.toggle('active', opt.dataset.type === proxyType);
-      });
+      options.forEach(opt => opt.classList.toggle('active', opt.dataset.type === proxyType));
       document.getElementById('proxyCapsule').style.display = proxyEnabled ? 'flex' : 'none';
     }
 
     function updateProxyStatus() {
       const statusElement = document.getElementById('proxyStatus');
       if (!proxyEnabled) {
-        statusElement.textContent = '直连';
+        statusElement.textContent = currentLang === 'zh' ? '直连' : 'Direct';
         statusElement.className = 'proxy-status direct';
       } else {
         fetch('/get-proxy-status')
           .then(response => response.json())
           .then(data => {
-            statusElement.textContent = data.status;
+            statusElement.textContent = currentLang === 'zh' ? data.status : (data.status === '直连' ? 'Direct' : data.status);
             statusElement.className = 'proxy-status ' + (data.status === '直连' ? 'direct' : 'success');
-          })
-          .catch(() => {
-            statusElement.textContent = '直连';
-            statusElement.className = 'proxy-status direct';
           });
       }
     }
@@ -984,8 +1031,7 @@ function 生成订阅页面(订阅路径, hostName) {
       const formData = new FormData();
       formData.append('proxyEnabled', proxyEnabled);
       formData.append('proxyType', proxyType);
-      fetch('/set-proxy-state', { method: 'POST', body: formData })
-        .then(() => updateProxyStatus());
+      fetch('/set-proxy-state', { method: 'POST', body: formData }).then(updateProxyStatus);
     }
 
     function 导入小猫咪(订阅路径, hostName) {
@@ -1024,7 +1070,7 @@ function 生成订阅页面(订阅路径, hostName) {
       const formData = new FormData(form);
 
       if (!formData.getAll('ipFiles').length) {
-        alert('小仙女，请先选择文件哦~');
+        alert(currentLang === 'zh' ? '小仙女，请先选择文件哦~' : 'Please select a file first~');
         return;
       }
 
@@ -1049,14 +1095,10 @@ function 生成订阅页面(订阅路径, hostName) {
         try {
           const response = JSON.parse(xhr.responseText);
           if (xhr.status === 200) {
-            if (response.message) {
-              setTimeout(() => {
-                alert(response.message);
-                window.location.href = response.Location || '/${订阅路径}';
-              }, 500);
-            } else {
-              throw new Error('响应格式错误');
-            }
+            setTimeout(() => {
+              alert(response.message);
+              window.location.href = response.Location || '/${订阅路径}';
+            }, 500);
           } else {
             throw new Error(response.error || '未知错误');
           }
@@ -1068,11 +1110,54 @@ function 生成订阅页面(订阅路径, hostName) {
 
       xhr.onerror = function() {
         progressContainer.style.display = 'none';
-        alert('网络坏掉了，小仙女请检查一下哦~');
+        alert(currentLang === 'zh' ? '网络坏掉了，小仙女请检查一下哦~' : 'Network error, please check~');
       };
 
       xhr.send(formData);
     }
+
+    async function fetchNodes() {
+      const res = await fetch('/config/nodes');
+      const nodes = await res.json();
+      document.getElementById('nodeList').innerHTML = nodes.length ? nodes.map(n => \`<div>\${n} <button class="cute-button" style="background: #ff9999; padding: 5px 10px;" onclick="deleteNode('\${n}')">删除</button></div>\`).join('') : '暂无节点';
+    }
+    async function addNode() {
+      const node = document.getElementById('newNode').value;
+      if (!node) return alert(currentLang === 'zh' ? '请输入节点哦~' : 'Please enter a node~');
+      const res = await fetch('/config/add-node', { method: 'POST', body: JSON.stringify({ node }), headers: { 'Content-Type': 'application/json' } });
+      if (res.ok) { document.getElementById('newNode').value = ''; fetchNodes(); } else alert('添加失败啦~');
+    }
+    async function deleteNode(node) {
+      const res = await fetch('/config/delete-node', { method: 'POST', body: JSON.stringify({ node }), headers: { 'Content-Type': 'application/json' } });
+      if (res.ok) fetchNodes(); else alert('删除失败啦~');
+    }
+    fetchNodes();
+
+    async function saveSettings() {
+      const subPath = document.getElementById('subPath').value;
+      const uuid = document.getElementById('uuid').value;
+      const res = await fetch('/config/settings', { 
+        method: 'POST', 
+        body: JSON.stringify({ subPath, uuid }), 
+        headers: { 'Content-Type': 'application/json' } 
+      });
+      if (res.ok) alert(currentLang === 'zh' ? '保存成功！请刷新页面~' : 'Saved successfully! Please refresh~'); else alert('保存失败啦~');
+    }
+
+    async function testNodes() {
+      document.getElementById('testResults').innerHTML = currentLang === 'zh' ? '测试中...' : 'Testing...';
+      const res = await fetch('/config/test-nodes');
+      const results = await res.json();
+      document.getElementById('testResults').innerHTML = results.map(r => \`<div>\${r.node}: \${r.delay}ms</div>\`).join('');
+    }
+
+    async function fetchStats() {
+      const res = await fetch('/config/stats');
+      const { clashDownloads, v2rayDownloads } = await res.json();
+      document.getElementById('clashDownloads').textContent = clashDownloads;
+      document.getElementById('v2rayDownloads').textContent = v2rayDownloads;
+    }
+    fetchStats();
   </script>
 </body>
 </html>
@@ -1152,9 +1237,6 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
       border-color: #ff69b4;
       outline: none;
     }
-    .login-form input::placeholder {
-      color: #ffb6c1;
-    }
     .login-form button {
       padding: 12px;
       background: linear-gradient(to right, #ffb6c1, #ff69b4);
@@ -1191,12 +1273,6 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
       0%, 100% { opacity: 1; }
       50% { opacity: 0.5; }
     }
-    @media (max-width: 600px) {
-      .content { padding: 20px; }
-      h1 { font-size: 1.5em; }
-      .login-form { max-width: 250px; }
-      .login-form input, .login-form button { font-size: 0.9em; padding: 10px; }
-    }
   </style>
 </head>
 <body>
@@ -1205,7 +1281,7 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
     <h1>🌸樱花面板🌸</h1>
     ${锁定状态 ? `
     <div class="lock-message">
-      密码输错太多次啦，请等待 <span id="countdown" aria-live="polite">${剩余时间}</span> 秒哦~
+      密码输错太多次啦，请等待 <span id="countdown">${剩余时间}</span> 秒哦~
     </div>
     ` : `
     <form class="login-form" action="/login/submit" method="POST">
@@ -1225,7 +1301,6 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
       const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
       bgImage.src = isDarkMode ? darkBg : lightBg;
     }
-
     updateBackground();
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
 
@@ -1248,8 +1323,6 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
 
       let timer = setInterval(updateCountdown, 1000);
       updateCountdown();
-      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') updateCountdown(); });
-      window.addEventListener('load', () => { if (localStorage.getItem(storageKey)) updateCountdown(); });
     }
   </script>
 </body>
@@ -1316,16 +1389,6 @@ function 生成KV未绑定提示页面() {
       color: #ff1493;
       font-weight: bold;
     }
-    .instruction {
-      margin-top: 20px;
-      font-size: 1em;
-      color: #ff69b4;
-    }
-    @media (max-width: 600px) {
-      .content { padding: 20px; }
-      h1 { font-size: 1.5em; }
-      p { font-size: 0.95em; }
-    }
   </style>
 </head>
 <body>
@@ -1333,7 +1396,6 @@ function 生成KV未绑定提示页面() {
   <div class="content">
     <h1>💔 哎呀，KV没绑定哦</h1>
     <p>小仙女，你的 <span class="highlight">Cloudflare KV 存储空间</span> 还没绑定呢~<br>快去 <span class="highlight">Cloudflare Workers</span> 设置里绑一个 KV 命名空间（比如 <span class="highlight">LOGIN_STATE</span>），然后重新部署一下吧！</p>
-    <div class="instruction">绑定好后，访问 <span class="highlight">/config</span> 就可以进入订阅啦~</div>
   </div>
   <script>
     const lightBg = '${白天背景壁纸}';
@@ -1344,7 +1406,6 @@ function 生成KV未绑定提示页面() {
       const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
       bgImage.src = isDarkMode ? darkBg : lightBg;
     }
-
     updateBackground();
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
   </script>
