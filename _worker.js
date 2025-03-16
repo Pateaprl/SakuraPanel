@@ -26,6 +26,10 @@ let 蕊蒽 = 'rayng';
 let 白天背景壁纸 = 'https://raw.githubusercontent.com/Alien-Et/ips/refs/heads/main/image/day.jpg';
 let 暗黑背景壁纸 = 'https://raw.githubusercontent.com/Alien-Et/ips/refs/heads/main/image/night.jpg';
 
+// Cloudflare Token 和 Account ID（硬编码，用于测试）
+const CF_TOKEN = 's4gkEsix6avx1uVoJVcY4jkduSMrs1dg58l4Hpsf';
+const CF_ACCOUNT_ID = 'f6c25ec540d7997552a905ee062d08a7';
+
 function 创建HTML响应(内容, 状态码 = 200) {
   return new Response(内容, {
     status: 状态码,
@@ -132,6 +136,43 @@ async function 检查锁定(env, 设备标识) {
     被锁定,
     剩余时间: 被锁定 ? Math.ceil((Number(锁定时间戳) - 当前时间) / 1000) : 0
   };
+}
+
+// 获取Cloudflare请求余量
+async function getCloudflareRequests() {
+  const url = `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/analytics/requests`;
+  const headers = {
+    'Authorization': `Bearer ${CF_TOKEN}`,
+    'Content-Type': 'application/json'
+  };
+  const response = await fetch(url, { headers });
+  if (!response.ok) {
+    throw new Error(`Cloudflare API请求失败: ${response.statusText}`);
+  }
+  const data = await response.json();
+  return data;
+}
+
+// 生成流量信息
+async function getTrafficInfo() {
+  try {
+    const data = await getCloudflareRequests();
+    // 注意：实际字段可能不同，需根据Cloudflare API文档调整
+    const usedRequests = data.result.totals.requests || 0; // 已使用请求数
+    const totalRequests = 100000; // 假设免费计划的总请求数为10万
+    return {
+      total: totalRequests,
+      used: usedRequests,
+      expire: "2099-12-31"
+    };
+  } catch (error) {
+    console.error(`获取流量信息失败: ${error.message}`);
+    return {
+      total: 100000,
+      used: 0,
+      expire: "2099-12-31"
+    };
+  }
 }
 
 export default {
@@ -261,6 +302,9 @@ export default {
               else if (代理类型 === 'socks5' && SOCKS5账号) status = 'SOCKS5';
             }
             return 创建JSON响应({ status });
+          case '/traffic-info':
+            const trafficInfo = await getTrafficInfo();
+            return 创建JSON响应(trafficInfo);
           default:
             url.hostname = 伪装域名;
             url.protocol = 'https:';
@@ -562,7 +606,7 @@ function 生成订阅页面(订阅路径, hostName) {
       text-align: center;
       transition: transform 0.3s ease, box-shadow 0.3s ease;
       position: relative;
-      overflow: visible; /* 改为 visible 以允许蝴蝶结超出边界 */
+      overflow: visible;
     }
     .card::before {
       content: '';
@@ -577,18 +621,17 @@ function 生成订阅页面(订阅路径, hostName) {
     .card:hover {
       transform: scale(1.03);
     }
-    /* 添加蝴蝶结样式 */
     .card::after {
       content: '🎀';
       position: absolute;
       top: -20px;
       right: -20px;
-      font-size: 60px; /* 增大蝴蝶结 */
+      font-size: 60px;
       color: #ff69b4;
       transform: rotate(20deg);
-      z-index: 1; /* 确保蝴蝶结在卡片内容之上 */
+      z-index: 1;
       text-shadow: 2px 2px 4px rgba(255, 105, 180, 0.3);
-      pointer-events: none; /* 防止蝴蝶结干扰交互 */
+      pointer-events: none;
     }
     @media (prefers-color-scheme: dark) {
       .card::after {
