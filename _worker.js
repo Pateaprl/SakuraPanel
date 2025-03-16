@@ -20,7 +20,7 @@ let 小猫 = 'cla';
 let 咪 = 'sh';
 let 符号 = '://';
 let 歪啦 = 'vl';
-let 伊埃斯 = 'ess'
+let 伊埃斯 = 'ess';
 let 歪兔 = 'v2';
 let 蕊蒽 = 'rayng';
 let 白天背景壁纸 = 'https://raw.githubusercontent.com/Alien-Et/ips/refs/heads/main/image/day.jpg';
@@ -274,12 +274,11 @@ export default {
             const endTime = Date.now();
             const domain = url.hostname;
             const duration = endTime - startTime;
-            const latency = response.headers.get('cf-ray') ? duration : '未知'; // 简化延迟计算
-            const status = response.ok ? '成功' : '失败';
+            const latency = response.headers.get('cf-ray') ? duration : '未知';
+            const connStatus = response.ok ? '成功' : '失败'; // 重命名 status 为 connStatus
 
-            // 更新最近连接记录
             recentConnections = [
-              { domain, duration: `${duration}ms`, latency: `${latency}ms`, status, timestamp: new Date().toISOString() },
+              { domain, duration: `${duration}ms`, latency: `${latency}ms`, status: connStatus, timestamp: new Date().toISOString() },
               ...recentConnections.slice(0, 9)
             ];
             return response;
