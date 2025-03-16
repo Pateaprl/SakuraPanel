@@ -1,6 +1,5 @@
 import { connect } from 'cloudflare:sockets';
 
-// 原始变量
 let 订阅路径 = "config";
 let 开门锁匙 = "03978e2f-2129-4c0c-8f15-22175dd0aba6";
 let 优选TXT路径 = [
@@ -27,40 +26,6 @@ let 蕊蒽 = 'rayng';
 let 白天背景壁纸 = 'https://raw.githubusercontent.com/Alien-Et/ips/refs/heads/main/image/day.jpg';
 let 暗黑背景壁纸 = 'https://raw.githubusercontent.com/Alien-Et/ips/refs/heads/main/image/night.jpg';
 
-// Cloudflare API 配置
-const CF_API_TOKEN = 's4gkEsix6avx1uVoJVcY4jkduSMrs1dg58l4Hpsf'; // 建议移到 env.CF_API_TOKEN
-const ACCOUNT_ID = 'f6c25ec540d7997552a905ee062d08a7'; // 你的 Account ID
-const FREE_REQUEST_LIMIT = 1000000; // 默认免费请求上限，可调整
-
-// 实时拉取请求使用量的函数
-async function fetchRequestUsage() {
-  try {
-    const url = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/analytics/dashboard?since=-1440&until=0`; // 过去 24 小时
-    const response = await fetch(url, {
-      headers: { 'Authorization': `Bearer ${CF_API_TOKEN}` }
-    });
-    if (!response.ok) throw new Error(`API 请求失败: ${response.status}`);
-    const data = await response.json();
-    const totalRequests = data.result.totals.requests.all || 0;
-    const remainingRequests = FREE_REQUEST_LIMIT - totalRequests;
-
-    return {
-      date: new Date().toISOString().split('T')[0],
-      total_requests: FREE_REQUEST_LIMIT,
-      remaining_requests: remainingRequests >= 0 ? remainingRequests : 0
-    };
-  } catch (error) {
-    console.error(`API 调用错误: ${error.message}`);
-    return {
-      date: new Date().toISOString().split('T')[0],
-      total_requests: FREE_REQUEST_LIMIT,
-      remaining_requests: 'N/A',
-      error: error.message
-    };
-  }
-}
-
-// 创建响应函数（不变）
 function 创建HTML响应(内容, 状态码 = 200) {
   return new Response(内容, {
     status: 状态码,
@@ -93,7 +58,6 @@ function 创建JSON响应(数据, 状态码 = 200, 额外头 = {}) {
   });
 }
 
-// 加载节点和配置（不变）
 async function 加载节点和配置(env, hostName) {
   try {
     const 手动节点缓存 = await env.LOGIN_STATE.get('manual_preferred_ips');
@@ -128,7 +92,7 @@ async function 加载节点和配置(env, hostName) {
         const 新版本 = String(Date.now());
         await env.LOGIN_STATE.put('ip_preferred_ips', JSON.stringify(合并节点列表), { expirationTtl: 86400 });
         await env.LOGIN_STATE.put('ip_preferred_ips_version', 新版本);
-        await env.LOGIN_STATE.put('config_clash', await 生成猫咪配置(hostName, env), { expirationTtl: 86400 });
+        await env.LOGIN_STATE.put('config_clash', 生成猫咪配置(hostName), { expirationTtl: 86400 });
         await env.LOGIN_STATE.put('config_clash_version', 新版本);
         await env.LOGIN_STATE.put('config_v2ray', 生成备用配置(hostName), { expirationTtl: 86400 });
         await env.LOGIN_STATE.put('config_v2ray_version', 新版本);
@@ -143,7 +107,6 @@ async function 加载节点和配置(env, hostName) {
   }
 }
 
-// 获取配置（修改以支持实时数据）
 async function 获取配置(env, 类型, hostName) {
   const 缓存键 = 类型 === 'clash' ? 'config_clash' : 'config_v2ray';
   const 版本键 = `${缓存键}_version`;
@@ -151,17 +114,16 @@ async function 获取配置(env, 类型, hostName) {
   const 配置版本 = await env.LOGIN_STATE.get(版本键) || '0';
   const 节点版本 = await env.LOGIN_STATE.get('ip_preferred_ips_version') || '0';
 
-  if (缓存配置 && 配置版本 === 节点版本 && 类型 !== 'clash') {
+  if (缓存配置 && 配置版本 === 节点版本) {
     return 缓存配置;
   }
 
-  const 新配置 = 类型 === 'clash' ? await 生成猫咪配置(hostName, env) : 生成备用配置(hostName);
+  const 新配置 = 类型 === 'clash' ? 生成猫咪配置(hostName) : 生成备用配置(hostName);
   await env.LOGIN_STATE.put(缓存键, 新配置, { expirationTtl: 86400 });
   await env.LOGIN_STATE.put(版本键, 节点版本);
   return 新配置;
 }
 
-// 检查锁定（不变）
 async function 检查锁定(env, 设备标识) {
   const 锁定时间戳 = await env.LOGIN_STATE.get(`lock_${设备标识}`);
   const 当前时间 = Date.now();
@@ -172,144 +134,6 @@ async function 检查锁定(env, 设备标识) {
   };
 }
 
-// 生成猫咪配置（添加实时拉取）
-async function 生成猫咪配置(hostName, env) {
-  const 节点列表 = 优选节点.length ? 优选节点 : [`${hostName}:443`];
-  const 郭嘉分组 = {};
-
-  // 实时拉取请求使用量
-  const usageData = await fetchRequestUsage();
-  let usageInfo = usageData.error
-    ? `# Cloudflare Usage (${usageData.date}): Error - ${usageData.error}`
-    : `# Cloudflare Usage (${usageData.date}): ${usageData.remaining_requests} / ${usageData.total_requests} requests remaining`;
-
-  节点列表.forEach((节点, 索引) => {
-    const [主内容, tls] = 节点.split("@");
-    const [地址端口, 节点名字 = 节点名称] = 主内容.split("#");
-    const [, 地址, 端口 = "443"] = 地址端口.match(/^\[(.*?)\](?::(\d+))?$/) || 地址端口.match(/^(.*?)(?::(\d+))?$/);
-    const 修正地址 = 地址.includes(":") ? 地址.replace(/^\[|\]$/g, '') : 地址;
-    const TLS开关 = tls === 'notls' ? 'false' : 'true';
-    const 郭嘉 = 节点名字.split('-')[0] || '默认';
-    const 地址类型 = 修正地址.includes(":") ? "IPv6" : "IPv4";
-
-    郭嘉分组[郭嘉] = 郭嘉分组[郭嘉] || { IPv4: [], IPv6: [] };
-    郭嘉分组[郭嘉][地址类型].push({
-      name: `${节点名字}-${郭嘉分组[郭嘉][地址类型].length + 1}`,
-      config: `- name: "${节点名字}-${郭嘉分组[郭嘉][地址类型].length + 1}"
-  type: ${歪啦}${伊埃斯}
-  server: ${修正地址}
-  port: ${端口}
-  uuid: ${开门锁匙}
-  udp: false
-  tls: ${TLS开关}
-  sni: ${hostName}
-  network: ws
-  ws-opts:
-    path: "/?ed=2560"
-    headers:
-      Host: ${hostName}`
-    });
-  });
-
-  const 郭嘉列表 = Object.keys(郭嘉分组).sort();
-  const 节点配置 = 郭嘉列表.flatMap(郭嘉 => [...郭嘉分组[郭嘉].IPv4, ...郭嘉分组[郭嘉].IPv6].map(n => n.config)).join("\n");
-  const 郭嘉分组配置 = 郭嘉列表.map(郭嘉 => `
-  - name: "${郭嘉}"
-    type: url-test
-    url: "http://www.gstatic.com/generate_204"
-    interval: 120
-    tolerance: 50
-    proxies:
-${[...郭嘉分组[郭嘉].IPv4, ...郭嘉分组[郭嘉].IPv6].map(n => `      - "${n.name}"`).join("\n")}
-`).join("");
-
-  return `# Generated at: ${new Date().toISOString()}
-${usageInfo}
-mixed-port: 7890
-allow-lan: true
-mode: Rule
-log-level: info
-external-controller: :9090
-dns:
-  enable: true
-  listen: 0.0.0.0:53
-  default-nameserver:
-    - 8.8.8.8
-    - 1.1.1.1
-  enhanced-mode: fake-ip
-  nameserver:
-    - tls://8.8.8.8
-    - tls://1.1.1.1
-  fallback:
-    - tls://9.9.9.9
-    - tls://1.0.0.1
-  fallback-filter:
-    geoip: true
-    ipcidr:
-      - 240.0.0.0/4
-
-proxies:
-${节点配置}
-
-proxy-groups:
-  - name: "🚀节点选择"
-    type: select
-    proxies:
-      - "🤪自动选择"
-      - "🥰负载均衡"
-${郭嘉列表.map(郭嘉 => `      - "${郭嘉}"`).join("\n")}
-
-  - name: "🤪自动选择"
-    type: url-test
-    url: "http://www.gstatic.com/generate_204"
-    interval: 120
-    tolerance: 50
-    proxies:
-${郭嘉列表.map(郭嘉 => `      - "${郭嘉}"`).join("\n")}
-
-  - name: "🥰负载均衡"
-    type: load-balance
-    strategy: round-robin
-    proxies:
-${郭嘉列表.map(郭嘉 => `      - "${郭嘉}"`).join("\n")}
-
-${郭嘉分组配置}
-
-rules:
-  - GEOIP,LAN,DIRECT
-  - DOMAIN-SUFFIX,cn,DIRECT
-  - GEOIP,CN,DIRECT
-  - MATCH,🚀节点选择
-`;
-}
-
-// 生成备用配置（不变）
-function 生成备用配置(hostName) {
-  const 节点列表 = 优选节点.length ? 优选节点 : [`${hostName}:443`];
-  const 配置列表 = 节点列表.map(节点 => {
-    try {
-      const [主内容, tls = 'tls'] = 节点.split("@");
-      const [地址端口, 节点名字 = 节点名称] = 主内容.split("#");
-      const match = 地址端口.match(/^(?:\[([0-9a-fA-F:]+)\]|([^:]+))(?:\:(\d+))?$/);
-      if (!match) return null;
-      const 地址 = match[1] || match[2];
-      const 端口 = match[3] || "443";
-      if (!地址) return null;
-      const 修正地址 = 地址.includes(":") ? `[${地址}]` : 地址;
-      const TLS开关 = tls === 'notls' ? 'none' : 'tls';
-      const encodedPath = encodeURIComponent('/?ed=2560');
-      return `${歪啦}${伊埃斯}://${开门锁匙}@${修正地址}:${端口}?encryption=none&security=${TLS开关}&type=ws&host=${hostName}&path=${encodedPath}&sni=${hostName}#${节点名字}`;
-    } catch (error) {
-      console.error(`生成V2Ray节点配置失败: ${节点}, 错误: ${error.message}`);
-      return null;
-    }
-  }).filter(Boolean);
-
-  return `# Generated at: ${new Date().toISOString()}
-${配置列表.length ? 配置列表.join("\n") : `${歪啦}${伊埃斯}://${开门锁匙}@${hostName}:443?encryption=none&security=tls&type=ws&host=${hostName}&path=${encodeURIComponent('/?ed=2560')}&sni=${hostName}#默认节点`}`;
-}
-
-// 主处理逻辑
 export default {
   async fetch(请求, env) {
     try {
@@ -369,7 +193,7 @@ export default {
             return 创建重定向响应('/login', { 'Set-Cookie': 'token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Strict' });
           case `/${订阅路径}/${小猫}${咪}`:
             await 加载节点和配置(env, hostName);
-            const clashConfig = await 生成猫咪配置(hostName, env); // 实时生成
+            const clashConfig = await 获取配置(env, 'clash', hostName);
             return new Response(clashConfig, { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8" } });
           case `/${订阅路径}/${歪兔}${蕊蒽}`:
             await 加载节点和配置(env, hostName);
@@ -410,7 +234,7 @@ export default {
               await env.LOGIN_STATE.put('manual_preferred_ips', JSON.stringify(uniqueIpList), { expirationTtl: 86400 });
               const 新版本 = String(Date.now());
               await env.LOGIN_STATE.put('ip_preferred_ips_version', 新版本);
-              await env.LOGIN_STATE.put('config_clash', await 生成猫咪配置(hostName, env), { expirationTtl: 86400 });
+              await env.LOGIN_STATE.put('config_clash', 生成猫咪配置(hostName), { expirationTtl: 86400 });
               await env.LOGIN_STATE.put('config_clash_version', 新版本);
               await env.LOGIN_STATE.put('config_v2ray', 生成备用配置(hostName), { expirationTtl: 86400 });
               await env.LOGIN_STATE.put('config_v2ray_version', 新版本);
@@ -454,7 +278,6 @@ export default {
   }
 };
 
-// WebSocket 相关函数（不变）
 async function 升级请求(请求, env) {
   const 创建接口 = new WebSocketPair();
   const [客户端, 服务端] = Object.values(创建接口);
@@ -494,7 +317,7 @@ async function 解析头(数据, env) {
     default: return null;
   }
 
-  const 初始数据 = 数据.slice(地址信息索引 + (地址类型 === 2 ? 数据数组[地址索引] + 1 : 地址类型 === 1 ? 4 : 16));
+  const 初始数据 = 数据.slice(地址信息索引 + (地址类型 === 2 ? 数据数组[地址信息索引] + 1 : 地址类型 === 1 ? 4 : 16));
   const TCP接口 = await 智能连接(地址, 端口, 地址类型, env);
   return { TCP接口, 初始数据 };
 }
@@ -639,7 +462,6 @@ async function 解析SOCKS5账号(SOCKS5) {
   return { username, password, hostname, port };
 }
 
-// HTML 生成函数（不变）
 function 生成订阅页面(订阅路径, hostName) {
   return `
 <!DOCTYPE html>
@@ -740,7 +562,7 @@ function 生成订阅页面(订阅路径, hostName) {
       text-align: center;
       transition: transform 0.3s ease, box-shadow 0.3s ease;
       position: relative;
-      overflow: visible;
+      overflow: visible; /* 改为 visible 以允许蝴蝶结超出边界 */
     }
     .card::before {
       content: '';
@@ -755,17 +577,18 @@ function 生成订阅页面(订阅路径, hostName) {
     .card:hover {
       transform: scale(1.03);
     }
+    /* 添加蝴蝶结样式 */
     .card::after {
       content: '🎀';
       position: absolute;
       top: -20px;
       right: -20px;
-      font-size: 60px;
+      font-size: 60px; /* 增大蝴蝶结 */
       color: #ff69b4;
       transform: rotate(20deg);
-      z-index: 1;
+      z-index: 1; /* 确保蝴蝶结在卡片内容之上 */
       text-shadow: 2px 2px 4px rgba(255, 105, 180, 0.3);
-      pointer-events: none;
+      pointer-events: none; /* 防止蝴蝶结干扰交互 */
     }
     @media (prefers-color-scheme: dark) {
       .card::after {
@@ -1528,4 +1351,132 @@ function 生成KV未绑定提示页面() {
 </body>
 </html>
   `;
+}
+
+function 生成猫咪配置(hostName) {
+  const 节点列表 = 优选节点.length ? 优选节点 : [`${hostName}:443`];
+  const 郭嘉分组 = {};
+
+  节点列表.forEach((节点, 索引) => {
+    const [主内容, tls] = 节点.split("@");
+    const [地址端口, 节点名字 = 节点名称] = 主内容.split("#");
+    const [, 地址, 端口 = "443"] = 地址端口.match(/^\[(.*?)\](?::(\d+))?$/) || 地址端口.match(/^(.*?)(?::(\d+))?$/);
+    const 修正地址 = 地址.includes(":") ? 地址.replace(/^\[|\]$/g, '') : 地址;
+    const TLS开关 = tls === 'notls' ? 'false' : 'true';
+    const 郭嘉 = 节点名字.split('-')[0] || '默认';
+    const 地址类型 = 修正地址.includes(":") ? "IPv6" : "IPv4";
+
+    郭嘉分组[郭嘉] = 郭嘉分组[郭嘉] || { IPv4: [], IPv6: [] };
+    郭嘉分组[郭嘉][地址类型].push({
+      name: `${节点名字}-${郭嘉分组[郭嘉][地址类型].length + 1}`,
+      config: `- name: "${节点名字}-${郭嘉分组[郭嘉][地址类型].length + 1}"
+  type: ${歪啦}${伊埃斯}
+  server: ${修正地址}
+  port: ${端口}
+  uuid: ${开门锁匙}
+  udp: false
+  tls: ${TLS开关}
+  sni: ${hostName}
+  network: ws
+  ws-opts:
+    path: "/?ed=2560"
+    headers:
+      Host: ${hostName}`
+    });
+  });
+
+  const 郭嘉列表 = Object.keys(郭嘉分组).sort();
+  const 节点配置 = 郭嘉列表.flatMap(郭嘉 => [...郭嘉分组[郭嘉].IPv4, ...郭嘉分组[郭嘉].IPv6].map(n => n.config)).join("\n");
+  const 郭嘉分组配置 = 郭嘉列表.map(郭嘉 => `
+  - name: "${郭嘉}"
+    type: url-test
+    url: "http://www.gstatic.com/generate_204"
+    interval: 120
+    tolerance: 50
+    proxies:
+${[...郭嘉分组[郭嘉].IPv4, ...郭嘉分组[郭嘉].IPv6].map(n => `      - "${n.name}"`).join("\n")}
+`).join("");
+
+  return `# Generated at: ${new Date().toISOString()}
+mixed-port: 7890
+allow-lan: true
+mode: Rule
+log-level: info
+external-controller: :9090
+dns:
+  enable: true
+  listen: 0.0.0.0:53
+  default-nameserver:
+    - 8.8.8.8
+    - 1.1.1.1
+  enhanced-mode: fake-ip
+  nameserver:
+    - tls://8.8.8.8
+    - tls://1.1.1.1
+  fallback:
+    - tls://9.9.9.9
+    - tls://1.0.0.1
+  fallback-filter:
+    geoip: true
+    ipcidr:
+      - 240.0.0.0/4
+
+proxies:
+${节点配置}
+
+proxy-groups:
+  - name: "🚀节点选择"
+    type: select
+    proxies:
+      - "🤪自动选择"
+      - "🥰负载均衡"
+${郭嘉列表.map(郭嘉 => `      - "${郭嘉}"`).join("\n")}
+
+  - name: "🤪自动选择"
+    type: url-test
+    url: "http://www.gstatic.com/generate_204"
+    interval: 120
+    tolerance: 50
+    proxies:
+${郭嘉列表.map(郭嘉 => `      - "${郭嘉}"`).join("\n")}
+
+  - name: "🥰负载均衡"
+    type: load-balance
+    strategy: round-robin
+    proxies:
+${郭嘉列表.map(郭嘉 => `      - "${郭嘉}"`).join("\n")}
+
+${郭嘉分组配置}
+
+rules:
+  - GEOIP,LAN,DIRECT
+  - DOMAIN-SUFFIX,cn,DIRECT
+  - GEOIP,CN,DIRECT
+  - MATCH,🚀节点选择
+`;
+}
+
+function 生成备用配置(hostName) {
+  const 节点列表 = 优选节点.length ? 优选节点 : [`${hostName}:443`];
+  const 配置列表 = 节点列表.map(节点 => {
+    try {
+      const [主内容, tls = 'tls'] = 节点.split("@");
+      const [地址端口, 节点名字 = 节点名称] = 主内容.split("#");
+      const match = 地址端口.match(/^(?:\[([0-9a-fA-F:]+)\]|([^:]+))(?:\:(\d+))?$/);
+      if (!match) return null;
+      const 地址 = match[1] || match[2];
+      const 端口 = match[3] || "443";
+      if (!地址) return null;
+      const 修正地址 = 地址.includes(":") ? `[${地址}]` : 地址;
+      const TLS开关 = tls === 'notls' ? 'none' : 'tls';
+      const encodedPath = encodeURIComponent('/?ed=2560');
+      return `${歪啦}${伊埃斯}://${开门锁匙}@${修正地址}:${端口}?encryption=none&security=${TLS开关}&type=ws&host=${hostName}&path=${encodedPath}&sni=${hostName}#${节点名字}`;
+    } catch (error) {
+      console.error(`生成V2Ray节点配置失败: ${节点}, 错误: ${error.message}`);
+      return null;
+    }
+  }).filter(Boolean);
+
+  return `# Generated at: ${new Date().toISOString()}
+${配置列表.length ? 配置列表.join("\n") : `${歪啦}${伊埃斯}://${开门锁匙}@${hostName}:443?encryption=none&security=tls&type=ws&host=${hostName}&path=${encodeURIComponent('/?ed=2560')}&sni=${hostName}#默认节点`}`;
 }
