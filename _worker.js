@@ -20,11 +20,14 @@ let 小猫 = 'cla';
 let 咪 = 'sh';
 let 符号 = '://';
 let 歪啦 = 'vl';
-let 伊埃斯 = 'ess';
+let 伊埃斯 = 'ess'
 let 歪兔 = 'v2';
 let 蕊蒽 = 'rayng';
 let 白天背景壁纸 = 'https://raw.githubusercontent.com/Alien-Et/ips/refs/heads/main/image/day.jpg';
 let 暗黑背景壁纸 = 'https://raw.githubusercontent.com/Alien-Et/ips/refs/heads/main/image/night.jpg';
+
+// 全局存储最近十个连接
+let recentConnections = [];
 
 function 创建HTML响应(内容, 状态码 = 200) {
   return new Response(内容, {
@@ -261,10 +264,25 @@ export default {
               else if (代理类型 === 'socks5' && SOCKS5账号) status = 'SOCKS5';
             }
             return 创建JSON响应({ status });
+          case '/get-recent-connections':
+            return 创建JSON响应(recentConnections);
           default:
+            const startTime = Date.now();
             url.hostname = 伪装域名;
             url.protocol = 'https:';
-            return fetch(new Request(url, 请求));
+            const response = await fetch(new Request(url, 请求));
+            const endTime = Date.now();
+            const domain = url.hostname;
+            const duration = endTime - startTime;
+            const latency = response.headers.get('cf-ray') ? duration : '未知'; // 简化延迟计算
+            const status = response.ok ? '成功' : '失败';
+
+            // 更新最近连接记录
+            recentConnections = [
+              { domain, duration: `${duration}ms`, latency: `${latency}ms`, status, timestamp: new Date().toISOString() },
+              ...recentConnections.slice(0, 9)
+            ];
+            return response;
         }
       } else if (请求头 === 'websocket') {
         反代地址 = env.PROXYIP || 反代地址;
@@ -481,66 +499,24 @@ function 生成订阅页面(订阅路径, hostName) {
       transition: background 0.5s ease;
     }
     @media (prefers-color-scheme: light) {
-      body {
-        background: linear-gradient(135deg, #ffe6f0, #fff0f5);
-      }
-      .card {
-        background: rgba(255, 245, 247, 0.9);
-        box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3);
-      }
-      .card::before {
-        border: 2px dashed #ffb6c1;
-      }
-      .card:hover {
-        box-shadow: 0 10px 25px rgba(255, 182, 193, 0.5);
-      }
-      .link-box, .proxy-status {
-        background: rgba(255, 240, 245, 0.9);
-        border: 2px dashed #ffb6c1;
-      }
-      .file-item {
-        background: rgba(255, 245, 247, 0.9);
-      }
-      .status-box {
-        background: rgba(255, 240, 245, 0.9);
-        border: 2px dashed #ffb6c1;
-      }
+      body { background: linear-gradient(135deg, #ffe6f0, #fff0f5); }
+      .card { background: rgba(255, 245, 247, 0.9); box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3); }
+      .card::before { border: 2px dashed #ffb6c1; }
+      .card:hover { box-shadow: 0 10px 25px rgba(255, 182, 193, 0.5); }
+      .link-box, .proxy-status { background: rgba(255, 240, 245, 0.9); border: 2px dashed #ffb6c1; }
+      .file-item { background: rgba(255, 245, 247, 0.9); }
+      .connection-table { background: rgba(255, 240, 245, 0.9); border: 2px dashed #ffb6c1; }
     }
     @media (prefers-color-scheme: dark) {
-      body {
-        background: linear-gradient(135deg, #1e1e2f, #2a2a3b);
-      }
-      .card {
-        background: rgba(30, 30, 30, 0.9);
-        color: #ffd1dc;
-        box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2);
-      }
-      .card::before {
-        border: 2px dashed #ff85a2;
-      }
-      .card:hover {
-        box-shadow: 0 10px 25px rgba(255, 133, 162, 0.4);
-      }
-      .link-box, .proxy-status {
-        background: rgba(40, 40, 40, 0.9);
-        border: 2px dashed #ff85a2;
-        color: #ffd1dc;
-      }
-      .link-box a {
-        color: #ff85a2;
-      }
-      .link-box a:hover {
-        color: #ff1493;
-      }
-      .file-item {
-        background: rgba(50, 50, 50, 0.9);
-        color: #ffd1dc;
-      }
-      .status-box {
-        background: rgba(40, 40, 40, 0.9);
-        border: 2px dashed #ff85a2;
-        color: #ffd1dc;
-      }
+      body { background: linear-gradient(135deg, #1e1e2f, #2a2a3b); }
+      .card { background: rgba(30, 30, 30, 0.9); color: #ffd1dc; box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2); }
+      .card::before { border: 2px dashed #ff85a2; }
+      .card:hover { box-shadow: 0 10px 25px rgba(255, 133, 162, 0.4); }
+      .link-box, .proxy-status { background: rgba(40, 40, 40, 0.9); border: 2px dashed #ff85a2; color: #ffd1dc; }
+      .link-box a { color: #ff85a2; }
+      .link-box a:hover { color: #ff1493; }
+      .file-item { background: rgba(50, 50, 50, 0.9); color: #ffd1dc; }
+      .connection-table { background: rgba(40, 40, 40, 0.9); border: 2px dashed #ff85a2; color: #ffd1dc; }
     }
     .background-media {
       position: fixed;
@@ -599,10 +575,7 @@ function 生成订阅页面(订阅路径, hostName) {
       pointer-events: none;
     }
     @media (prefers-color-scheme: dark) {
-      .card::after {
-        color: #ff85a2;
-        text-shadow: 2px 2px 4px rgba(255, 133, 162, 0.3);
-      }
+      .card::after { color: #ff85a2; text-shadow: 2px 2px 4px rgba(255, 133, 162, 0.3); }
     }
     .card-title {
       font-size: 1.6em;
@@ -674,8 +647,6 @@ function 生成订阅页面(订阅路径, hostName) {
       cursor: pointer;
       color: #ff6f91;
       transition: all 0.3s ease;
-      position: relative;
-      font-size: 1em;
     }
     .proxy-option.active {
       background: linear-gradient(to right, #ffb6c1, #ff69b4);
@@ -687,22 +658,6 @@ function 生成订阅页面(订阅路径, hostName) {
     }
     .proxy-option[data-type="socks5"].active {
       background: linear-gradient(to right, #ffd1dc, #ff85a2);
-    }
-    .proxy-option::before {
-      content: '';
-      position: absolute;
-      top: -50%;
-      left: -50%;
-      width: 200%;
-      height: 200%;
-      background: rgba(255, 255, 255, 0.2);
-      transform: rotate(30deg);
-      transition: all 0.5s ease;
-      pointer-events: none;
-    }
-    .proxy-option:hover::before {
-      top: 100%;
-      left: 100%;
     }
     .proxy-status {
       margin-top: 20px;
@@ -738,15 +693,32 @@ function 生成订阅页面(订阅路径, hostName) {
       display: inline-block;
       margin-right: 8px;
     }
-    .status-online {
-      background: #28a745;
+    .status-online { background: #28a745; }
+    .status-offline { background: #dc3545; }
+    .status-checking { background: #ffc107; }
+    .connection-table {
+      margin-top: 15px;
+      padding: 15px;
+      border-radius: 15px;
+      width: 100%;
+      font-size: 0.9em;
+      overflow-x: auto;
     }
-    .status-offline {
-      background: #dc3545;
+    .connection-table table {
+      width: 100%;
+      border-collapse: collapse;
     }
-    .status-checking {
-      background: #ffc107;
+    .connection-table th, .connection-table td {
+      padding: 8px;
+      text-align: left;
+      border-bottom: 1px solid #ffb6c1;
     }
+    .connection-table th {
+      color: #ff85a2;
+      font-weight: bold;
+    }
+    .connection-table td.success { color: #28a745; }
+    .connection-table td.failure { color: #dc3545; }
     .link-box {
       border-radius: 15px;
       padding: 15px;
@@ -785,15 +757,9 @@ function 生成订阅页面(订阅路径, hostName) {
     .cute-button:active {
       transform: scale(0.95);
     }
-    .clash-btn {
-      background: linear-gradient(to right, #ffb6c1, #ff69b4);
-    }
-    .v2ray-btn {
-      background: linear-gradient(to right, #ffd1dc, #ff85a2);
-    }
-    .logout-btn {
-      background: linear-gradient(to right, #ff9999, #ff6666);
-    }
+    .clash-btn { background: linear-gradient(to right, #ffb6c1, #ff69b4); }
+    .v2ray-btn { background: linear-gradient(to right, #ffd1dc, #ff85a2); }
+    .logout-btn { background: linear-gradient(to right, #ff9999, #ff6666); }
     .upload-title {
       font-size: 1.4em;
       color: #ff85a2;
@@ -879,11 +845,8 @@ function 生成订阅页面(订阅路径, hostName) {
     @media (max-width: 600px) {
       .card { padding: 15px; max-width: 90%; }
       .card-title { font-size: 1.3em; }
-      .switch-container { gap: 10px; }
-      .toggle-row { gap: 10px; }
-      .proxy-option { width: 70px; padding: 8px 0; font-size: 0.9em; }
-      .proxy-status { font-size: 0.9em; padding: 12px; }
-      .link-box { font-size: 0.9em; padding: 12px; }
+      .connection-table { font-size: 0.8em; }
+      .connection-table th, .connection-table td { padding: 6px; }
       .cute-button, .upload-label, .upload-submit { padding: 10px 20px; font-size: 0.9em; }
       .card::after { font-size: 50px; top: -15px; right: -15px; }
     }
@@ -899,12 +862,24 @@ function 生成订阅页面(订阅路径, hostName) {
     <div class="card">
       <h2 class="card-title">🌐 连接状态</h2>
       <div class="status-box" id="clientStatus">
-        <span><span class="status-indicator status-checking"></span>客户端连接</span>
+        <span><span class="status-indicator status-checking"></span>客户端VPN连接</span>
         <span id="clientStatusText">检测中...</span>
       </div>
-      <div class="status-box" id="serverStatus">
-        <span><span class="status-indicator status-checking"></span>服务器连接</span>
-        <span id="serverStatusText">检测中...</span>
+    </div>
+    <div class="card">
+      <h2 class="card-title">📊 最近连接</h2>
+      <div class="connection-table">
+        <table>
+          <thead>
+            <tr>
+              <th>域名</th>
+              <th>连接时长</th>
+              <th>延迟</th>
+              <th>状态</th>
+            </tr>
+          </thead>
+          <tbody id="connectionList"></tbody>
+        </table>
       </div>
     </div>
     <div class="card">
@@ -986,62 +961,71 @@ function 生成订阅页面(订阅路径, hostName) {
       const clientStatus = document.getElementById('clientStatus');
       const clientText = document.getElementById('clientStatusText');
       const indicator = clientStatus.querySelector('.status-indicator');
-      
+
       try {
-        const response = await fetch('/get-proxy-status', { 
+        const proxyResponse = await fetch('/get-proxy-status', { 
           method: 'GET',
           credentials: 'include'
         });
-        if (response.ok) {
-          indicator.className = 'status-indicator status-online';
-          clientText.textContent = '已连接';
-        } else {
-          throw new Error('Response not OK');
-        }
-      } catch (error) {
-        indicator.className = 'status-indicator status-offline';
-        clientText.textContent = '未连接';
-        console.error('客户端连接检测失败:', error);
-      }
-    }
+        const proxyData = await proxyResponse.json();
+        const isProxyActive = proxyData.status !== '直连';
 
-    async function checkServerConnection() {
-      const serverStatus = document.getElementById('serverStatus');
-      const serverText = document.getElementById('serverStatusText');
-      const indicator = serverStatus.querySelector('.status-indicator');
-      
-      try {
-        const testUrl = 'http://www.gstatic.com/generate_204';
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
-        
-        const response = await fetch(testUrl, {
+        if (!isProxyActive) {
+          indicator.className = 'status-indicator status-offline';
+          clientText.textContent = '未连接VPN';
+          return;
+        }
+
+        const testResponse = await fetch(`https://${hostName}/${订阅路径}/${小猫}${咪}`, {
           method: 'HEAD',
-          signal: controller.signal,
           cache: 'no-store'
         });
-        clearTimeout(timeoutId);
-        
-        if (response.ok) {
+
+        if (testResponse.ok) {
           indicator.className = 'status-indicator status-online';
-          serverText.textContent = '正常';
+          clientText.textContent = '已连接VPN';
         } else {
-          throw new Error('Server response not OK');
+          throw new Error('VPN连接失败');
         }
       } catch (error) {
         indicator.className = 'status-indicator status-offline';
-        serverText.textContent = '异常';
-        console.error('服务器连接检测失败:', error);
+        clientText.textContent = '未连接VPN';
+        console.error('客户端VPN检测失败:', error);
       }
     }
 
-    Promise.all([checkClientConnection(), checkServerConnection()])
-      .then(() => console.log('连接状态检测完成'));
+    async function updateConnectionList() {
+      try {
+        const response = await fetch('/get-recent-connections', {
+          method: 'GET',
+          credentials: 'include'
+        });
+        const connections = await response.json();
+        const tbody = document.getElementById('connectionList');
+        tbody.innerHTML = '';
+
+        connections.forEach(conn => {
+          const row = document.createElement('tr');
+          row.innerHTML = `
+            <td>${conn.domain}</td>
+            <td>${conn.duration}</td>
+            <td>${conn.latency}</td>
+            <td class="${conn.status === '成功' ? 'success' : 'failure'}">${conn.status}</td>
+          `;
+          tbody.appendChild(row);
+        });
+      } catch (error) {
+        console.error('获取最近连接失败:', error);
+      }
+    }
+
+    checkClientConnection();
+    updateConnectionList();
 
     setInterval(() => {
       checkClientConnection();
-      checkServerConnection();
-    }, 30000);
+      updateConnectionList();
+    }, 5000);
 
     function toggleProxy() {
       proxyEnabled = document.getElementById('proxyToggle').checked;
@@ -1049,10 +1033,7 @@ function 生成订阅页面(订阅路径, hostName) {
       updateProxyCapsuleUI();
       saveProxyState();
       updateProxyStatus();
-      setTimeout(() => {
-        checkClientConnection();
-        checkServerConnection();
-      }, 1000);
+      setTimeout(checkClientConnection, 1000);
     }
 
     function switchProxyType(type) {
@@ -1061,10 +1042,7 @@ function 生成订阅页面(订阅路径, hostName) {
       updateProxyCapsuleUI();
       saveProxyState();
       updateProxyStatus();
-      setTimeout(() => {
-        checkClientConnection();
-        checkServerConnection();
-      }, 1000);
+      setTimeout(checkClientConnection, 1000);
     }
 
     function updateProxyCapsuleUI() {
