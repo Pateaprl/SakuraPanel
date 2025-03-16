@@ -83,11 +83,11 @@ async function 加载节点和配置(env, hostName) {
       优选节点 = 合并节点列表;
       if (!列表相同) {
         const 新版本 = String(Date.now());
-        await env.LOGIN_STATE.put('ip_preferred_ips', JSON.stringify(合并节点列表), { expirationTtl: 86400 });
+        await env.LOGIN_STATE.put('ip_preferred_ips', JSON.stringify(合并节点列表)); // 移除 expirationTtl
         await env.LOGIN_STATE.put('ip_preferred_ips_version', 新版本);
-        await env.LOGIN_STATE.put('config_clash', 生成Clash配置(hostName), { expirationTtl: 86400 });
+        await env.LOGIN_STATE.put('config_clash', 生成Clash配置(hostName)); // 移除 expirationTtl
         await env.LOGIN_STATE.put('config_clash_version', 新版本);
-        await env.LOGIN_STATE.put('config_v2ray', 生成V2ray配置(hostName), { expirationTtl: 86400 });
+        await env.LOGIN_STATE.put('config_v2ray', 生成V2ray配置(hostName)); // 移除 expirationTtl
         await env.LOGIN_STATE.put('config_v2ray_version', 新版本);
       }
     } else {
@@ -112,7 +112,7 @@ async function 获取配置(env, 类型, hostName) {
   }
 
   const 新配置 = 类型 === 'clash' ? 生成Clash配置(hostName) : 生成V2ray配置(hostName);
-  await env.LOGIN_STATE.put(缓存键, 新配置, { expirationTtl: 86400 });
+  await env.LOGIN_STATE.put(缓存键, 新配置); // 移除 expirationTtl
   await env.LOGIN_STATE.put(版本键, 节点版本);
   return 新配置;
 }
@@ -224,12 +224,12 @@ export default {
                 return 创建JSON响应({ message: '上传内容与现有节点相同，无需更新' }, 200);
               }
 
-              await env.LOGIN_STATE.put('manual_preferred_ips', JSON.stringify(uniqueIpList), { expirationTtl: 86400 });
+              await env.LOGIN_STATE.put('manual_preferred_ips', JSON.stringify(uniqueIpList)); // 移除 expirationTtl
               const 新版本 = String(Date.now());
               await env.LOGIN_STATE.put('ip_preferred_ips_version', 新版本);
-              await env.LOGIN_STATE.put('config_clash', 生成Clash配置(hostName), { expirationTtl: 86400 });
+              await env.LOGIN_STATE.put('config_clash', 生成Clash配置(hostName)); // 移除 expirationTtl
               await env.LOGIN_STATE.put('config_clash_version', 新版本);
-              await env.LOGIN_STATE.put('config_v2ray', 生成V2ray配置(hostName), { expirationTtl: 86400 });
+              await env.LOGIN_STATE.put('config_v2ray', 生成V2ray配置(hostName)); // 移除 expirationTtl
               await env.LOGIN_STATE.put('config_v2ray_version', 新版本);
               return 创建JSON响应({ message: '上传成功，即将跳转' }, 200, { 'Location': `/${配置路径}` });
             } catch (错误) {
