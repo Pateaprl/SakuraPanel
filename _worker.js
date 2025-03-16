@@ -8,12 +8,15 @@ let 优选TXT路径 = [
   'https://这里可以无限扩展'
 ];
 let 优选节点 = [];
+let 启用反代 = true;
 let 反代地址 = 'ts.hpc.tw';
+let 启用SOCKS5 = false;
+let 启用全局SOCKS5 = false;
 let SOCKS5账号 = '';
-let 节点名称 = '🌸樱花';
+let 节点名称 = '小仙女';
 let 伪装域名 = 'lkssite.vip';
-let 账号 = 'andypan';
-let 密码 = 'Yyds@2023';
+let 账号 = '你的账号';
+let 密码 = '你的密码';
 let 最大失败次数 = 5;
 let 锁定时间 = 5 * 60 * 1000;
 let 小猫 = 'cla';
@@ -243,24 +246,6 @@ export default {
               console.error(`上传处理失败: ${错误.message}`);
               return 创建JSON响应({ error: `上传处理失败: ${错误.message}` }, 500);
             }
-          case '/set-proxy-state':
-            formData = await 请求.formData();
-            const proxyEnabled = formData.get('proxyEnabled');
-            const proxyType = formData.get('proxyType');
-            await env.LOGIN_STATE.put('proxyEnabled', proxyEnabled);
-            await env.LOGIN_STATE.put('proxyType', proxyType);
-            return new Response(null, { status: 200 });
-          case '/get-proxy-status':
-            const 代理启用 = await env.LOGIN_STATE.get('proxyEnabled') === 'true';
-            const 代理类型 = await env.LOGIN_STATE.get('proxyType') || 'reverse';
-            const 反代地址 = env.PROXYIP || 'ts.hpc.tw';
-            const SOCKS5账号 = env.SOCKS5 || '';
-            let status = '直连';
-            if (代理启用) {
-              if (代理类型 === 'reverse' && 反代地址) status = '反代';
-              else if (代理类型 === 'socks5' && SOCKS5账号) status = 'SOCKS5';
-            }
-            return 创建JSON响应({ status });
           default:
             url.hostname = 伪装域名;
             url.protocol = 'https:';
@@ -269,7 +254,9 @@ export default {
       } else if (请求头 === 'websocket') {
         反代地址 = env.PROXYIP || 反代地址;
         SOCKS5账号 = env.SOCKS5 || SOCKS5账号;
-        return await 升级请求(请求, env);
+        启用SOCKS5 = env.SOCKS5OPEN === 'true' ? true : env.SOCKS5OPEN === 'false' ? false : 启用SOCKS5;
+        启用全局SOCKS5 = env.SOCKS5GLOBAL === 'true' ? true : env.SOCKS5GLOBAL === 'false' ? false : 启用全局SOCKS5;
+        return await 升级请求(请求);
       }
     } catch (error) {
       console.error(`全局错误: ${error.message}`);
@@ -278,11 +265,11 @@ export default {
   }
 };
 
-async function 升级请求(请求, env) {
+async function 升级请求(请求) {
   const 创建接口 = new WebSocketPair();
   const [客户端, 服务端] = Object.values(创建接口);
   服务端.accept();
-  const 结果 = await 解析头(解密(请求.headers.get('sec-websocket-protocol')), env);
+  const 结果 = await 解析头(解密(请求.headers.get('sec-websocket-protocol')));
   if (!结果) return new Response('Invalid request', { status: 400 });
   const { TCP接口, 初始数据 } = 结果;
   建立管道(服务端, TCP接口, 初始数据);
@@ -294,7 +281,7 @@ function 解密(混淆字符) {
   return Uint8Array.from(atob(混淆字符), c => c.charCodeAt(0)).buffer;
 }
 
-async function 解析头(数据, env) {
+async function 解析头(数据) {
   const 数据数组 = new Uint8Array(数据);
   if (验证密钥(数据数组.slice(1, 17)) !== 开门锁匙) return null;
 
@@ -318,69 +305,22 @@ async function 解析头(数据, env) {
   }
 
   const 初始数据 = 数据.slice(地址信息索引 + (地址类型 === 2 ? 数据数组[地址信息索引] + 1 : 地址类型 === 1 ? 4 : 16));
-  const TCP接口 = await 智能连接(地址, 端口, 地址类型, env);
+  let TCP接口;
+  if (启用反代 && 启用SOCKS5 && 启用全局SOCKS5) {
+    TCP接口 = await 创建SOCKS5(地址类型, 地址, 端口);
+  } else {
+    try {
+      TCP接口 = connect({ hostname: 地址, port: 端口 });
+      await TCP接口.opened;
+    } catch {
+      if (启用反代) {
+        TCP接口 = 启用SOCKS5
+          ? await 创建SOCKS5(地址类型, 地址, 端口)
+          : connect({ hostname: 反代地址.split(':')[0], port: 反代地址.split(':')[1] || 端口 });
+      }
+    }
+  }
   return { TCP接口, 初始数据 };
-}
-
-async function 智能连接(地址, 端口, 地址类型, env) {
-  const 反代地址 = env.PROXYIP || 'ts.hpc.tw';
-  const SOCKS5账号 = env.SOCKS5 || '';
-
-  if (!地址 || 地址.trim() === '') {
-    return await 尝试直连(地址, 端口);
-  }
-
-  const 是域名 = 地址类型 === 2 && !地址.match(/^\d+\.\d+\.\d+\.\d+$/);
-  const 是IP = 地址类型 === 1 || (地址类型 === 2 && 地址.match(/^\d+\.\d+\.\d+\.\d+$/)) || 地址类型 === 3;
-
-  if (是域名 || 是IP) {
-    const 代理启用 = await env.LOGIN_STATE.get('proxyEnabled') === 'true';
-    const 代理类型 = await env.LOGIN_STATE.get('proxyType') || 'reverse';
-
-    if (!代理启用) {
-      return await 尝试直连(地址, 端口);
-    }
-
-    if (代理类型 === 'reverse') {
-      if (反代地址) {
-        try {
-          const [反代主机, 反代端口] = 反代地址.split(':');
-          const 连接 = connect({ hostname: 反代主机, port: 反代端口 || 端口 });
-          await 连接.opened;
-          console.log(`通过反代连接: ${反代地址}`);
-          return 连接;
-        } catch (错误) {
-          console.error(`反代连接失败: ${错误.message}`);
-        }
-      }
-    } else if (代理类型 === 'socks5') {
-      if (SOCKS5账号) {
-        try {
-          const SOCKS5连接 = await 创建SOCKS5(地址类型, 地址, 端口);
-          console.log(`通过 SOCKS5 连接: ${地址}:${端口}`);
-          return SOCKS5连接;
-        } catch (错误) {
-          console.error(`SOCKS5 连接失败: ${错误.message}`);
-        }
-      }
-    }
-
-    return await 尝试直连(地址, 端口);
-  }
-
-  return await 尝试直连(地址, 端口);
-}
-
-async function 尝试直连(地址, 端口) {
-  try {
-    const 连接 = connect({ hostname: 地址, port: 端口 });
-    await 连接.opened;
-    console.log(`回退到直连: ${地址}:${端口}`);
-    return 连接;
-  } catch (错误) {
-    console.error(`直连失败: ${错误.message}`);
-    throw new Error(`无法连接: ${错误.message}`);
-  }
 }
 
 function 验证密钥(arr) {
@@ -480,6 +420,7 @@ function 生成订阅页面(订阅路径, hostName) {
       align-items: flex-start;
       transition: background 0.5s ease;
     }
+    /* 白天模式 */
     @media (prefers-color-scheme: light) {
       body {
         background: linear-gradient(135deg, #ffe6f0, #fff0f5);
@@ -494,7 +435,7 @@ function 生成订阅页面(订阅路径, hostName) {
       .card:hover {
         box-shadow: 0 10px 25px rgba(255, 182, 193, 0.5);
       }
-      .link-box, .proxy-status {
+      .link-box {
         background: rgba(255, 240, 245, 0.9);
         border: 2px dashed #ffb6c1;
       }
@@ -502,6 +443,7 @@ function 生成订阅页面(订阅路径, hostName) {
         background: rgba(255, 245, 247, 0.9);
       }
     }
+    /* 暗黑模式 */
     @media (prefers-color-scheme: dark) {
       body {
         background: linear-gradient(135deg, #1e1e2f, #2a2a3b);
@@ -517,7 +459,7 @@ function 生成订阅页面(订阅路径, hostName) {
       .card:hover {
         box-shadow: 0 10px 25px rgba(255, 133, 162, 0.4);
       }
-      .link-box, .proxy-status {
+      .link-box {
         background: rgba(40, 40, 40, 0.9);
         border: 2px dashed #ff85a2;
         color: #ffd1dc;
@@ -562,7 +504,7 @@ function 生成订阅页面(订阅路径, hostName) {
       text-align: center;
       transition: transform 0.3s ease, box-shadow 0.3s ease;
       position: relative;
-      overflow: visible; /* 改为 visible 以允许蝴蝶结超出边界 */
+      overflow: hidden;
     }
     .card::before {
       content: '';
@@ -577,142 +519,20 @@ function 生成订阅页面(订阅路径, hostName) {
     .card:hover {
       transform: scale(1.03);
     }
-    /* 添加蝴蝶结样式 */
     .card::after {
-      content: '🎀';
+      content: '✨';
       position: absolute;
-      top: -20px;
-      right: -20px;
-      font-size: 60px; /* 增大蝴蝶结 */
-      color: #ff69b4;
-      transform: rotate(20deg);
-      z-index: 1; /* 确保蝴蝶结在卡片内容之上 */
-      text-shadow: 2px 2px 4px rgba(255, 105, 180, 0.3);
-      pointer-events: none; /* 防止蝴蝶结干扰交互 */
-    }
-    @media (prefers-color-scheme: dark) {
-      .card::after {
-        color: #ff85a2;
-        text-shadow: 2px 2px 4px rgba(255, 133, 162, 0.3);
-      }
+      top: 10px;
+      right: 10px;
+      font-size: 1.5em;
+      color: #ffb6c1;
+      opacity: 0.7;
     }
     .card-title {
       font-size: 1.6em;
       color: #ff69b4;
       margin-bottom: 15px;
       text-shadow: 1px 1px 3px rgba(255, 105, 180, 0.2);
-    }
-    .switch-container {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 15px;
-    }
-    .toggle-row {
-      display: flex;
-      align-items: center;
-      gap: 15px;
-    }
-    .toggle-switch {
-      position: relative;
-      display: inline-block;
-      width: 60px;
-      height: 34px;
-    }
-    .toggle-switch input {
-      opacity: 0;
-      width: 0;
-      height: 0;
-    }
-    .slider {
-      position: absolute;
-      cursor: pointer;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background-color: #ccc;
-      transition: .4s;
-      border-radius: 34px;
-    }
-    .slider:before {
-      position: absolute;
-      content: "";
-      height: 26px;
-      width: 26px;
-      left: 4px;
-      bottom: 4px;
-      background-color: white;
-      transition: .4s;
-      border-radius: 50%;
-    }
-    input:checked + .slider {
-      background-color: #ff69b4;
-    }
-    input:checked + .slider:before {
-      transform: translateX(26px);
-    }
-    .proxy-capsule {
-      display: flex;
-      border-radius: 20px;
-      overflow: hidden;
-      background: #ffe6f0;
-      box-shadow: 0 4px 10px rgba(255, 182, 193, 0.2);
-    }
-    .proxy-option {
-      width: 80px;
-      padding: 10px 0;
-      text-align: center;
-      cursor: pointer;
-      color: #ff6f91;
-      transition: all 0.3s ease;
-      position: relative;
-      font-size: 1em;
-    }
-    .proxy-option.active {
-      background: linear-gradient(to right, #ffb6c1, #ff69b4);
-      color: white;
-      box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.1);
-    }
-    .proxy-option:not(.active):hover {
-      background: #ffd1dc;
-    }
-    .proxy-option[data-type="socks5"].active {
-      background: linear-gradient(to right, #ffd1dc, #ff85a2);
-    }
-    .proxy-option::before {
-      content: '';
-      position: absolute;
-      top: -50%;
-      left: -50%;
-      width: 200%;
-      height: 200%;
-      background: rgba(255, 255, 255, 0.2);
-      transform: rotate(30deg);
-      transition: all 0.5s ease;
-      pointer-events: none;
-    }
-    .proxy-option:hover::before {
-      top: 100%;
-      left: 100%;
-    }
-    .proxy-status {
-      margin-top: 20px;
-      padding: 15px;
-      border-radius: 15px;
-      font-size: 0.95em;
-      word-break: break-all;
-      transition: background 0.3s ease, color 0.3s ease;
-      width: 100%;
-      box-sizing: border-box;
-    }
-    .proxy-status.success {
-      background: rgba(212, 237, 218, 0.9);
-      color: #155724;
-    }
-    .proxy-status.direct {
-      background: rgba(233, 236, 239, 0.9);
-      color: #495057;
     }
     .link-box {
       border-radius: 15px;
@@ -744,6 +564,8 @@ function 生成订阅页面(订阅路径, hostName) {
       color: white;
       cursor: pointer;
       transition: transform 0.2s ease, box-shadow 0.2s ease;
+      text-align: center;
+      display: inline-block;
     }
     .cute-button:hover {
       transform: scale(1.05);
@@ -844,15 +666,11 @@ function 生成订阅页面(订阅路径, hostName) {
       margin-top: 5px;
     }
     @media (max-width: 600px) {
+      .container { padding: 10px; }
       .card { padding: 15px; max-width: 90%; }
       .card-title { font-size: 1.3em; }
-      .switch-container { gap: 10px; }
-      .toggle-row { gap: 10px; }
-      .proxy-option { width: 70px; padding: 8px 0; font-size: 0.9em; }
-      .proxy-status { font-size: 0.9em; padding: 12px; }
-      .link-box { font-size: 0.9em; padding: 12px; }
       .cute-button, .upload-label, .upload-submit { padding: 10px 20px; font-size: 0.9em; }
-      .card::after { font-size: 50px; top: -15px; right: -15px; }
+      .link-box { font-size: 0.85em; }
     }
   </style>
 </head>
@@ -860,25 +678,8 @@ function 生成订阅页面(订阅路径, hostName) {
   <img id="backgroundImage" class="background-media" alt="Background">
   <div class="container">
     <div class="card">
-      <h1 class="card-title">🌸 欢迎来到樱花订阅站 🌸</h1>
+      <h1 class="card-title">🌸 欢迎来到小仙女订阅站 🌸</h1>
       <p style="font-size: 1em;">支持 <span style="color: #ff69b4;">${小猫}${咪}</span> 和 <span style="color: #ff85a2;">${歪兔}${蕊蒽}</span> 哦~</p>
-    </div>
-    <div class="card">
-      <h2 class="card-title">🌟 代理设置</h2>
-      <div class="switch-container">
-        <div class="toggle-row">
-          <label>代理开关</label>
-          <label class="toggle-switch">
-            <input type="checkbox" id="proxyToggle" onchange="toggleProxy()">
-            <span class="slider"></span>
-          </label>
-        </div>
-        <div class="proxy-capsule" id="proxyCapsule">
-          <div class="proxy-option active" data-type="reverse" onclick="switchProxyType('reverse')">反代</div>
-          <div class="proxy-option" data-type="socks5" onclick="switchProxyType('socks5')">SOCKS5</div>
-        </div>
-      </div>
-      <div class="proxy-status" id="proxyStatus">直连</div>
     </div>
     <div class="card">
       <h2 class="card-title">🐾 ${小猫}${咪} 订阅</h2>
@@ -928,65 +729,9 @@ function 生成订阅页面(订阅路径, hostName) {
       const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
       bgImage.src = isDarkMode ? darkBg : lightBg;
     }
+
     updateBackground();
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
-
-    let proxyEnabled = localStorage.getItem('proxyEnabled') === 'true';
-    let proxyType = localStorage.getItem('proxyType') || 'reverse';
-    document.getElementById('proxyToggle').checked = proxyEnabled;
-    updateProxyCapsuleUI();
-    updateProxyStatus();
-
-    function toggleProxy() {
-      proxyEnabled = document.getElementById('proxyToggle').checked;
-      localStorage.setItem('proxyEnabled', proxyEnabled);
-      updateProxyCapsuleUI();
-      saveProxyState();
-      updateProxyStatus();
-    }
-
-    function switchProxyType(type) {
-      proxyType = type;
-      localStorage.setItem('proxyType', proxyType);
-      updateProxyCapsuleUI();
-      saveProxyState();
-      updateProxyStatus();
-    }
-
-    function updateProxyCapsuleUI() {
-      const options = document.querySelectorAll('.proxy-option');
-      options.forEach(opt => {
-        opt.classList.toggle('active', opt.dataset.type === proxyType);
-      });
-      document.getElementById('proxyCapsule').style.display = proxyEnabled ? 'flex' : 'none';
-    }
-
-    function updateProxyStatus() {
-      const statusElement = document.getElementById('proxyStatus');
-      if (!proxyEnabled) {
-        statusElement.textContent = '直连';
-        statusElement.className = 'proxy-status direct';
-      } else {
-        fetch('/get-proxy-status')
-          .then(response => response.json())
-          .then(data => {
-            statusElement.textContent = data.status;
-            statusElement.className = 'proxy-status ' + (data.status === '直连' ? 'direct' : 'success');
-          })
-          .catch(() => {
-            statusElement.textContent = '直连';
-            statusElement.className = 'proxy-status direct';
-          });
-      }
-    }
-
-    function saveProxyState() {
-      const formData = new FormData();
-      formData.append('proxyEnabled', proxyEnabled);
-      formData.append('proxyType', proxyType);
-      fetch('/set-proxy-state', { method: 'POST', body: formData })
-        .then(() => updateProxyStatus());
-    }
 
     function 导入小猫咪(订阅路径, hostName) {
       window.location.href = '${小猫}${咪}://install-config?url=https://' + hostName + '/${订阅路径}/${小猫}${咪}';
@@ -994,7 +739,6 @@ function 生成订阅页面(订阅路径, hostName) {
     function 导入${歪兔}${蕊蒽}(订阅路径, hostName) {
       window.location.href = '${歪兔}${蕊蒽}://install-config?url=https://' + hostName + '/${订阅路径}/${歪兔}${蕊蒽}';
     }
-
     function 显示文件() {
       const fileInput = document.getElementById('ipFiles');
       const fileList = document.getElementById('fileList');
@@ -1006,7 +750,6 @@ function 生成订阅页面(订阅路径, hostName) {
         fileList.appendChild(div);
       });
     }
-
     function 移除文件(index) {
       const fileInput = document.getElementById('ipFiles');
       const dt = new DataTransfer();
@@ -1014,7 +757,6 @@ function 生成订阅页面(订阅路径, hostName) {
       fileInput.files = dt.files;
       显示文件();
     }
-
     function 开始上传(event) {
       event.preventDefault();
       const form = document.getElementById('uploadForm');
@@ -1099,12 +841,23 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
       transition: background 0.5s ease;
     }
     @media (prefers-color-scheme: light) {
-      body { background: linear-gradient(135deg, #ffe6f0, #fff0f5); }
-      .content { background: rgba(255, 255, 255, 0.85); box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3); }
+      body {
+        background: linear-gradient(135deg, #ffe6f0, #fff0f5);
+      }
+      .content {
+        background: rgba(255, 255, 255, 0.85);
+        box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3);
+      }
     }
     @media (prefers-color-scheme: dark) {
-      body { background: linear-gradient(135deg, #1e1e2f, #2a2a3b); }
-      .content { background: rgba(30, 30, 30, 0.9); color: #ffd1dc; box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2); }
+      body {
+        background: linear-gradient(135deg, #1e1e2f, #2a2a3b);
+      }
+      .content {
+        background: rgba(30, 30, 30, 0.9);
+        color: #ffd1dc;
+        box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2);
+      }
     }
     .background-media {
       position: fixed;
@@ -1202,7 +955,7 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
 <body>
   <img id="backgroundImage" class="background-media" alt="Background">
   <div class="content">
-    <h1>🌸樱花面板🌸</h1>
+    <h1>🌷 小仙女登录 🌷</h1>
     ${锁定状态 ? `
     <div class="lock-message">
       密码输错太多次啦，请等待 <span id="countdown" aria-live="polite">${剩余时间}</span> 秒哦~
@@ -1277,12 +1030,23 @@ function 生成KV未绑定提示页面() {
       transition: background 0.5s ease;
     }
     @media (prefers-color-scheme: light) {
-      body { background: linear-gradient(135deg, #ffe6f0, #fff0f5); }
-      .content { background: rgba(255, 255, 255, 0.85); box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3); }
+      body {
+        background: linear-gradient(135deg, #ffe6f0, #fff0f5);
+      }
+      .content {
+        background: rgba(255, 255, 255, 0.85);
+        box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3);
+      }
     }
     @media (prefers-color-scheme: dark) {
-      body { background: linear-gradient(135deg, #1e1e2f, #2a2a3b); }
-      .content { background: rgba(30, 30, 30, 0.9); color: #ffd1dc; box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2); }
+      body {
+        background: linear-gradient(135deg, #1e1e2f, #2a2a3b);
+      }
+      .content {
+        background: rgba(30, 30, 30, 0.9);
+        color: #ffd1dc;
+        box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2);
+      }
     }
     .background-media {
       position: fixed;
