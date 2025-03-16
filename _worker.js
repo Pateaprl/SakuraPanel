@@ -12,8 +12,6 @@ let 反代地址 = 'ts.hpc.tw';
 let SOCKS5账号 = '';
 let 节点名称 = '🌸樱花';
 let 伪装域名 = 'lkssite.vip';
-let 账号 = 'andypan';
-let 密码 = 'Yyds@2023';
 let 最大失败次数 = 5;
 let 锁定时间 = 5 * 60 * 1000;
 let 小猫 = 'cla';
@@ -26,7 +24,6 @@ let 蕊蒽 = 'rayng';
 let 白天背景壁纸 = 'https://raw.githubusercontent.com/Alien-Et/ips/refs/heads/main/image/day.jpg';
 let 暗黑背景壁纸 = 'https://raw.githubusercontent.com/Alien-Et/ips/refs/heads/main/image/night.jpg';
 
-// 创建响应函数保持不变
 function 创建HTML响应(内容, 状态码 = 200) {
   return new Response(内容, {
     status: 状态码,
@@ -59,7 +56,6 @@ function 创建JSON响应(数据, 状态码 = 200, 额外头 = {}) {
   });
 }
 
-// 优化后的加载节点函数
 async function 加载节点和配置(env, hostName) {
   try {
     const 手动节点缓存 = await env.LOGIN_STATE.get('manual_preferred_ips');
@@ -70,14 +66,15 @@ async function 加载节点和配置(env, hostName) {
 
     const 响应列表 = await Promise.all(
       优选TXT路径.map(async (路径) => {
-        const cachedEtag = await env.LOGIN_STATE.get(`etag_${路径}`);
-        const 响应 = await fetch(路径, { headers: { 'If-None-Match': cachedEtag || '' } });
-        if (响应.status === 304) return [];
-        if (!响应.ok) throw new Error(`请求 ${路径} 失败，状态码: ${响应.status}`);
-        const etag = 响应.headers.get('ETag');
-        if (etag) await env.LOGIN_STATE.put(`etag_${路径}`, etag, { expirationTtl: 86400 });
-        const 文本 = await 响应.text();
-        return 文本.split('\n').map(line => line.trim()).filter(Boolean);
+        try {
+          const 响应 = await fetch(路径);
+          if (!响应.ok) throw new Error(`请求 ${路径} 失败，状态码: ${响应.status}`);
+          const 文本 = await 响应.text();
+          return 文本.split('\n').map(line => line.trim()).filter(Boolean);
+        } catch (错误) {
+          console.error(`拉取 ${路径} 失败: ${错误.message}`);
+          return [];
+        }
       })
     );
 
@@ -104,10 +101,10 @@ async function 加载节点和配置(env, hostName) {
   } catch (错误) {
     const 缓存节点 = await env.LOGIN_STATE.get('ip_preferred_ips');
     优选节点 = 缓存节点 ? JSON.parse(缓存节点) : [`${hostName}:443`];
+    await env.LOGIN_STATE.put('ip_error_log', JSON.stringify({ time: Date.now(), error: '所有路径拉取失败或手动上传为空' }), { expirationTtl: 86400 });
   }
 }
 
-// 获取配置函数保持不变
 async function 获取配置(env, 类型, hostName) {
   const 缓存键 = 类型 === 'clash' ? 'config_clash' : 'config_v2ray';
   const 版本键 = `${缓存键}_version`;
@@ -142,16 +139,47 @@ export default {
         return 创建HTML响应(生成KV未绑定提示页面());
       }
 
-      const 请求头 = 请求.headers.get('Upgrade');
       const url = new URL(请求.url);
       const hostName = 请求.headers.get('Host');
       const UA = 请求.headers.get('User-Agent') || 'unknown';
       const IP = 请求.headers.get('CF-Connecting-IP') || 'unknown';
       const 设备标识 = `${UA}_${IP}`;
+
+      // 检查是否已初始化管理员账户
+      const adminInitialized = await env.LOGIN_STATE.get('admin_initialized');
+      if (!adminInitialized && url.pathname !== '/register' && url.pathname !== '/register/submit') {
+        return 创建重定向响应('/register');
+      }
+
+      const 请求头 = 请求.headers.get('Upgrade');
       let formData;
 
       if (!请求头 || 请求头 !== 'websocket') {
         switch (url.pathname) {
+          case '/register':
+            const registerKey = 请求.headers.get('X-Register-Key');
+            if (!env.REGISTER_KEY || registerKey !== env.REGISTER_KEY) {
+              return 创建JSON响应({ error: '注册密钥错误，请提供正确的 X-Register-Key' }, 403);
+            }
+            return 创建HTML响应(生成注册页面());
+          case '/register/submit':
+            const providedKey = 请求.headers.get('X-Register-Key');
+            if (!env.REGISTER_KEY || providedKey !== env.REGISTER_KEY) {
+              return 创建JSON响应({ error: '注册密钥错误' }, 403);
+            }
+            formData = await 请求.formData();
+            const 新账号 = formData.get('username');
+            const 新密码 = formData.get('password');
+            const 确认密码 = formData.get('confirm_password');
+
+            if (!新账号 || !新密码 || 新密码 !== 确认密码) {
+              return 创建HTML响应(生成注册页面('账号或密码无效，或密码不匹配')));
+            }
+
+            await env.LOGIN_STATE.put('admin_username', 新账号);
+            await env.LOGIN_STATE.put('admin_password', 新密码);
+            await env.LOGIN_STATE.put('admin_initialized', 'true');
+            return 创建重定向响应('/login');
           case '/reset-login-failures':
             await env.LOGIN_STATE.put(`fail_${设备标识}`, '0');
             await env.LOGIN_STATE.delete(`lock_${设备标识}`);
@@ -159,16 +187,12 @@ export default {
           case `/${订阅路径}`:
             const Token = 请求.headers.get('Cookie')?.split('=')[1];
             const 有效Token = await env.LOGIN_STATE.get('current_token');
-            if (!Token || Token !== atob(有效Token)) return 创建重定向响应('/login');
-            let stats = await env.LOGIN_STATE.get('access_stats') || '{"count": 0}';
-            stats = JSON.parse(stats);
-            stats.count++;
-            await env.LOGIN_STATE.put('access_stats', JSON.stringify(stats), { expirationTtl: 86400 });
+            if (!Token || Token !== 有效Token) return 创建重定向响应('/login');
             return 创建HTML响应(生成订阅页面(订阅路径, hostName));
           case '/login':
             const 锁定状态 = await 检查锁定(env, 设备标识);
             if (锁定状态.被锁定) return 创建HTML响应(生成登录界面(true, 锁定状态.剩余时间));
-            if (请求.headers.get('Cookie')?.split('=')[1] === atob(await env.LOGIN_STATE.get('current_token'))) {
+            if (请求.headers.get('Cookie')?.split('=')[1] === await env.LOGIN_STATE.get('current_token')) {
               return 创建重定向响应(`/${订阅路径}`);
             }
             const 失败次数 = Number(await env.LOGIN_STATE.get(`fail_${设备标识}`) || 0);
@@ -179,10 +203,12 @@ export default {
             formData = await 请求.formData();
             const 提供的账号 = formData.get('username');
             const 提供的密码 = formData.get('password');
-            if (提供的账号 === 账号 && 提供的密码 === 密码) {
+            const 存储账号 = await env.LOGIN_STATE.get('admin_username');
+            const 存储密码 = await env.LOGIN_STATE.get('admin_password');
+            if (!存储账号 || !存储密码) return 创建重定向响应('/register'); // 未初始化时重定向到注册
+            if (提供的账号 === 存储账号 && 提供的密码 === 存储密码) {
               const 新Token = Math.random().toString(36).substring(2);
-              const encryptedToken = btoa(新Token);
-              await env.LOGIN_STATE.put('current_token', encryptedToken, { expirationTtl: 300 });
+              await env.LOGIN_STATE.put('current_token', 新Token, { expirationTtl: 300 });
               await env.LOGIN_STATE.put(`fail_${设备标识}`, '0');
               return 创建重定向响应(`/${订阅路径}`, { 'Set-Cookie': `token=${新Token}; Path=/; HttpOnly; SameSite=Strict` });
             } else {
@@ -208,7 +234,7 @@ export default {
           case `/${订阅路径}/upload`:
             const uploadToken = 请求.headers.get('Cookie')?.split('=')[1];
             const 有效UploadToken = await env.LOGIN_STATE.get('current_token');
-            if (!uploadToken || uploadToken !== atob(有效UploadToken)) {
+            if (!uploadToken || uploadToken !== 有效UploadToken) {
               return 创建JSON响应({ error: '未登录或Token无效，请重新登录' }, 401);
             }
             formData = await 请求.formData();
@@ -217,28 +243,38 @@ export default {
               return 创建JSON响应({ error: '未选择任何文件' }, 400);
             }
             let allIpList = [];
-            for (const ipFile of ipFiles) {
-              if (!ipFile || !ipFile.text) throw new Error(`文件 ${ipFile.name} 无效`);
-              const ipText = await ipFile.text();
-              const ipList = ipText.split('\n').map(line => line.trim()).filter(Boolean);
-              allIpList = allIpList.concat(ipList);
+            try {
+              for (const ipFile of ipFiles) {
+                if (!ipFile || !ipFile.text) throw new Error(`文件 ${ipFile.name} 无效`);
+                const ipText = await ipFile.text();
+                const ipList = ipText.split('\n').map(line => line.trim()).filter(Boolean);
+                if (ipList.length === 0) console.warn(`文件 ${ipFile.name} 内容为空`);
+                allIpList = allIpList.concat(ipList);
+              }
+              if (allIpList.length === 0) {
+                return 创建JSON响应({ error: '所有上传文件内容为空' }, 400);
+              }
+              const uniqueIpList = [...new Set(allIpList)];
+
+              const 当前手动节点 = await env.LOGIN_STATE.get('manual_preferred_ips');
+              const 当前节点列表 = 当前手动节点 ? JSON.parse(当前手动节点) : [];
+              const 是重复上传 = JSON.stringify(当前节点列表.sort()) === JSON.stringify(uniqueIpList.sort());
+              if (是重复上传) {
+                return 创建JSON响应({ message: '上传内容与现有节点相同，无需更新' }, 200);
+              }
+
+              await env.LOGIN_STATE.put('manual_preferred_ips', JSON.stringify(uniqueIpList), { expirationTtl: 86400 });
+              const 新版本 = String(Date.now());
+              await env.LOGIN_STATE.put('ip_preferred_ips_version', 新版本);
+              await env.LOGIN_STATE.put('config_clash', 生成猫咪配置(hostName), { expirationTtl: 86400 });
+              await env.LOGIN_STATE.put('config_clash_version', 新版本);
+              await env.LOGIN_STATE.put('config_v2ray', 生成备用配置(hostName), { expirationTtl: 86400 });
+              await env.LOGIN_STATE.put('config_v2ray_version', 新版本);
+              return 创建JSON响应({ message: '上传成功，即将跳转' }, 200, { 'Location': `/${订阅路径}` });
+            } catch (错误) {
+              console.error(`上传处理失败: ${错误.message}`);
+              return 创建JSON响应({ error: `上传处理失败: ${错误.message}` }, 500);
             }
-            if (allIpList.length === 0) {
-              return 创建JSON响应({ error: '所有上传文件内容为空' }, 400);
-            }
-            const uniqueIpList = [...new Set(allIpList)];
-            const 当前手动节点 = await env.LOGIN_STATE.get('manual_preferred_ips');
-            const 当前节点列表 = 当前手动节点 ? JSON.parse(当前手动节点) : [];
-            const 是重复上传 = JSON.stringify(当前节点列表.sort()) === JSON.stringify(uniqueIpList.sort());
-            if (是重复上传) {
-              return 创建JSON响应({ message: '上传内容与现有节点相同，无需更新' }, 200);
-            }
-            await env.LOGIN_STATE.put('manual_preferred_ips', JSON.stringify(uniqueIpList), { expirationTtl: 86400 });
-            const 新版本 = String(Date.now());
-            await env.LOGIN_STATE.put('ip_preferred_ips_version', 新版本);
-            await env.LOGIN_STATE.put('config_clash', 生成猫咪配置(hostName), { expirationTtl: 86400 });
-            await env.LOGIN_STATE.put('config_v2ray', 生成备用配置(hostName), { expirationTtl: 86400 });
-            return 创建JSON响应({ message: '上传成功，即将跳转' }, 200, { 'Location': `/${订阅路径}` });
           case '/set-proxy-state':
             formData = await 请求.formData();
             const proxyEnabled = formData.get('proxyEnabled');
@@ -257,63 +293,6 @@ export default {
               else if (代理类型 === 'socks5' && SOCKS5账号) status = 'SOCKS5';
             }
             return 创建JSON响应({ status });
-          case '/config/nodes':
-            const nodes = await env.LOGIN_STATE.get('ip_preferred_ips');
-            return 创建JSON响应(nodes ? JSON.parse(nodes) : []);
-          case '/config/add-node':
-            const { node } = await 请求.json();
-            const currentNodes = await env.LOGIN_STATE.get('ip_preferred_ips');
-            const nodeList = currentNodes ? JSON.parse(currentNodes) : [];
-            if (!nodeList.includes(node)) {
-              nodeList.push(node);
-              await env.LOGIN_STATE.put('ip_preferred_ips', JSON.stringify(nodeList), { expirationTtl: 86400 });
-              const newVersion = String(Date.now());
-              await env.LOGIN_STATE.put('ip_preferred_ips_version', newVersion);
-              await env.LOGIN_STATE.put('config_clash', 生成猫咪配置(hostName), { expirationTtl: 86400 });
-              await env.LOGIN_STATE.put('config_v2ray', 生成备用配置(hostName), { expirationTtl: 86400 });
-            }
-            return new Response(null, { status: 200 });
-          case '/config/delete-node':
-            const { node: nodeToDelete } = await 请求.json();
-            const currentNodesDel = await env.LOGIN_STATE.get('ip_preferred_ips');
-            const nodeListDel = currentNodesDel ? JSON.parse(currentNodesDel) : [];
-            const updatedList = nodeListDel.filter(n => n !== nodeToDelete);
-            await env.LOGIN_STATE.put('ip_preferred_ips', JSON.stringify(updatedList), { expirationTtl: 86400 });
-            const newVersionDel = String(Date.now());
-            await env.LOGIN_STATE.put('ip_preferred_ips_version', newVersionDel);
-            await env.LOGIN_STATE.put('config_clash', 生成猫咪配置(hostName), { expirationTtl: 86400 });
-            await env.LOGIN_STATE.put('config_v2ray', 生成备用配置(hostName), { expirationTtl: 86400 });
-            return new Response(null, { status: 200 });
-          case '/config/settings':
-            if (请求.method === 'GET') {
-              return 创建JSON响应({ subPath: 订阅路径, uuid: 开门锁匙 });
-            } else if (请求.method === 'POST') {
-              const { subPath, uuid } = await 请求.json();
-              订阅路径 = subPath;
-              开门锁匙 = uuid;
-              await env.LOGIN_STATE.put('config_clash', 生成猫咪配置(hostName), { expirationTtl: 86400 });
-              await env.LOGIN_STATE.put('config_v2ray', 生成备用配置(hostName), { expirationTtl: 86400 });
-              return new Response(null, { status: 200 });
-            }
-          case '/config/test-nodes':
-            const nodeListTest = 优选节点.length ? 优选节点 : [`${hostName}:443`];
-            const testResults = await Promise.all(nodeListTest.map(async node => {
-              const start = Date.now();
-              try {
-                const [addressPort] = node.split('#');
-                const [address, port = '443'] = addressPort.split(':');
-                const conn = connect({ hostname: address, port: Number(port) });
-                await conn.opened;
-                conn.close();
-                return { node, delay: Date.now() - start };
-              } catch {
-                return { node, delay: -1 };
-              }
-            }));
-            return 创建JSON响应(testResults);
-          case '/config/stats':
-            const statsData = await env.LOGIN_STATE.get('access_stats') || '{"count": 0}';
-            return 创建JSON响应(JSON.parse(statsData));
           default:
             url.hostname = 伪装域名;
             url.protocol = 'https:';
@@ -331,7 +310,6 @@ export default {
   }
 };
 
-// WebSocket 和连接相关函数保持不变
 async function 升级请求(请求, env) {
   const 创建接口 = new WebSocketPair();
   const [客户端, 服务端] = Object.values(创建接口);
@@ -516,7 +494,147 @@ async function 解析SOCKS5账号(SOCKS5) {
   return { username, password, hostname, port };
 }
 
-// 修改后的订阅页面，包含新功能
+function 生成注册页面(错误消息 = '') {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: 'Comic Sans MS', 'Arial', sans-serif;
+      color: #ff6f91;
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+      overflow: hidden;
+      transition: background 0.5s ease;
+    }
+    @media (prefers-color-scheme: light) {
+      body { background: linear-gradient(135deg, #ffe6f0, #fff0f5); }
+      .content { background: rgba(255, 255, 255, 0.85); box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3); }
+    }
+    @media (prefers-color-scheme: dark) {
+      body { background: linear-gradient(135deg, #1e1e2f, #2a2a3b); }
+      .content { background: rgba(30, 30, 30, 0.9); color: #ffd1dc; box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2); }
+    }
+    .background-media {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: -1;
+      transition: opacity 0.5s ease;
+    }
+    .content {
+      padding: 30px;
+      border-radius: 25px;
+      max-width: 400px;
+      width: 90%;
+      text-align: center;
+    }
+    h1 {
+      font-size: 1.8em;
+      color: #ff69b4;
+      text-shadow: 1px 1px 3px rgba(255, 105, 180, 0.2);
+      margin-bottom: 20px;
+    }
+    .register-form {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      width: 100%;
+      max-width: 300px;
+      margin: 0 auto;
+    }
+    .register-form input {
+      padding: 12px;
+      border-radius: 15px;
+      border: 2px solid #ffb6c1;
+      background: #fff;
+      font-size: 1em;
+      color: #ff6f91;
+      width: 100%;
+      box-sizing: border-box;
+      transition: border-color 0.3s ease;
+    }
+    .register-form input:focus {
+      border-color: #ff69b4;
+      outline: none;
+    }
+    .register-form input::placeholder {
+      color: #ffb6c1;
+    }
+    .register-form button {
+      padding: 12px;
+      background: linear-gradient(to right, #ffb6c1, #ff69b4);
+      color: white;
+      border: none;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 1em;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    .register-form button:hover {
+      transform: scale(1.05);
+      box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4);
+    }
+    .error-message {
+      color: #ff6666;
+      margin-top: 15px;
+      font-size: 0.9em;
+      animation: shake 0.5s ease-in-out;
+    }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-5px); }
+      50% { transform: translateX(5px); }
+      75% { transform: translateX(-5px); }
+    }
+    @media (max-width: 600px) {
+      .content { padding: 20px; }
+      h1 { font-size: 1.5em; }
+      .register-form { max-width: 250px; }
+      .register-form input, .register-form button { font-size: 0.9em; padding: 10px; }
+    }
+  </style>
+</head>
+<body>
+  <img id="backgroundImage" class="background-media" alt="Background">
+  <div class="content">
+    <h1>🌸 设置管理员账户 🌸</h1>
+    <p>首次使用，请设置你的管理员账号和密码哦~</p>
+    <form class="register-form" action="/register/submit" method="POST">
+      <input type="text" id="username" name="username" placeholder="请输入账号" required>
+      <input type="password" id="password" name="password" placeholder="请输入密码" required>
+      <input type="password" id="confirm_password" name="confirm_password" placeholder="确认密码" required>
+      <button type="submit">注册</button>
+    </form>
+    ${错误消息 ? `<div class="error-message">${错误消息}</div>` : ''}
+  </div>
+  <script>
+    const lightBg = '${白天背景壁纸}';
+    const darkBg = '${暗黑背景壁纸}';
+    const bgImage = document.getElementById('backgroundImage');
+
+    function updateBackground() {
+      const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      bgImage.src = isDarkMode ? darkBg : lightBg;
+    }
+
+    updateBackground();
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
+  </script>
+</body>
+</html>
+  `;
+}
+
 function 生成订阅页面(订阅路径, hostName) {
   return `
 <!DOCTYPE html>
@@ -536,22 +654,57 @@ function 生成订阅页面(订阅路径, hostName) {
       transition: background 0.5s ease;
     }
     @media (prefers-color-scheme: light) {
-      body { background: linear-gradient(135deg, #ffe6f0, #fff0f5); }
-      .card { background: rgba(255, 245, 247, 0.9); box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3); }
-      .card::before { border: 2px dashed #ffb6c1; }
-      .card:hover { box-shadow: 0 10px 25px rgba(255, 182, 193, 0.5); }
-      .link-box, .proxy-status { background: rgba(255, 240, 245, 0.9); border: 2px dashed #ffb6c1; }
-      .file-item, .node-item { background: rgba(255, 245, 247, 0.9); }
+      body {
+        background: linear-gradient(135deg, #ffe6f0, #fff0f5);
+      }
+      .card {
+        background: rgba(255, 245, 247, 0.9);
+        box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3);
+      }
+      .card::before {
+        border: 2px dashed #ffb6c1;
+      }
+      .card:hover {
+        box-shadow: 0 10px 25px rgba(255, 182, 193, 0.5);
+      }
+      .link-box, .proxy-status {
+        background: rgba(255, 240, 245, 0.9);
+        border: 2px dashed #ffb6c1;
+      }
+      .file-item {
+        background: rgba(255, 245, 247, 0.9);
+      }
     }
     @media (prefers-color-scheme: dark) {
-      body { background: linear-gradient(135deg, #1e1e2f, #2a2a3b); }
-      .card { background: rgba(30, 30, 30, 0.9); color: #ffd1dc; box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2); }
-      .card::before { border: 2px dashed #ff85a2; }
-      .card:hover { box-shadow: 0 10px 25px rgba(255, 133, 162, 0.4); }
-      .link-box, .proxy-status { background: rgba(40, 40, 40, 0.9); border: 2px dashed #ff85a2; color: #ffd1dc; }
-      .link-box a { color: #ff85a2; }
-      .link-box a:hover { color: #ff1493; }
-      .file-item, .node-item { background: rgba(50, 50, 50, 0.9); color: #ffd1dc; }
+      body {
+        background: linear-gradient(135deg, #1e1e2f, #2a2a3b);
+      }
+      .card {
+        background: rgba(30, 30, 30, 0.9);
+        color: #ffd1dc;
+        box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2);
+      }
+      .card::before {
+        border: 2px dashed #ff85a2;
+      }
+      .card:hover {
+        box-shadow: 0 10px 25px rgba(255, 133, 162, 0.4);
+      }
+      .link-box, .proxy-status {
+        background: rgba(40, 40, 40, 0.9);
+        border: 2px dashed #ff85a2;
+        color: #ffd1dc;
+      }
+      .link-box a {
+        color: #ff85a2;
+      }
+      .link-box a:hover {
+        color: #ff1493;
+      }
+      .file-item {
+        background: rgba(50, 50, 50, 0.9);
+        color: #ffd1dc;
+      }
     }
     .background-media {
       position: fixed;
@@ -594,6 +747,9 @@ function 生成订阅页面(订阅路径, hostName) {
       border-radius: 20px;
       z-index: -1;
     }
+    .card:hover {
+      transform: scale(1.03);
+    }
     .card::after {
       content: '🎀';
       position: absolute;
@@ -607,19 +763,39 @@ function 生成订阅页面(订阅路径, hostName) {
       pointer-events: none;
     }
     @media (prefers-color-scheme: dark) {
-      .card::after { color: #ff85a2; text-shadow: 2px 2px 4px rgba(255, 133, 162, 0.3); }
+      .card::after {
+        color: #ff85a2;
+        text-shadow: 2px 2px 4px rgba(255, 133, 162, 0.3);
+      }
     }
-    .card:hover { transform: scale(1.03); }
     .card-title {
       font-size: 1.6em;
       color: #ff69b4;
       margin-bottom: 15px;
       text-shadow: 1px 1px 3px rgba(255, 105, 180, 0.2);
     }
-    .switch-container { display: flex; flex-direction: column; align-items: center; gap: 15px; }
-    .toggle-row { display: flex; align-items: center; gap: 15px; }
-    .toggle-switch { position: relative; display: inline-block; width: 60px; height: 34px; }
-    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .switch-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 15px;
+    }
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 60px;
+      height: 34px;
+    }
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
     .slider {
       position: absolute;
       cursor: pointer;
@@ -642,9 +818,19 @@ function 生成订阅页面(订阅路径, hostName) {
       transition: .4s;
       border-radius: 50%;
     }
-    input:checked + .slider { background-color: #ff69b4; }
-    input:checked + .slider:before { transform: translateX(26px); }
-    .proxy-capsule { display: flex; border-radius: 20px; overflow: hidden; background: #ffe6f0; box-shadow: 0 4px 10px rgba(255, 182, 193, 0.2); }
+    input:checked + .slider {
+      background-color: #ff69b4;
+    }
+    input:checked + .slider:before {
+      transform: translateX(26px);
+    }
+    .proxy-capsule {
+      display: flex;
+      border-radius: 20px;
+      overflow: hidden;
+      background: #ffe6f0;
+      box-shadow: 0 4px 10px rgba(255, 182, 193, 0.2);
+    }
     .proxy-option {
       width: 80px;
       padding: 10px 0;
@@ -652,10 +838,36 @@ function 生成订阅页面(订阅路径, hostName) {
       cursor: pointer;
       color: #ff6f91;
       transition: all 0.3s ease;
+      position: relative;
+      font-size: 1em;
     }
-    .proxy-option.active { background: linear-gradient(to right, #ffb6c1, #ff69b4); color: white; box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.1); }
-    .proxy-option:not(.active):hover { background: #ffd1dc; }
-    .proxy-option[data-type="socks5"].active { background: linear-gradient(to right, #ffd1dc, #ff85a2); }
+    .proxy-option.active {
+      background: linear-gradient(to right, #ffb6c1, #ff69b4);
+      color: white;
+      box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.1);
+    }
+    .proxy-option:not(.active):hover {
+      background: #ffd1dc;
+    }
+    .proxy-option[data-type="socks5"].active {
+      background: linear-gradient(to right, #ffd1dc, #ff85a2);
+    }
+    .proxy-option::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: rgba(255, 255, 255, 0.2);
+      transform: rotate(30deg);
+      transition: all 0.5s ease;
+      pointer-events: none;
+    }
+    .proxy-option:hover::before {
+      top: 100%;
+      left: 100%;
+    }
     .proxy-status {
       margin-top: 20px;
       padding: 15px;
@@ -666,12 +878,36 @@ function 生成订阅页面(订阅路径, hostName) {
       width: 100%;
       box-sizing: border-box;
     }
-    .proxy-status.success { background: rgba(212, 237, 218, 0.9); color: #155724; }
-    .proxy-status.direct { background: rgba(233, 236, 239, 0.9); color: #495057; }
-    .link-box { border-radius: 15px; padding: 15px; margin: 10px 0; font-size: 0.95em; word-break: break-all; }
-    .link-box a { color: #ff69b4; text-decoration: none; transition: color 0.3s ease; }
-    .link-box a:hover { color: #ff1493; }
-    .button-group { display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; margin-top: 15px; }
+    .proxy-status.success {
+      background: rgba(212, 237, 218, 0.9);
+      color: #155724;
+    }
+    .proxy-status.direct {
+      background: rgba(233, 236, 239, 0.9);
+      color: #495057;
+    }
+    .link-box {
+      border-radius: 15px;
+      padding: 15px;
+      margin: 10px 0;
+      font-size: 0.95em;
+      word-break: break-all;
+    }
+    .link-box a {
+      color: #ff69b4;
+      text-decoration: none;
+      transition: color 0.3s ease;
+    }
+    .link-box a:hover {
+      color: #ff1493;
+    }
+    .button-group {
+      display: flex;
+      justify-content: center;
+      gap: 15px;
+      flex-wrap: wrap;
+      margin-top: 15px;
+    }
     .cute-button {
       padding: 12px 25px;
       border-radius: 20px;
@@ -679,14 +915,29 @@ function 生成订阅页面(订阅路径, hostName) {
       font-size: 1em;
       color: white;
       cursor: pointer;
-      transition: all 0.3s ease;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
-    .cute-button:hover { transform: scale(1.05) rotate(2deg); box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4); }
-    .cute-button:active { transform: scale(0.95); }
-    .clash-btn { background: linear-gradient(to right, #ffb6c1, #ff69b4); }
-    .v2ray-btn { background: linear-gradient(to right, #ffd1dc, #ff85a2); }
-    .logout-btn { background: linear-gradient(to right, #ff9999, #ff6666); }
-    .upload-title { font-size: 1.4em; color: #ff85a2; margin-bottom: 15px; }
+    .cute-button:hover {
+      transform: scale(1.05);
+      box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4);
+    }
+    .cute-button:active {
+      transform: scale(0.95);
+    }
+    .clash-btn {
+      background: linear-gradient(to right, #ffb6c1, #ff69b4);
+    }
+    .v2ray-btn {
+      background: linear-gradient(to right, #ffd1dc, #ff85a2);
+    }
+    .logout-btn {
+      background: linear-gradient(to right, #ff9999, #ff6666);
+    }
+    .upload-title {
+      font-size: 1.4em;
+      color: #ff85a2;
+      margin-bottom: 15px;
+    }
     .upload-label {
       padding: 10px 20px;
       background: linear-gradient(to right, #ffb6c1, #ff69b4);
@@ -696,9 +947,17 @@ function 生成订阅页面(订阅路径, hostName) {
       display: inline-block;
       transition: all 0.3s ease;
     }
-    .upload-label:hover { transform: scale(1.05); box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4); }
-    .file-list, .node-list { margin: 15px 0; max-height: 120px; overflow-y: auto; text-align: left; }
-    .file-item, .node-item {
+    .upload-label:hover {
+      transform: scale(1.05);
+      box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4);
+    }
+    .file-list {
+      margin: 15px 0;
+      max-height: 120px;
+      overflow-y: auto;
+      text-align: left;
+    }
+    .file-item {
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -707,7 +966,7 @@ function 生成订阅页面(订阅路径, hostName) {
       margin: 5px 0;
       font-size: 0.9em;
     }
-    .file-item button, .node-item button {
+    .file-item button {
       background: #ff9999;
       border: none;
       border-radius: 15px;
@@ -716,7 +975,9 @@ function 生成订阅页面(订阅路径, hostName) {
       cursor: pointer;
       transition: background 0.3s ease;
     }
-    .file-item button:hover, .node-item button:hover { background: #ff6666; }
+    .file-item button:hover {
+      background: #ff6666;
+    }
     .upload-submit {
       background: linear-gradient(to right, #ffdead, #ff85a2);
       padding: 12px 25px;
@@ -726,18 +987,38 @@ function 生成订阅页面(订阅路径, hostName) {
       cursor: pointer;
       transition: all 0.3s ease;
     }
-    .upload-submit:hover { transform: scale(1.05); box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4); }
-    .progress-container { display: none; margin-top: 15px; }
-    .progress-bar { width: 100%; height: 15px; background: #ffe6f0; border-radius: 10px; overflow: hidden; border: 1px solid #ffb6c1; }
-    .progress-fill { height: 100%; background: linear-gradient(to right, #ff69b4, #ff1493); width: 0; transition: width 0.3s ease; }
-    .progress-text { text-align: center; font-size: 0.85em; color: #ff6f91; margin-top: 5px; }
-    .input-group, .settings-form { display: flex; gap: 10px; flex-wrap: wrap; flex-direction: column; max-width: 300px; margin: 0 auto; }
-    .node-input { padding: 10px; border-radius: 15px; border: 2px solid #ffb6c1; background: #fff; font-size: 1em; color: #ff6f91; flex: 1; transition: all 0.3s ease; }
-    .node-input:focus { border-color: #ff69b4; outline: none; box-shadow: 0 0 10px rgba(255, 105, 180, 0.5); }
+    .upload-submit:hover {
+      transform: scale(1.05);
+      box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4);
+    }
+    .progress-container {
+      display: none;
+      margin-top: 15px;
+    }
+    .progress-bar {
+      width: 100%;
+      height: 15px;
+      background: #ffe6f0;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid #ffb6c1;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(to right, #ff69b4, #ff1493);
+      width: 0;
+      transition: width 0.3s ease;
+    }
+    .progress-text {
+      text-align: center;
+      font-size: 0.85em;
+      color: #ff6f91;
+      margin-top: 5px;
+    }
     @media (max-width: 600px) {
       .card { padding: 15px; max-width: 90%; }
       .card-title { font-size: 1.3em; }
-      .switch-container, .settings-form { gap: 10px; }
+      .switch-container { gap: 10px; }
       .toggle-row { gap: 10px; }
       .proxy-option { width: 70px; padding: 8px 0; font-size: 0.9em; }
       .proxy-status { font-size: 0.9em; padding: 12px; }
@@ -750,13 +1031,6 @@ function 生成订阅页面(订阅路径, hostName) {
 <body>
   <img id="backgroundImage" class="background-media" alt="Background">
   <div class="container">
-    <div class="card">
-      <h2 class="card-title">🌐 语言</h2>
-      <select onchange="switchLang(this.value)">
-        <option value="zh">中文</option>
-        <option value="en">English</option>
-      </select>
-    </div>
     <div class="card">
       <h1 class="card-title">🌸 欢迎来到樱花订阅站 🌸</h1>
       <p style="font-size: 1em;">支持 <span style="color: #ff69b4;">${小猫}${咪}</span> 和 <span style="color: #ff85a2;">${歪兔}${蕊蒽}</span> 哦~</p>
@@ -810,31 +1084,6 @@ function 生成订阅页面(订阅路径, hostName) {
           <div class="progress-text" id="progressText">0%</div>
         </div>
       </form>
-    </div>
-    <div class="card">
-      <h2 class="card-title">🌟 当前节点</h2>
-      <div id="nodeList" class="node-list"></div>
-      <div class="input-group">
-        <input type="text" id="newNode" placeholder="输入新节点 (如 host:port#name)" class="node-input">
-        <button class="cute-button clash-btn" onclick="addNode()">添加节点</button>
-      </div>
-    </div>
-    <div class="card">
-      <h2 class="card-title">⚙️ 订阅设置</h2>
-      <div class="settings-form">
-        <input type="text" id="subPath" placeholder="订阅路径" class="node-input">
-        <input type="text" id="uuid" placeholder="UUID" class="node-input">
-        <button class="cute-button clash-btn" onclick="saveSettings()">保存</button>
-      </div>
-    </div>
-    <div class="card">
-      <h2 class="card-title">📡 节点测试</h2>
-      <button class="cute-button clash-btn" onclick="testNodes()">开始测试</button>
-      <div id="testResults" class="node-list"></div>
-    </div>
-    <div class="card">
-      <h2 class="card-title">📊 统计</h2>
-      <div>访问次数: <span id="accessCount"></span></div>
     </div>
     <div class="card">
       <div class="button-group">
@@ -996,101 +1245,12 @@ function 生成订阅页面(订阅路径, hostName) {
 
       xhr.send(formData);
     }
-
-    async function fetchNodes() {
-      const res = await fetch('/config/nodes');
-      const nodes = await res.json();
-      document.getElementById('nodeList').innerHTML = nodes.map(n => `
-        <div class="node-item">
-          <span>\${n}</span>
-          <button onclick="deleteNode('\${n}')">删除</button>
-        </div>
-      `).join('');
-    }
-    async function addNode() {
-      const node = document.getElementById('newNode').value.trim();
-      if (!node) return alert('请输入节点哦~');
-      const res = await fetch('/config/add-node', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ node })
-      });
-      if (res.ok) {
-        document.getElementById('newNode').value = '';
-        fetchNodes();
-      } else alert('添加失败啦~');
-    }
-    async function deleteNode(node) {
-      const res = await fetch('/config/delete-node', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ node })
-      });
-      if (res.ok) fetchNodes();
-      else alert('删除失败啦~');
-    }
-    fetchNodes();
-
-    async function loadSettings() {
-      const res = await fetch('/config/settings');
-      const { subPath, uuid } = await res.json();
-      document.getElementById('subPath').value = subPath;
-      document.getElementById('uuid').value = uuid;
-    }
-    async function saveSettings() {
-      const subPath = document.getElementById('subPath').value.trim();
-      const uuid = document.getElementById('uuid').value.trim();
-      if (!subPath || !uuid) return alert('请填写所有字段哦~');
-      const res = await fetch('/config/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subPath, uuid })
-      });
-      if (res.ok) alert('保存成功啦~ 请更新订阅链接！');
-      else alert('保存失败啦~');
-    }
-    loadSettings();
-
-    async function testNodes() {
-      document.getElementById('testResults').innerHTML = '测试中...';
-      const res = await fetch('/config/test-nodes');
-      const results = await res.json();
-      document.getElementById('testResults').innerHTML = results.map(r => `
-        <div class="node-item">
-          <span>\${r.node}</span>
-          <span>\${r.delay === -1 ? '超时' : r.delay + 'ms'}</span>
-        </div>
-      `).join('');
-    }
-
-    async function fetchStats() {
-      const res = await fetch('/config/stats');
-      const { count } = await res.json();
-      document.getElementById('accessCount').textContent = count;
-    }
-    fetchStats();
-
-    const lang = {
-      zh: { welcome: '欢迎来到樱花订阅站', proxy: '代理设置', clash: '${小猫}${咪} 订阅', v2ray: '${歪兔}${蕊蒽} 订阅', upload: '上传你的魔法 IP', nodes: '当前节点', settings: '订阅设置', test: '节点测试', stats: '统计', logout: '退出登录' },
-      en: { welcome: 'Welcome to Sakura Subscription', proxy: 'Proxy Settings', clash: 'Clash Subscription', v2ray: 'V2Ray Subscription', upload: 'Upload Your Magic IPs', nodes: 'Current Nodes', settings: 'Subscription Settings', test: 'Node Test', stats: 'Statistics', logout: 'Logout' }
-    };
-    function switchLang(l) {
-      localStorage.setItem('lang', l);
-      const titles = document.querySelectorAll('.card-title');
-      const keys = ['语言', 'welcome', 'proxy', 'clash', 'v2ray', 'upload', 'nodes', 'settings', 'test', 'stats', 'logout'];
-      titles.forEach((el, i) => {
-        if (i === 0) return; // 跳过语言选择卡片
-        el.textContent = '🌸 ' + lang[l][keys[i]];
-      });
-    }
-    switchLang(localStorage.getItem('lang') || 'zh');
   </script>
 </body>
 </html>
   `;
 }
 
-// 登录界面和 KV 未绑定提示页面保持不变
 function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码 = false, 剩余次数 = 0) {
   return `
 <!DOCTYPE html>
@@ -1365,7 +1525,6 @@ function 生成KV未绑定提示页面() {
   `;
 }
 
-// Clash 和 V2Ray 配置生成函数保持不变
 function 生成猫咪配置(hostName) {
   const 节点列表 = 优选节点.length ? 优选节点 : [`${hostName}:443`];
   const 郭嘉分组 = {};
