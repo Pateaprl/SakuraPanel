@@ -462,7 +462,390 @@ function 生成订阅页面(配置路径, hostName) {
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    /* 样式保持不变 */
+    body {
+      font-family: 'Comic Sans MS', 'Arial', sans-serif;
+      color: #ff6f91;
+      margin: 0;
+      padding: 20px;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      transition: background 0.5s ease;
+    }
+    @media (prefers-color-scheme: light) {
+      body {
+        background: linear-gradient(135deg, #ffe6f0, #fff0f5);
+      }
+      .card {
+        background: rgba(255, 245, 247, 0.9);
+        box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3);
+      }
+      .card::before {
+        border: 2px dashed #ffb6c1;
+      }
+      .card:hover {
+        box-shadow: 0 10px 25px rgba(255, 182, 193, 0.5);
+      }
+      .link-box, .proxy-status {
+        background: rgba(255, 240, 245, 0.9);
+        border: 2px dashed #ffb6c1;
+      }
+      .file-item {
+        background: rgba(255, 245, 247, 0.9);
+      }
+    }
+    @media (prefers-color-scheme: dark) {
+      body {
+        background: linear-gradient(135deg, #1e1e2f, #2a2a3b);
+      }
+      .card {
+        background: rgba(30, 30, 30, 0.9);
+        color: #ffd1dc;
+        box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2);
+      }
+      .card::before {
+        border: 2px dashed #ff85a2;
+      }
+      .card:hover {
+        box-shadow: 0 10px 25px rgba(255, 133, 162, 0.4);
+      }
+      .link-box, .proxy-status {
+        background: rgba(40, 40, 40, 0.9);
+        border: 2px dashed #ff85a2;
+        color: #ffd1dc;
+      }
+      .link-box a {
+        color: #ff85a2;
+      }
+      .link-box a:hover {
+        color: #ff1493;
+      }
+      .file-item {
+        background: rgba(50, 50, 50, 0.9);
+        color: #ffd1dc;
+      }
+    }
+    .background-media {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: -1;
+      transition: opacity 0.5s ease;
+    }
+    .container {
+      max-width: 900px;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 25px;
+      position: relative;
+      z-index: 1;
+      padding-bottom: 20px;
+    }
+    .card {
+      border-radius: 25px;
+      padding: 25px;
+      width: 100%;
+      max-width: 500px;
+      text-align: center;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+      position: relative;
+      overflow: visible;
+    }
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      right: 10px;
+      bottom: 10px;
+      border-radius: 20px;
+      z-index: -1;
+    }
+    .card:hover {
+      transform: scale(1.03);
+    }
+    .card::after {
+      content: '🎀';
+      position: absolute;
+      top: -20px;
+      right: -20px;
+      font-size: 60px;
+      color: #ff69b4;
+      transform: rotate(20deg);
+      z-index: 1;
+      text-shadow: 2px 2px 4px rgba(255, 105, 180, 0.3);
+      pointer-events: none;
+    }
+    @media (prefers-color-scheme: dark) {
+      .card::after {
+        color: #ff85a2;
+        text-shadow: 2px 2px 4px rgba(255, 133, 162, 0.3);
+      }
+    }
+    .card-title {
+      font-size: 1.6em;
+      color: #ff69b4;
+      margin-bottom: 15px;
+      text-shadow: 1px 1px 3px rgba(255, 105, 180, 0.2);
+    }
+    .switch-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 15px;
+    }
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 60px;
+      height: 34px;
+    }
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #ccc;
+      transition: .4s;
+      border-radius: 34px;
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 26px;
+      width: 26px;
+      left: 4px;
+      bottom: 4px;
+      background-color: white;
+      transition: .4s;
+      border-radius: 50%;
+    }
+    input:checked + .slider {
+      background-color: #ff69b4;
+    }
+    input:checked + .slider:before {
+      transform: translateX(26px);
+    }
+    .proxy-capsule {
+      display: flex;
+      border-radius: 20px;
+      overflow: hidden;
+      background: #ffe6f0;
+      box-shadow: 0 4px 10px rgba(255, 182, 193, 0.2);
+    }
+    .proxy-option {
+      width: 80px;
+      padding: 10px 0;
+      text-align: center;
+      cursor: pointer;
+      color: #ff6f91;
+      transition: all 0.3s ease;
+      position: relative;
+      font-size: 1em;
+    }
+    .proxy-option.active {
+      background: linear-gradient(to right, #ffb6c1, #ff69b4);
+      color: white;
+      box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.1);
+    }
+    .proxy-option:not(.active):hover {
+      background: #ffd1dc;
+    }
+    .proxy-option[data-type="socks5"].active {
+      background: linear-gradient(to right, #ffd1dc, #ff85a2);
+    }
+    .proxy-option::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: rgba(255, 255, 255, 0.2);
+      transform: rotate(30deg);
+      transition: all 0.5s ease;
+      pointer-events: none;
+    }
+    .proxy-option:hover::before {
+      top: 100%;
+      left: 100%;
+    }
+    .proxy-status {
+      margin-top: 20px;
+      padding: 15px;
+      border-radius: 15px;
+      font-size: 0.95em;
+      word-break: break-all;
+      transition: background 0.3s ease, color 0.3s ease;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .proxy-status.success {
+      background: rgba(212, 237, 218, 0.9);
+      color: #155724;
+    }
+    .proxy-status.direct {
+      background: rgba(233, 236, 239, 0.9);
+      color: #495057;
+    }
+    .link-box {
+      border-radius: 15px;
+      padding: 15px;
+      margin: 10px 0;
+      font-size: 0.95em;
+      word-break: break-all;
+    }
+    .link-box a {
+      color: #ff69b4;
+      text-decoration: none;
+      transition: color 0.3s ease;
+    }
+    .link-box a:hover {
+      color: #ff1493;
+    }
+    .button-group {
+      display: flex;
+      justify-content: center;
+      gap: 15px;
+      flex-wrap: wrap;
+      margin-top: 15px;
+    }
+    .cute-button {
+      padding: 12px 25px;
+      border-radius: 20px;
+      border: none;
+      font-size: 1em;
+      color: white;
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .cute-button:hover {
+      transform: scale(1.05);
+      box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4);
+    }
+    .cute-button:active {
+      transform: scale(0.95);
+    }
+    .clash-btn {
+      background: linear-gradient(to right, #ffb6c1, #ff69b4);
+    }
+    .v2ray-btn {
+      background: linear-gradient(to right, #ffd1dc, #ff85a2);
+    }
+    .logout-btn {
+      background: linear-gradient(to right, #ff9999, #ff6666);
+    }
+    .upload-title {
+      font-size: 1.4em;
+      color: #ff85a2;
+      margin-bottom: 15px;
+    }
+    .upload-label {
+      padding: 10px 20px;
+      background: linear-gradient(to right, #ffb6c1, #ff69b4);
+      color: white;
+      border-radius: 20px;
+      cursor: pointer;
+      display: inline-block;
+      transition: all 0.3s ease;
+    }
+    .upload-label:hover {
+      transform: scale(1.05);
+      box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4);
+    }
+    .file-list {
+      margin: 15px 0;
+      max-height: 120px;
+      overflow-y: auto;
+      text-align: left;
+    }
+    .file-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      border-radius: 10px;
+      margin: 5px 0;
+      font-size: 0.9em;
+    }
+    .file-item button {
+      background: #ff9999;
+      border: none;
+      border-radius: 15px;
+      padding: 5px 10px;
+      color: white;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+    .file-item button:hover {
+      background: #ff6666;
+    }
+    .upload-submit {
+      background: linear-gradient(to right, #ffdead, #ff85a2);
+      padding: 12px 25px;
+      border-radius: 20px;
+      border: none;
+      color: white;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    .upload-submit:hover {
+      transform: scale(1.05);
+      box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4);
+    }
+    .progress-container {
+      display: none;
+      margin-top: 15px;
+    }
+    .progress-bar {
+      width: 100%;
+      height: 15px;
+      background: #ffe6f0;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid #ffb6c1;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(to right, #ff69b4, #ff1493);
+      width: 0;
+      transition: width 0.3s ease;
+    }
+    .progress-text {
+      text-align: center;
+      font-size: 0.85em;
+      color: #ff6f91;
+      margin-top: 5px;
+    }
+    @media (max-width: 600px) {
+      .card { padding: 15px; max-width: 90%; }
+      .card-title { font-size: 1.3em; }
+      .switch-container { gap: 10px; }
+      .toggle-row { gap: 10px; }
+      .proxy-option { width: 70px; padding: 8px 0; font-size: 0.9em; }
+      .proxy-status { font-size: 0.9em; padding: 12px; }
+      .link-box { font-size: 0.9em; padding: 12px; }
+      .cute-button, .upload-label, .upload-submit { padding: 10px 20px; font-size: 0.9em; }
+      .card::after { font-size: 50px; top: -15px; right: -15px; }
+    }
   </style>
 </head>
 <body>
@@ -695,7 +1078,117 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    /* 样式保持不变 */
+    body {
+      font-family: 'Comic Sans MS', 'Arial', sans-serif;
+      color: #ff6f91;
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+      overflow: hidden;
+      transition: background 0.5s ease;
+    }
+    @media (prefers-color-scheme: light) {
+      body { background: linear-gradient(135deg, #ffe6f0, #fff0f5); }
+      .content { background: rgba(255, 255, 255, 0.85); box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3); }
+    }
+    @media (prefers-color-scheme: dark) {
+      body { background: linear-gradient(135deg, #1e1e2f, #2a2a3b); }
+      .content { background: rgba(30, 30, 30, 0.9); color: #ffd1dc; box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2); }
+    }
+    .background-media {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: -1;
+      transition: opacity 0.5s ease;
+    }
+    .content {
+      padding: 30px;
+      border-radius: 25px;
+      max-width: 400px;
+      width: 90%;
+      text-align: center;
+    }
+    h1 {
+      font-size: 1.8em;
+      color: #ff69b4;
+      text-shadow: 1px 1px 3px rgba(255, 105, 180, 0.2);
+      margin-bottom: 20px;
+    }
+    .login-form {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      width: 100%;
+      max-width: 300px;
+      margin: 0 auto;
+    }
+    .login-form input {
+      padding: 12px;
+      border-radius: 15px;
+      border: 2px solid #ffb6c1;
+      background: #fff;
+      font-size: 1em;
+      color: #ff6f91;
+      width: 100%;
+      box-sizing: border-box;
+      transition: border-color 0.3s ease;
+    }
+    .login-form input:focus {
+      border-color: #ff69b4;
+      outline: none;
+    }
+    .login-form input::placeholder {
+      color: #ffb6c1;
+    }
+    .login-form button {
+      padding: 12px;
+      background: linear-gradient(to right, #ffb6c1, #ff69b4);
+      color: white;
+      border: none;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 1em;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    .login-form button:hover {
+      transform: scale(1.05);
+      box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4);
+    }
+    .error-message {
+      color: #ff6666;
+      margin-top: 15px;
+      font-size: 0.9em;
+      animation: shake 0.5s ease-in-out;
+    }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-5px); }
+      50% { transform: translateX(5px); }
+      75% { transform: translateX(-5px); }
+    }
+    .lock-message {
+      color: #ff6666;
+      margin-top: 20px;
+      font-size: 1.1em;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    @media (max-width: 600px) {
+      .content { padding: 20px; }
+      h1 { font-size: 1.5em; }
+      .login-form { max-width: 250px; }
+      .login-form input, .login-form button { font-size: 0.9em; padding: 10px; }
+    }
   </style>
 </head>
 <body>
@@ -763,7 +1256,68 @@ function 生成KV未绑定提示页面() {
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    /* 样式保持不变 */
+    body {
+      font-family: 'Comic Sans MS', 'Arial', sans-serif;
+      color: #ff6f91;
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+      overflow: hidden;
+      transition: background 0.5s ease;
+    }
+    @media (prefers-color-scheme: light) {
+      body { background: linear-gradient(135deg, #ffe6f0, #fff0f5); }
+      .content { background: rgba(255, 255, 255, 0.85); box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3); }
+    }
+    @media (prefers-color-scheme: dark) {
+      body { background: linear-gradient(135deg, #1e1e2f, #2a2a3b); }
+      .content { background: rgba(30, 30, 30, 0.9); color: #ffd1dc; box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2); }
+    }
+    .background-media {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: -1;
+      transition: opacity 0.5s ease;
+    }
+    .content {
+      padding: 30px;
+      border-radius: 25px;
+      max-width: 500px;
+      width: 90%;
+      text-align: center;
+    }
+    h1 {
+      font-size: 1.8em;
+      color: #ff69b4;
+      text-shadow: 1px 1px 3px rgba(255, 105, 180, 0.2);
+      margin-bottom: 20px;
+    }
+    p {
+      font-size: 1.1em;
+      line-height: 1.6;
+      color: #ff85a2;
+    }
+    .highlight {
+      color: #ff1493;
+      font-weight: bold;
+    }
+    .instruction {
+      margin-top: 20px;
+      font-size: 1em;
+      color: #ff69b4;
+    }
+    @media (max-width: 600px) {
+      .content { padding: 20px; }
+      h1 { font-size: 1.5em; }
+      p { font-size: 0.95em; }
+    }
   </style>
 </head>
 <body>
