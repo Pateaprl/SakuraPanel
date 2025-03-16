@@ -538,12 +538,19 @@ function 生成订阅页面(订阅路径, hostName) {
       .card:hover {
         box-shadow: 0 10px 25px rgba(255, 182, 193, 0.5);
       }
-      .link-box, .proxy-status {
+      .link-box, .proxy-status, .traffic-box {
         background: rgba(255, 240, 245, 0.9);
         border: 2px dashed #ffb6c1;
       }
       .file-item {
         background: rgba(255, 245, 247, 0.9);
+      }
+      .traffic-bar {
+        background: #ffe6f0;
+        border: 1px solid #ffb6c1;
+      }
+      .traffic-fill {
+        background: linear-gradient(to right, #ff69b4, #ff1493);
       }
     }
     @media (prefers-color-scheme: dark) {
@@ -561,7 +568,7 @@ function 生成订阅页面(订阅路径, hostName) {
       .card:hover {
         box-shadow: 0 10px 25px rgba(255, 133, 162, 0.4);
       }
-      .link-box, .proxy-status {
+      .link-box, .proxy-status, .traffic-box {
         background: rgba(40, 40, 40, 0.9);
         border: 2px dashed #ff85a2;
         color: #ffd1dc;
@@ -575,6 +582,13 @@ function 生成订阅页面(订阅路径, hostName) {
       .file-item {
         background: rgba(50, 50, 50, 0.9);
         color: #ffd1dc;
+      }
+      .traffic-bar {
+        background: rgba(50, 50, 50, 0.9);
+        border: 1px solid #ff85a2;
+      }
+      .traffic-fill {
+        background: linear-gradient(to right, #ff85a2, #ff1493);
       }
     }
     .background-media {
@@ -644,6 +658,35 @@ function 生成订阅页面(订阅路径, hostName) {
       color: #ff69b4;
       margin-bottom: 15px;
       text-shadow: 1px 1px 3px rgba(255, 105, 180, 0.2);
+    }
+    .traffic-box {
+      border-radius: 15px;
+      padding: 15px;
+      margin: 10px 0;
+      font-size: 0.95em;
+      text-align: left;
+    }
+    .traffic-bar {
+      width: 100%;
+      height: 15px;
+      border-radius: 10px;
+      overflow: hidden;
+      margin: 10px 0;
+    }
+    .traffic-fill {
+      height: 100%;
+      width: 0;
+      transition: width 0.5s ease;
+    }
+    .traffic-details {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.9em;
+      color: #ff6f91;
+    }
+    .traffic-details span {
+      flex: 1;
+      text-align: center;
     }
     .switch-container {
       display: flex;
@@ -893,7 +936,7 @@ function 生成订阅页面(订阅路径, hostName) {
       .toggle-row { gap: 10px; }
       .proxy-option { width: 70px; padding: 8px 0; font-size: 0.9em; }
       .proxy-status { font-size: 0.9em; padding: 12px; }
-      .link-box { font-size: 0.9em; padding: 12px; }
+      .link-box, .traffic-box { font-size: 0.9em; padding: 12px; }
       .cute-button, .upload-label, .upload-submit { padding: 10px 20px; font-size: 0.9em; }
       .card::after { font-size: 50px; top: -15px; right: -15px; }
     }
@@ -905,6 +948,20 @@ function 生成订阅页面(订阅路径, hostName) {
     <div class="card">
       <h1 class="card-title">🌸 欢迎来到樱花订阅站 🌸</h1>
       <p style="font-size: 1em;">支持 <span style="color: #ff69b4;">${小猫}${咪}</span> 和 <span style="color: #ff85a2;">${歪兔}${蕊蒽}</span> 哦~</p>
+    </div>
+    <div class="card">
+      <h2 class="card-title">📊 流量信息</h2>
+      <div class="traffic-box" id="trafficBox">
+        <p>加载中...</p>
+        <div class="traffic-bar">
+          <div class="traffic-fill" id="trafficFill"></div>
+        </div>
+        <div class="traffic-details">
+          <span id="trafficUsed">已用: 0</span>
+          <span id="trafficTotal">总计: 0</span>
+          <span id="trafficExpire">到期: -</span>
+        </div>
+      </div>
     </div>
     <div class="card">
       <h2 class="card-title">🌟 代理设置</h2>
@@ -973,6 +1030,30 @@ function 生成订阅页面(订阅路径, hostName) {
     }
     updateBackground();
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
+
+    // 加载流量信息
+    function loadTrafficInfo() {
+      fetch('/traffic-info')
+        .then(response => response.json())
+        .then(data => {
+          const total = data.total || 100000;
+          const used = data.used || 0;
+          const expire = data.expire || '2099-12-31';
+          const percentage = Math.min((used / total) * 100, 100).toFixed(2);
+
+          document.getElementById('trafficBox').innerHTML = '';
+          document.getElementById('trafficFill').style.width = percentage + '%';
+          document.getElementById('trafficUsed').textContent = \`已用: \${used}\`;
+          document.getElementById('trafficTotal').textContent = \`总计: \${total}\`;
+          document.getElementById('trafficExpire').textContent = \`到期: \${expire}\`;
+        })
+        .catch(error => {
+          console.error('加载流量信息失败:', error);
+          document.getElementById('trafficBox').innerHTML = '<p>加载流量信息失败，请稍后重试~</p>';
+        });
+    }
+    loadTrafficInfo();
+    setInterval(loadTrafficInfo, 300000); // 每5分钟刷新一次
 
     let proxyEnabled = localStorage.getItem('proxyEnabled') === 'true';
     let proxyType = localStorage.getItem('proxyType') || 'reverse';
