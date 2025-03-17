@@ -246,30 +246,40 @@ export default {
           case '/get-proxy-status':
             const 代理启用 = await env.LOGIN_STATE.get('proxyEnabled') === 'true';
             const 代理类型 = await env.LOGIN_STATE.get('proxyType') || 'reverse';
-            const 反代地址 = env.PROXYIP || 'ts.hpc.tw';
-            const SOCKS5账号 = env.SOCKS5 || '';
+            const 反代地址 = env.PROXYIP || ''; // 确保即使未配置也不会是 null
+            const SOCKS5账号 = env.SOCKS5 || ''; // 确保即使未配置也不会是 null
             let status = '直连模式';
             let available = null; // null 表示直连模式
             let connectedTo = ''; // 连接目标
 
             if (代理启用) {
-              if (代理类型 === 'reverse' && 反代地址) {
+              if (代理类型 === 'reverse') {
                 status = '反代';
-                connectedTo = 反代地址;
-                available = await 测试代理(
-                  (addr, port) => connect({ hostname: 反代地址.split(':')[0], port: 反代地址.split(':')[1] || port }),
-                  `反代 ${反代地址}`,
-                  env
-                );
-              } else if (代理类型 === 'socks5' && SOCKS5账号) {
+                if (反代地址) {
+                  connectedTo = 反代地址;
+                  available = await 测试代理(
+                    (addr, port) => connect({ hostname: 反代地址.split(':')[0], port: 反代地址.split(':')[1] || port }),
+                    `反代 ${反代地址}`,
+                    env
+                  );
+                } else {
+                  available = false; // 未配置反代地址时标记为不可用
+                  connectedTo = '未配置';
+                }
+              } else if (代理类型 === 'socks5') {
                 status = 'SOCKS5';
-                const { hostname, port } = await 解析SOCKS5账号(SOCKS5账号);
-                connectedTo = `${hostname}:${port}`;
-                available = await 测试代理(
-                  () => 创建SOCKS5(2, "www.google.com", 443, env),
-                  `SOCKS5 ${SOCKS5账号}`,
-                  env
-                );
+                if (SOCKS5账号) {
+                  const { hostname, port } = await 解析SOCKS5账号(SOCKS5账号);
+                  connectedTo = `${hostname}:${port}`;
+                  available = await 测试代理(
+                    () => 创建SOCKS5(2, "www.google.com", 443, env),
+                    `SOCKS5 ${SOCKS5账号}`,
+                    env
+                  );
+                } else {
+                  available = false; // 未配置 SOCKS5 时标记为不可用
+                  connectedTo = '未配置';
+                }
               }
             } else {
               const 直连地址 = await env.LOGIN_STATE.get('direct_connected_to');
@@ -915,6 +925,7 @@ function 生成订阅页面(配置路径, hostName) {
       fetch('/get-proxy-status')
         .then(response => response.json())
         .then(data => {
+          console.log('Proxy status response:', data); // 调试日志
           let displayText = '';
           let className = 'proxy-status';
 
@@ -934,7 +945,8 @@ function 生成订阅页面(配置路径, hostName) {
           statusElement.textContent = displayText;
           statusElement.className = className;
         })
-        .catch(() => {
+        .catch(error => {
+          console.error('Failed to fetch proxy status:', error); // 错误日志
           statusElement.textContent = '直连模式 (未知)';
           statusElement.className = 'proxy-status direct';
         });
