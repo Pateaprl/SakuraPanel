@@ -83,11 +83,11 @@ async function 加载节点和配置(env, hostName) {
       优选节点 = 合并节点列表;
       if (!列表相同) {
         const 新版本 = String(Date.now());
-        await env.LOGIN_STATE.put('ip_preferred_ips', JSON.stringify(合并节点列表)); // 移除 expirationTtl
+        await env.LOGIN_STATE.put('ip_preferred_ips', JSON.stringify(合并节点列表));
         await env.LOGIN_STATE.put('ip_preferred_ips_version', 新版本);
-        await env.LOGIN_STATE.put('config_clash', 生成Clash配置(hostName)); // 移除 expirationTtl
+        await env.LOGIN_STATE.put('config_clash', 生成Clash配置(hostName));
         await env.LOGIN_STATE.put('config_clash_version', 新版本);
-        await env.LOGIN_STATE.put('config_v2ray', 生成V2ray配置(hostName)); // 移除 expirationTtl
+        await env.LOGIN_STATE.put('config_v2ray', 生成V2ray配置(hostName));
         await env.LOGIN_STATE.put('config_v2ray_version', 新版本);
       }
     } else {
@@ -112,7 +112,7 @@ async function 获取配置(env, 类型, hostName) {
   }
 
   const 新配置 = 类型 === 'clash' ? 生成Clash配置(hostName) : 生成V2ray配置(hostName);
-  await env.LOGIN_STATE.put(缓存键, 新配置); // 移除 expirationTtl
+  await env.LOGIN_STATE.put(缓存键, 新配置);
   await env.LOGIN_STATE.put(版本键, 节点版本);
   return 新配置;
 }
@@ -224,12 +224,12 @@ export default {
                 return 创建JSON响应({ message: '上传内容与现有节点相同，无需更新' }, 200);
               }
 
-              await env.LOGIN_STATE.put('manual_preferred_ips', JSON.stringify(uniqueIpList)); // 移除 expirationTtl
+              await env.LOGIN_STATE.put('manual_preferred_ips', JSON.stringify(uniqueIpList));
               const 新版本 = String(Date.now());
               await env.LOGIN_STATE.put('ip_preferred_ips_version', 新版本);
-              await env.LOGIN_STATE.put('config_clash', 生成Clash配置(hostName)); // 移除 expirationTtl
+              await env.LOGIN_STATE.put('config_clash', 生成Clash配置(hostName));
               await env.LOGIN_STATE.put('config_clash_version', 新版本);
-              await env.LOGIN_STATE.put('config_v2ray', 生成V2ray配置(hostName)); // 移除 expirationTtl
+              await env.LOGIN_STATE.put('config_v2ray', 生成V2ray配置(hostName));
               await env.LOGIN_STATE.put('config_v2ray_version', 新版本);
               return 创建JSON响应({ message: '上传成功，即将跳转' }, 200, { 'Location': `/${配置路径}` });
             } catch (错误) {
@@ -249,11 +249,26 @@ export default {
             const 反代地址 = env.PROXYIP || 'ts.hpc.tw';
             const SOCKS5账号 = env.SOCKS5 || '';
             let status = '直连';
+            let available = false;
+
             if (代理启用) {
-              if (代理类型 === 'reverse' && 反代地址) status = '反代';
-              else if (代理类型 === 'socks5' && SOCKS5账号) status = 'SOCKS5';
+              if (代理类型 === 'reverse' && 反代地址) {
+                status = '反代';
+                available = await 测试代理(
+                  (addr, port) => connect({ hostname: 反代地址.split(':')[0], port: 反代地址.split(':')[1] || port }),
+                  `反代 ${反代地址}`,
+                  env
+                );
+              } else if (代理类型 === 'socks5' && SOCKS5账号) {
+                status = 'SOCKS5';
+                available = await 测试代理(
+                  () => 创建SOCKS5(2, "www.google.com", 443, env),
+                  `SOCKS5 ${SOCKS5账号}`,
+                  env
+                );
+              }
             }
-            return 创建JSON响应({ status });
+            return 创建JSON响应({ status, available });
           default:
             url.hostname = 伪装域名;
             url.protocol = 'https:';
@@ -270,6 +285,23 @@ export default {
     }
   }
 };
+
+async function 测试代理(连接函数, 描述, env) {
+  const 测试地址 = "www.google.com";
+  const 测试端口 = 443;
+  try {
+    const 测试连接 = await 连接函数(测试地址, 测试端口);
+    await 测试连接.opened;
+    console.log(`${描述} 测试成功`);
+    测试连接.close();
+    await env.LOGIN_STATE.put(`${描述}_status`, 'available', { expirationTtl: 300 }); // 缓存 5 分钟
+    return true;
+  } catch (错误) {
+    console.error(`${描述} 测试失败: ${错误.message}`);
+    await env.LOGIN_STATE.put(`${描述}_status`, 'unavailable', { expirationTtl: 300 });
+    return false;
+  }
+}
 
 async function 升级请求(请求, env) {
   const 创建接口 = new WebSocketPair();
@@ -334,27 +366,29 @@ async function 智能连接(地址, 端口, 地址类型, env) {
       return await 尝试直连(地址, 端口);
     }
 
-    if (代理类型 === 'reverse') {
-      if (反代地址) {
-        try {
-          const [反代主机, 反代端口] = 反代地址.split(':');
-          const 连接 = connect({ hostname: 反代主机, port: 反代端口 || 端口 });
-          await 连接.opened;
-          console.log(`通过反代连接: ${反代地址}`);
-          return 连接;
-        } catch (错误) {
-          console.error(`反代连接失败: ${错误.message}`);
-        }
+    if (代理类型 === 'reverse' && 反代地址) {
+      const 反代可用 = await 测试代理(
+        (addr, port) => connect({ hostname: 反代地址.split(':')[0], port: 反代地址.split(':')[1] || port }),
+        `反代 ${反代地址}`,
+        env
+      );
+      if (反代可用) {
+        const [反代主机, 反代端口] = 反代地址.split(':');
+        const 连接 = connect({ hostname: 反代主机, port: 反代端口 || 端口 });
+        await 连接.opened;
+        console.log(`通过反代连接: ${反代地址}`);
+        return 连接;
       }
-    } else if (代理类型 === 'socks5') {
-      if (SOCKS5账号) {
-        try {
-          const SOCKS5连接 = await 创建SOCKS5(地址类型, 地址, 端口);
-          console.log(`通过 SOCKS5 连接: ${地址}:${端口}`);
-          return SOCKS5连接;
-        } catch (错误) {
-          console.error(`SOCKS5 连接失败: ${错误.message}`);
-        }
+    } else if (代理类型 === 'socks5' && SOCKS5账号) {
+      const SOCKS5可用 = await 测试代理(
+        () => 创建SOCKS5(2, "www.google.com", 443, env),
+        `SOCKS5 ${SOCKS5账号}`,
+        env
+      );
+      if (SOCKS5可用) {
+        const SOCKS5连接 = await 创建SOCKS5(地址类型, 地址, 端口, env);
+        console.log(`通过 SOCKS5 连接: ${地址}:${端口}`);
+        return SOCKS5连接;
       }
     }
 
@@ -404,8 +438,10 @@ async function 建立管道(服务端, TCP接口, 初始数据) {
   }));
 }
 
-async function 创建SOCKS5(地址类型, 地址, 端口) {
-  const { username, password, hostname, port } = await 解析SOCKS5账号(SOCKS5账号);
+async function 创建SOCKS5(地址类型, 地址, 端口, env) {
+  const 反代地址 = env.PROXYIP || 'ts.hpc.tw';
+  const SOCKS5账号 = env.SOCKS5 || '';
+  const { username, password, hostname, port } = await 解析SOCKS5账号(SOCKS5账号 || '');
   const SOCKS5接口 = connect({ hostname, port });
   try {
     await SOCKS5接口.opened;
@@ -706,6 +742,10 @@ function 生成订阅页面(配置路径, hostName) {
       background: rgba(233, 236, 239, 0.9);
       color: #495057;
     }
+    .proxy-status.error {
+      background: rgba(248, 215, 218, 0.9);
+      color: #721c24;
+    }
     .link-box {
       border-radius: 15px;
       padding: 15px;
@@ -955,21 +995,16 @@ function 生成订阅页面(配置路径, hostName) {
 
     function updateProxyStatus() {
       const statusElement = document.getElementById('proxyStatus');
-      if (!proxyEnabled) {
-        statusElement.textContent = '直连';
-        statusElement.className = 'proxy-status direct';
-      } else {
-        fetch('/get-proxy-status')
-          .then(response => response.json())
-          .then(data => {
-            statusElement.textContent = data.status;
-            statusElement.className = 'proxy-status ' + (data.status === '直连' ? 'direct' : 'success');
-          })
-          .catch(() => {
-            statusElement.textContent = '直连';
-            statusElement.className = 'proxy-status direct';
-          });
-      }
+      fetch('/get-proxy-status')
+        .then(response => response.json())
+        .then(data => {
+          statusElement.textContent = \`\${data.status} (\${data.available ? '可用' : '不可用'})\`;
+          statusElement.className = 'proxy-status ' + (data.status === '直连' ? 'direct' : data.available ? 'success' : 'error');
+        })
+        .catch(() => {
+          statusElement.textContent = '直连 (未知)';
+          statusElement.className = 'proxy-status direct';
+        });
     }
 
     function saveProxyState() {
