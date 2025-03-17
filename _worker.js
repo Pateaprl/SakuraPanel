@@ -246,37 +246,51 @@ export default {
           case '/get-proxy-status':
             const 代理启用 = await env.LOGIN_STATE.get('proxyEnabled') === 'true';
             const 代理类型 = await env.LOGIN_STATE.get('proxyType') || 'reverse';
-            const 反代地址 = env.PROXYIP || 'ts.hpc.tw';
+            const 反代地址 = env.PROXYIP || '';
             const SOCKS5账号 = env.SOCKS5 || '';
             let status = '直连模式';
-            let available = null; // null 表示直连模式
-            let connectedTo = ''; // 连接目标
+            let available = null;
+            let connectedTo = '';
+
+            console.log(`代理启用: ${代理启用}, 代理类型: ${代理类型}, 反代地址: ${反代地址}, SOCKS5账号: ${SOCKS5账号}`);
 
             if (代理启用) {
-              if (代理类型 === 'reverse' && 反代地址) {
+              if (代理类型 === 'reverse') {
                 status = '反代';
-                connectedTo = 反代地址;
-                available = await 测试代理(
-                  (addr, port) => connect({ hostname: 反代地址.split(':')[0], port: 反代地址.split(':')[1] || port }),
-                  `反代 ${反代地址}`,
-                  env
-                );
-              } else if (代理类型 === 'socks5' && SOCKS5账号) {
+                if (反代地址) {
+                  connectedTo = 反代地址;
+                  available = await 测试代理(
+                    (addr, port) => connect({ hostname: 反代地址.split(':')[0], port: 反代地址.split(':')[1] || port }),
+                    `反代 ${反代地址}`,
+                    env
+                  );
+                  console.log(`反代测试结果: ${available}`);
+                } else {
+                  available = false;
+                  connectedTo = '未配置';
+                }
+              } else if (代理类型 === 'socks5') {
                 status = 'SOCKS5';
-                const { hostname, port } = await 解析SOCKS5账号(SOCKS5账号);
-                connectedTo = `${hostname}:${port}`;
-                available = await 测试代理(
-                  () => 创建SOCKS5(2, "www.google.com", 443, env),
-                  `SOCKS5 ${SOCKS5账号}`,
-                  env
-                );
+                if (SOCKS5账号) {
+                  const { hostname, port } = await 解析SOCKS5账号(SOCKS5账号);
+                  connectedTo = `${hostname}:${port}`;
+                  available = await 测试代理(
+                    () => 创建SOCKS5(2, "www.google.com", 443, env),
+                    `SOCKS5 ${SOCKS5账号}`,
+                    env
+                  );
+                  console.log(`SOCKS5测试结果: ${available}`);
+                } else {
+                  available = false;
+                  connectedTo = '未配置';
+                }
               }
             } else {
               const 直连地址 = await env.LOGIN_STATE.get('direct_connected_to');
               if (直连地址) {
                 connectedTo = 直连地址;
               } else {
-                connectedTo = `${hostName}:443`; // 默认使用 Workers 域名
+                connectedTo = `${hostName}:443`;
               }
               status = '直连模式';
             }
@@ -303,11 +317,14 @@ async function 测试代理(连接函数, 描述, env) {
   const 测试地址 = "www.google.com";
   const 测试端口 = 443;
   try {
-    const 测试连接 = await 连接函数(测试地址, 测试端口);
+    const 测试连接 = await Promise.race([
+      连接函数(测试地址, 测试端口),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("连接超时")), 5000)) // 5秒超时
+    ]);
     await 测试连接.opened;
     console.log(`${描述} 测试成功`);
-    测试连接.close();
     await env.LOGIN_STATE.put(`${描述}_status`, 'available', { expirationTtl: 300 });
+    测试连接.close();
     return true;
   } catch (错误) {
     console.error(`${描述} 测试失败: ${错误.message}`);
@@ -469,7 +486,8 @@ async function 创建SOCKS5(地址类型, 地址, 端口, env) {
   try {
     await SOCKS5接口.opened;
   } catch {
-    return new Response('SOCKS5未连通', { status: 400 });
+    SOCKS5接口.close();
+    throw new Error('SOCKS5未连通');
   }
   const writer = SOCKS5接口.writable.getWriter();
   const reader = SOCKS5接口.readable.getReader();
@@ -477,31 +495,43 @@ async function 创建SOCKS5(地址类型, 地址, 端口, env) {
   await writer.write(new Uint8Array([5, 2, 0, 2]));
   let res = (await reader.read()).value;
   if (res[1] === 0x02) {
-    if (!username || !password) return 关闭接口();
+    if (!username || !password) {
+      writer.releaseLock();
+      reader.releaseLock();
+      SOCKS5接口.close();
+      throw new Error('SOCKS5缺少用户名或密码');
+    }
     await writer.write(new Uint8Array([1, username.length, ...encoder.encode(username), password.length, ...encoder.encode(password)]));
     res = (await reader.read()).value;
-    if (res[0] !== 0x01 || res[1] !== 0x00) return 关闭接口();
+    if (res[0] !== 0x01 || res[1] !== 0x00) {
+      writer.releaseLock();
+      reader.releaseLock();
+      SOCKS5接口.close();
+      throw new Error('SOCKS5认证失败');
+    }
   }
   let 转换地址;
   switch (地址类型) {
     case 1: 转换地址 = new Uint8Array([1, ...地址.split('.').map(Number)]); break;
     case 2: 转换地址 = new Uint8Array([3, 地址.length, ...encoder.encode(地址)]); break;
     case 3: 转换地址 = new Uint8Array([4, ...地址.split(':').flatMap(x => [parseInt(x.slice(0, 2), 16), parseInt(x.slice(2), 16)])]); break;
-    default: return 关闭接口();
+    default:
+      writer.releaseLock();
+      reader.releaseLock();
+      SOCKS5接口.close();
+      throw new Error('无效的地址类型');
   }
   await writer.write(new Uint8Array([5, 1, 0, ...转换地址, 端口 >> 8, 端口 & 0xff]));
   res = (await reader.read()).value;
-  if (res[0] !== 0x05 || res[1] !== 0x00) return 关闭接口();
-  writer.releaseLock();
-  reader.releaseLock();
-  return SOCKS5接口;
-
-  function 关闭接口() {
+  if (res[0] !== 0x05 || res[1] !== 0x00) {
     writer.releaseLock();
     reader.releaseLock();
     SOCKS5接口.close();
-    return new Response('SOCKS5握手失败', { status: 400 });
+    throw new Error('SOCKS5握手失败');
   }
+  writer.releaseLock();
+  reader.releaseLock();
+  return SOCKS5接口;
 }
 
 async function 解析SOCKS5账号(SOCKS5) {
@@ -915,6 +945,7 @@ function 生成订阅页面(配置路径, hostName) {
       fetch('/get-proxy-status')
         .then(response => response.json())
         .then(data => {
+          console.log('Proxy status response:', data);
           let displayText = '';
           let className = 'proxy-status';
 
@@ -934,7 +965,8 @@ function 生成订阅页面(配置路径, hostName) {
           statusElement.textContent = displayText;
           statusElement.className = className;
         })
-        .catch(() => {
+        .catch(error => {
+          console.error('Failed to fetch proxy status:', error);
           statusElement.textContent = '直连模式 (未知)';
           statusElement.className = 'proxy-status direct';
         });
