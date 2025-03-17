@@ -248,12 +248,14 @@ export default {
             const 代理类型 = await env.LOGIN_STATE.get('proxyType') || 'reverse';
             const 反代地址 = env.PROXYIP || 'ts.hpc.tw';
             const SOCKS5账号 = env.SOCKS5 || '';
-            let status = '直连';
-            let available = false;
+            let status = '直连模式';
+            let available = null; // null 表示直连模式
+            let connectedTo = ''; // 连接目标
 
             if (代理启用) {
               if (代理类型 === 'reverse' && 反代地址) {
                 status = '反代';
+                connectedTo = 反代地址;
                 available = await 测试代理(
                   (addr, port) => connect({ hostname: 反代地址.split(':')[0], port: 反代地址.split(':')[1] || port }),
                   `反代 ${反代地址}`,
@@ -261,14 +263,25 @@ export default {
                 );
               } else if (代理类型 === 'socks5' && SOCKS5账号) {
                 status = 'SOCKS5';
+                const { hostname, port } = await 解析SOCKS5账号(SOCKS5账号);
+                connectedTo = `${hostname}:${port}`;
                 available = await 测试代理(
                   () => 创建SOCKS5(2, "www.google.com", 443, env),
                   `SOCKS5 ${SOCKS5账号}`,
                   env
                 );
               }
+            } else {
+              const 直连地址 = await env.LOGIN_STATE.get('direct_connected_to');
+              if (直连地址) {
+                connectedTo = 直连地址;
+              } else {
+                connectedTo = `${hostName}:443`; // 默认使用 Workers 域名
+              }
+              status = '直连模式';
             }
-            return 创建JSON响应({ status, available });
+
+            return 创建JSON响应({ status, available, connectedTo });
           default:
             url.hostname = 伪装域名;
             url.protocol = 'https:';
@@ -294,7 +307,7 @@ async function 测试代理(连接函数, 描述, env) {
     await 测试连接.opened;
     console.log(`${描述} 测试成功`);
     测试连接.close();
-    await env.LOGIN_STATE.put(`${描述}_status`, 'available', { expirationTtl: 300 }); // 缓存 5 分钟
+    await env.LOGIN_STATE.put(`${描述}_status`, 'available', { expirationTtl: 300 });
     return true;
   } catch (错误) {
     console.error(`${描述} 测试失败: ${错误.message}`);
@@ -352,7 +365,8 @@ async function 智能连接(地址, 端口, 地址类型, env) {
   const SOCKS5账号 = env.SOCKS5 || '';
 
   if (!地址 || 地址.trim() === '') {
-    return await 尝试直连(地址, 端口);
+    console.log(`地址为空，默认直连失败`);
+    throw new Error('目标地址为空');
   }
 
   const 是域名 = 地址类型 === 2 && !地址.match(/^\d+\.\d+\.\d+\.\d+$/);
@@ -363,6 +377,8 @@ async function 智能连接(地址, 端口, 地址类型, env) {
     const 代理类型 = await env.LOGIN_STATE.get('proxyType') || 'reverse';
 
     if (!代理启用) {
+      console.log(`代理未启用，使用直连: ${地址}:${端口}`);
+      await env.LOGIN_STATE.put('direct_connected_to', `${地址}:${端口}`, { expirationTtl: 300 });
       return await 尝试直连(地址, 端口);
     }
 
@@ -378,6 +394,10 @@ async function 智能连接(地址, 端口, 地址类型, env) {
         await 连接.opened;
         console.log(`通过反代连接: ${反代地址}`);
         return 连接;
+      } else {
+        console.log(`反代不可用，回退到直连: ${地址}:${端口}`);
+        await env.LOGIN_STATE.put('direct_connected_to', `${地址}:${端口}`, { expirationTtl: 300 });
+        return await 尝试直连(地址, 端口);
       }
     } else if (代理类型 === 'socks5' && SOCKS5账号) {
       const SOCKS5可用 = await 测试代理(
@@ -389,12 +409,16 @@ async function 智能连接(地址, 端口, 地址类型, env) {
         const SOCKS5连接 = await 创建SOCKS5(地址类型, 地址, 端口, env);
         console.log(`通过 SOCKS5 连接: ${地址}:${端口}`);
         return SOCKS5连接;
+      } else {
+        console.log(`SOCKS5不可用，回退到直连: ${地址}:${端口}`);
+        await env.LOGIN_STATE.put('direct_connected_to', `${地址}:${端口}`, { expirationTtl: 300 });
+        return await 尝试直连(地址, 端口);
       }
     }
-
-    return await 尝试直连(地址, 端口);
   }
 
+  console.log(`默认使用直连: ${地址}:${端口}`);
+  await env.LOGIN_STATE.put('direct_connected_to', `${地址}:${端口}`, { expirationTtl: 300 });
   return await 尝试直连(地址, 端口);
 }
 
@@ -439,7 +463,6 @@ async function 建立管道(服务端, TCP接口, 初始数据) {
 }
 
 async function 创建SOCKS5(地址类型, 地址, 端口, env) {
-  const 反代地址 = env.PROXYIP || 'ts.hpc.tw';
   const SOCKS5账号 = env.SOCKS5 || '';
   const { username, password, hostname, port } = await 解析SOCKS5账号(SOCKS5账号 || '');
   const SOCKS5接口 = connect({ hostname, port });
@@ -510,57 +533,22 @@ function 生成订阅页面(配置路径, hostName) {
       transition: background 0.5s ease;
     }
     @media (prefers-color-scheme: light) {
-      body {
-        background: linear-gradient(135deg, #ffe6f0, #fff0f5);
-      }
-      .card {
-        background: rgba(255, 245, 247, 0.9);
-        box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3);
-      }
-      .card::before {
-        border: 2px dashed #ffb6c1;
-      }
-      .card:hover {
-        box-shadow: 0 10px 25px rgba(255, 182, 193, 0.5);
-      }
-      .link-box, .proxy-status {
-        background: rgba(255, 240, 245, 0.9);
-        border: 2px dashed #ffb6c1;
-      }
-      .file-item {
-        background: rgba(255, 245, 247, 0.9);
-      }
+      body { background: linear-gradient(135deg, #ffe6f0, #fff0f5); }
+      .card { background: rgba(255, 245, 247, 0.9); box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3); }
+      .card::before { border: 2px dashed #ffb6c1; }
+      .card:hover { box-shadow: 0 10px 25px rgba(255, 182, 193, 0.5); }
+      .link-box, .proxy-status { background: rgba(255, 240, 245, 0.9); border: 2px dashed #ffb6c1; }
+      .file-item { background: rgba(255, 245, 247, 0.9); }
     }
     @media (prefers-color-scheme: dark) {
-      body {
-        background: linear-gradient(135deg, #1e1e2f, #2a2a3b);
-      }
-      .card {
-        background: rgba(30, 30, 30, 0.9);
-        color: #ffd1dc;
-        box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2);
-      }
-      .card::before {
-        border: 2px dashed #ff85a2;
-      }
-      .card:hover {
-        box-shadow: 0 10px 25px rgba(255, 133, 162, 0.4);
-      }
-      .link-box, .proxy-status {
-        background: rgba(40, 40, 40, 0.9);
-        border: 2px dashed #ff85a2;
-        color: #ffd1dc;
-      }
-      .link-box a {
-        color: #ff85a2;
-      }
-      .link-box a:hover {
-        color: #ff1493;
-      }
-      .file-item {
-        background: rgba(50, 50, 50, 0.9);
-        color: #ffd1dc;
-      }
+      body { background: linear-gradient(135deg, #1e1e2f, #2a2a3b); }
+      .card { background: rgba(30, 30, 30, 0.9); color: #ffd1dc; box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2); }
+      .card::before { border: 2px dashed #ff85a2; }
+      .card:hover { box-shadow: 0 10px 25px rgba(255, 133, 162, 0.4); }
+      .link-box, .proxy-status { background: rgba(40, 40, 40, 0.9); border: 2px dashed #ff85a2; color: #ffd1dc; }
+      .link-box a { color: #ff85a2; }
+      .link-box a:hover { color: #ff1493; }
+      .file-item { background: rgba(50, 50, 50, 0.9); color: #ffd1dc; }
     }
     .background-media {
       position: fixed;
@@ -603,9 +591,7 @@ function 生成订阅页面(配置路径, hostName) {
       border-radius: 20px;
       z-index: -1;
     }
-    .card:hover {
-      transform: scale(1.03);
-    }
+    .card:hover { transform: scale(1.03); }
     .card::after {
       content: '🎀';
       position: absolute;
@@ -619,10 +605,7 @@ function 生成订阅页面(配置路径, hostName) {
       pointer-events: none;
     }
     @media (prefers-color-scheme: dark) {
-      .card::after {
-        color: #ff85a2;
-        text-shadow: 2px 2px 4px rgba(255, 133, 162, 0.3);
-      }
+      .card::after { color: #ff85a2; text-shadow: 2px 2px 4px rgba(255, 133, 162, 0.3); }
     }
     .card-title {
       font-size: 1.6em;
@@ -674,12 +657,8 @@ function 生成订阅页面(配置路径, hostName) {
       transition: .4s;
       border-radius: 50%;
     }
-    input:checked + .slider {
-      background-color: #ff69b4;
-    }
-    input:checked + .slider:before {
-      transform: translateX(26px);
-    }
+    input:checked + .slider { background-color: #ff69b4; }
+    input:checked + .slider:before { transform: translateX(26px); }
     .proxy-capsule {
       display: flex;
       border-radius: 20px;
@@ -702,12 +681,10 @@ function 生成订阅页面(配置路径, hostName) {
       color: white;
       box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.1);
     }
-    .proxy-option:not(.active):hover {
-      background: #ffd1dc;
-    }
     .proxy-option[data-type="socks5"].active {
       background: linear-gradient(to right, #ffd1dc, #ff85a2);
     }
+    .proxy-option:not(.active):hover { background: #ffd1dc; }
     .proxy-option::before {
       content: '';
       position: absolute;
@@ -720,10 +697,7 @@ function 生成订阅页面(配置路径, hostName) {
       transition: all 0.5s ease;
       pointer-events: none;
     }
-    .proxy-option:hover::before {
-      top: 100%;
-      left: 100%;
-    }
+    .proxy-option:hover::before { top: 100%; left: 100%; }
     .proxy-status {
       margin-top: 20px;
       padding: 15px;
@@ -734,18 +708,9 @@ function 生成订阅页面(配置路径, hostName) {
       width: 100%;
       box-sizing: border-box;
     }
-    .proxy-status.success {
-      background: rgba(212, 237, 218, 0.9);
-      color: #155724;
-    }
-    .proxy-status.direct {
-      background: rgba(233, 236, 239, 0.9);
-      color: #495057;
-    }
-    .proxy-status.error {
-      background: rgba(248, 215, 218, 0.9);
-      color: #721c24;
-    }
+    .proxy-status.success { background: rgba(212, 237, 218, 0.9); color: #155724; }
+    .proxy-status.direct { background: rgba(233, 236, 239, 0.9); color: #495057; }
+    .proxy-status.error { background: rgba(248, 215, 218, 0.9); color: #721c24; }
     .link-box {
       border-radius: 15px;
       padding: 15px;
@@ -753,21 +718,9 @@ function 生成订阅页面(配置路径, hostName) {
       font-size: 0.95em;
       word-break: break-all;
     }
-    .link-box a {
-      color: #ff69b4;
-      text-decoration: none;
-      transition: color 0.3s ease;
-    }
-    .link-box a:hover {
-      color: #ff1493;
-    }
-    .button-group {
-      display: flex;
-      justify-content: center;
-      gap: 15px;
-      flex-wrap: wrap;
-      margin-top: 15px;
-    }
+    .link-box a { color: #ff69b4; text-decoration: none; transition: color 0.3s ease; }
+    .link-box a:hover { color: #ff1493; }
+    .button-group { display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; margin-top: 15px; }
     .cute-button {
       padding: 12px 25px;
       border-radius: 20px;
@@ -777,27 +730,12 @@ function 生成订阅页面(配置路径, hostName) {
       cursor: pointer;
       transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
-    .cute-button:hover {
-      transform: scale(1.05);
-      box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4);
-    }
-    .cute-button:active {
-      transform: scale(0.95);
-    }
-    .clash-btn {
-      background: linear-gradient(to right, #ffb6c1, #ff69b4);
-    }
-    .v2ray-btn {
-      background: linear-gradient(to right, #ffd1dc, #ff85a2);
-    }
-    .logout-btn {
-      background: linear-gradient(to right, #ff9999, #ff6666);
-    }
-    .upload-title {
-      font-size: 1.4em;
-      color: #ff85a2;
-      margin-bottom: 15px;
-    }
+    .cute-button:hover { transform: scale(1.05); box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4); }
+    .cute-button:active { transform: scale(0.95); }
+    .clash-btn { background: linear-gradient(to right, #ffb6c1, #ff69b4); }
+    .v2ray-btn { background: linear-gradient(to right, #ffd1dc, #ff85a2); }
+    .logout-btn { background: linear-gradient(to right, #ff9999, #ff6666); }
+    .upload-title { font-size: 1.4em; color: #ff85a2; margin-bottom: 15px; }
     .upload-label {
       padding: 10px 20px;
       background: linear-gradient(to right, #ffb6c1, #ff69b4);
@@ -807,16 +745,8 @@ function 生成订阅页面(配置路径, hostName) {
       display: inline-block;
       transition: all 0.3s ease;
     }
-    .upload-label:hover {
-      transform: scale(1.05);
-      box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4);
-    }
-    .file-list {
-      margin: 15px 0;
-      max-height: 120px;
-      overflow-y: auto;
-      text-align: left;
-    }
+    .upload-label:hover { transform: scale(1.05); box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4); }
+    .file-list { margin: 15px 0; max-height: 120px; overflow-y: auto; text-align: left; }
     .file-item {
       display: flex;
       justify-content: space-between;
@@ -835,9 +765,7 @@ function 生成订阅页面(配置路径, hostName) {
       cursor: pointer;
       transition: background 0.3s ease;
     }
-    .file-item button:hover {
-      background: #ff6666;
-    }
+    .file-item button:hover { background: #ff6666; }
     .upload-submit {
       background: linear-gradient(to right, #ffdead, #ff85a2);
       padding: 12px 25px;
@@ -847,14 +775,8 @@ function 生成订阅页面(配置路径, hostName) {
       cursor: pointer;
       transition: all 0.3s ease;
     }
-    .upload-submit:hover {
-      transform: scale(1.05);
-      box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4);
-    }
-    .progress-container {
-      display: none;
-      margin-top: 15px;
-    }
+    .upload-submit:hover { transform: scale(1.05); box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4); }
+    .progress-container { display: none; margin-top: 15px; }
     .progress-bar {
       width: 100%;
       height: 15px;
@@ -869,12 +791,7 @@ function 生成订阅页面(配置路径, hostName) {
       width: 0;
       transition: width 0.3s ease;
     }
-    .progress-text {
-      text-align: center;
-      font-size: 0.85em;
-      color: #ff6f91;
-      margin-top: 5px;
-    }
+    .progress-text { text-align: center; font-size: 0.85em; color: #ff6f91; margin-top: 5px; }
     @media (max-width: 600px) {
       .card { padding: 15px; max-width: 90%; }
       .card-title { font-size: 1.3em; }
@@ -910,7 +827,7 @@ function 生成订阅页面(配置路径, hostName) {
           <div class="proxy-option" data-type="socks5" onclick="switchProxyType('socks5')">SOCKS5</div>
         </div>
       </div>
-      <div class="proxy-status" id="proxyStatus">直连</div>
+      <div class="proxy-status" id="proxyStatus">直连模式 (未知)</div>
     </div>
     <div class="card">
       <h2 class="card-title">🐾 clash 订阅</h2>
@@ -998,11 +915,27 @@ function 生成订阅页面(配置路径, hostName) {
       fetch('/get-proxy-status')
         .then(response => response.json())
         .then(data => {
-          statusElement.textContent = \`\${data.status} (\${data.available ? '可用' : '不可用'})\`;
-          statusElement.className = 'proxy-status ' + (data.status === '直连' ? 'direct' : data.available ? 'success' : 'error');
+          let displayText = '';
+          let className = 'proxy-status';
+
+          if (data.status === '直连模式') {
+            displayText = \`直连模式 (已连接 \${data.connectedTo})\`;
+            className += ' direct';
+          } else if (data.available !== null) {
+            if (data.available) {
+              displayText = \`\${data.status}可用 (已连接 \${data.connectedTo})\`;
+              className += ' success';
+            } else {
+              displayText = \`\${data.status}不可用 (目前为直连模式)\`;
+              className += ' error';
+            }
+          }
+
+          statusElement.textContent = displayText;
+          statusElement.className = className;
         })
         .catch(() => {
-          statusElement.textContent = '直连 (未知)';
+          statusElement.textContent = '直连模式 (未知)';
           statusElement.className = 'proxy-status direct';
         });
     }
@@ -1175,13 +1108,8 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
       box-sizing: border-box;
       transition: border-color 0.3s ease;
     }
-    .login-form input:focus {
-      border-color: #ff69b4;
-      outline: none;
-    }
-    .login-form input::placeholder {
-      color: #ffb6c1;
-    }
+    .login-form input:focus { border-color: #ff69b4; outline: none; }
+    .login-form input::placeholder { color: #ffb6c1; }
     .login-form button {
       padding: 12px;
       background: linear-gradient(to right, #ffb6c1, #ff69b4);
@@ -1192,10 +1120,7 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
       font-size: 1em;
       transition: transform 0.3s ease, box-shadow 0.3s ease;
     }
-    .login-form button:hover {
-      transform: scale(1.05);
-      box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4);
-    }
+    .login-form button:hover { transform: scale(1.05); box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4); }
     .error-message {
       color: #ff6666;
       margin-top: 15px;
@@ -1339,15 +1264,8 @@ function 生成KV未绑定提示页面() {
       line-height: 1.6;
       color: #ff85a2;
     }
-    .highlight {
-      color: #ff1493;
-      font-weight: bold;
-    }
-    .instruction {
-      margin-top: 20px;
-      font-size: 1em;
-      color: #ff69b4;
-    }
+    .highlight { color: #ff1493; font-weight: bold; }
+    .instruction { margin-top: 20px; font-size: 1em; color: #ff69b4; }
     @media (max-width: 600px) {
       .content { padding: 20px; }
       h1 { font-size: 1.5em; }
