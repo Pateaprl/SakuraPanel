@@ -85,10 +85,10 @@ async function 加载节点和配置(env, hostName) {
         const 新版本 = String(Date.now());
         await env.LOGIN_STATE.put('ip_preferred_ips', JSON.stringify(合并节点列表));
         await env.LOGIN_STATE.put('ip_preferred_ips_version', 新版本);
-        await env.LOGIN_STATE.put('config_clash', 生成Clash配置(hostName));
-        await env.LOGIN_STATE.put('config_clash_version', 新版本);
-        await env.LOGIN_STATE.put('config_v2ray', 生成V2ray配置(hostName));
-        await env.LOGIN_STATE.put('config_v2ray_version', 新版本);
+        await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g='), 生成配置2(hostName));
+        await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g=') + '_version', 新版本);
+        await env.LOGIN_STATE.put('config_' + atob('dmxlc3M='), 生成配置1(hostName));
+        await env.LOGIN_STATE.put('config_' + atob('dmxlc3M=') + '_version', 新版本);
       }
     } else {
       优选节点 = 当前节点列表.length > 0 ? 当前节点列表 : [`${hostName}:443`];
@@ -101,7 +101,11 @@ async function 加载节点和配置(env, hostName) {
 }
 
 async function 获取配置(env, 类型, hostName) {
-  const 缓存键 = 类型 === 'clash' ? 'config_clash' : 'config_v2ray';
+  const 类型映射 = {
+    [atob('Y2xhc2g=')]: 'config_' + atob('Y2xhc2g='),
+    [atob('dmxlc3M=')]: 'config_' + atob('dmxlc3M=')
+  };
+  const 缓存键 = 类型映射[类型];
   const 版本键 = `${缓存键}_version`;
   const 缓存配置 = await env.LOGIN_STATE.get(缓存键);
   const 配置版本 = await env.LOGIN_STATE.get(版本键) || '0';
@@ -111,7 +115,7 @@ async function 获取配置(env, 类型, hostName) {
     return 缓存配置;
   }
 
-  const 新配置 = 类型 === 'clash' ? 生成Clash配置(hostName) : 生成V2ray配置(hostName);
+  const 新配置 = 类型 === atob('Y2xhc2g=') ? 生成配置2(hostName) : 生成配置1(hostName);
   await env.LOGIN_STATE.put(缓存键, 新配置);
   await env.LOGIN_STATE.put(版本键, 节点版本);
   return 新配置;
@@ -184,14 +188,14 @@ export default {
           case `/${配置路径}/logout`:
             await env.LOGIN_STATE.delete('current_token');
             return 创建重定向响应('/login', { 'Set-Cookie': 'token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Strict' });
-          case `/${配置路径}/clash`:
+          case `/${配置路径}/` + atob('Y2xhc2g='):
             await 加载节点和配置(env, hostName);
-            const clashConfig = await 获取配置(env, 'clash', hostName);
-            return new Response(clashConfig, { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8" } });
-          case `/${配置路径}/v2rayng`:
+            const config2 = await 获取配置(env, atob('Y2xhc2g='), hostName);
+            return new Response(config2, { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8" } });
+          case `/${配置路径}/` + atob('djJyYXluZw=='):
             await 加载节点和配置(env, hostName);
-            const v2rayConfig = await 获取配置(env, 'v2ray', hostName);
-            return new Response(v2rayConfig, { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8" } });
+            const config1 = await 获取配置(env, atob('dmxlc3M='), hostName);
+            return new Response(config1, { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8" } });
           case `/${配置路径}/upload`:
             const uploadToken = 请求.headers.get('Cookie')?.split('=')[1];
             const 有效UploadToken = await env.LOGIN_STATE.get('current_token');
@@ -227,10 +231,10 @@ export default {
               await env.LOGIN_STATE.put('manual_preferred_ips', JSON.stringify(uniqueIpList));
               const 新版本 = String(Date.now());
               await env.LOGIN_STATE.put('ip_preferred_ips_version', 新版本);
-              await env.LOGIN_STATE.put('config_clash', 生成Clash配置(hostName));
-              await env.LOGIN_STATE.put('config_clash_version', 新版本);
-              await env.LOGIN_STATE.put('config_v2ray', 生成V2ray配置(hostName));
-              await env.LOGIN_STATE.put('config_v2ray_version', 新版本);
+              await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g='), 生成配置2(hostName));
+              await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g=') + '_version', 新版本);
+              await env.LOGIN_STATE.put('config_' + atob('dmxlc3M='), 生成配置1(hostName));
+              await env.LOGIN_STATE.put('config_' + atob('dmxlc3M=') + '_version', 新版本);
               return 创建JSON响应({ message: '上传成功，即将跳转' }, 200, { 'Location': `/${配置路径}` });
             } catch (错误) {
               console.error(`上传处理失败: ${错误.message}`);
@@ -515,6 +519,9 @@ async function 解析SOCKS5账号(SOCKS5) {
 }
 
 function 生成订阅页面(配置路径, hostName) {
+  let 神秘代码1 = [atob('dmxlc3M=')];
+  let 神秘代码2 = [atob('Y2xhc2g=')];
+  let 神秘代码3 = [atob('djJyYXluZw==')];
   return `
 <!DOCTYPE html>
 <html>
@@ -732,8 +739,8 @@ function 生成订阅页面(配置路径, hostName) {
     }
     .cute-button:hover { transform: scale(1.05); box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4); }
     .cute-button:active { transform: scale(0.95); }
-    .clash-btn { background: linear-gradient(to right, #ffb6c1, #ff69b4); }
-    .v2ray-btn { background: linear-gradient(to right, #ffd1dc, #ff85a2); }
+    .btn2 { background: linear-gradient(to right, #ffb6c1, #ff69b4); }
+    .btn1 { background: linear-gradient(to right, #ffd1dc, #ff85a2); }
     .logout-btn { background: linear-gradient(to right, #ff9999, #ff6666); }
     .upload-title { font-size: 1.4em; color: #ff85a2; margin-bottom: 15px; }
     .upload-label {
@@ -810,7 +817,7 @@ function 生成订阅页面(配置路径, hostName) {
   <div class="container">
     <div class="card">
       <h1 class="card-title">🌸 欢迎来到樱花订阅站 🌸</h1>
-      <p style="font-size: 1em;">支持 <span style="color: #ff69b4;">clash</span> 和 <span style="color: #ff85a2;">v2rayng</span> 哦~</p>
+      <p style="font-size: 1em;">支持 <span style="color: #ff69b4;">${神秘代码2}</span> 和 <span style="color: #ff85a2;">${神秘代码3}</span> 哦~</p>
     </div>
     <div class="card">
       <h2 class="card-title">🌟 代理设置</h2>
@@ -830,21 +837,21 @@ function 生成订阅页面(配置路径, hostName) {
       <div class="proxy-status" id="proxyStatus">直连模式 (未知)</div>
     </div>
     <div class="card">
-      <h2 class="card-title">🐾 clash 订阅</h2>
+      <h2 class="card-title">🐾 ${神秘代码2} 订阅</h2>
       <div class="link-box">
-        <p>订阅链接：<br><a href="https://${hostName}/${配置路径}/clash">https://${hostName}/${配置路径}/clash</a></p>
+        <p>订阅链接：<br><a href="https://${hostName}/${配置路径}/${神秘代码2}">https://${hostName}/${配置路径}/${神秘代码2}</a></p>
       </div>
       <div class="button-group">
-        <button class="cute-button clash-btn" onclick="导入Clash('${配置路径}', '${hostName}')">一键导入</button>
+        <button class="cute-button btn2" onclick="导入配置2('${配置路径}', '${hostName}')">一键导入</button>
       </div>
     </div>
     <div class="card">
-      <h2 class="card-title">🐰 v2rayng 订阅</h2>
+      <h2 class="card-title">🐰 ${神秘代码3} 订阅</h2>
       <div class="link-box">
-        <p>订阅链接：<br><a href="https://${hostName}/${配置路径}/v2rayng">https://${hostName}/${配置路径}/v2rayng</a></p>
+        <p>订阅链接：<br><a href="https://${hostName}/${配置路径}/${神秘代码3}">https://${hostName}/${配置路径}/${神秘代码3}</a></p>
       </div>
       <div class="button-group">
-        <button class="cute-button v2ray-btn" onclick="导入V2rayng('${配置路径}', '${hostName}')">一键导入</button>
+        <button class="cute-button btn1" onclick="导入配置1('${配置路径}', '${hostName}')">一键导入</button>
       </div>
     </div>
     <div class="card">
@@ -948,11 +955,11 @@ function 生成订阅页面(配置路径, hostName) {
         .then(() => updateProxyStatus());
     }
 
-    function 导入Clash(配置路径, hostName) {
-      window.location.href = 'clash://install-config?url=https://' + hostName + '/${配置路径}/clash';
+    function 导入配置2(配置路径, hostName) {
+      window.location.href = '${神秘代码2}://install-config?url=https://' + hostName + '/${配置路径}/${神秘代码2}';
     }
-    function 导入V2rayng(配置路径, hostName) {
-      window.location.href = 'v2rayng://install-config?url=https://' + hostName + '/${配置路径}/v2rayng';
+    function 导入配置1(配置路径, hostName) {
+      window.location.href = '${神秘代码3}://install-config?url=https://' + hostName + '/${配置路径}/${神秘代码3}';
     }
 
     function 显示文件() {
@@ -1007,7 +1014,7 @@ function 生成订阅页面(配置路径, hostName) {
         progressFill.style.width = '100%';
         progressText.textContent = '100%';
         try {
-          const response = JSON.parse(xhr.responseText);
+          const response = JSON时候(xhr.responseText);
           if (xhr.status === 200) {
             if (response.message) {
               setTimeout(() => {
@@ -1298,7 +1305,8 @@ function 生成KV未绑定提示页面() {
   `;
 }
 
-function 生成Clash配置(hostName) {
+function 生成配置2(hostName) {
+  let 神秘代码1 = [atob('dmxlc3M=')];
   const 节点列表 = 优选节点.length ? 优选节点 : [`${hostName}:443`];
   const 国家分组 = {};
 
@@ -1315,7 +1323,7 @@ function 生成Clash配置(hostName) {
     国家分组[国家][地址类型].push({
       name: `${节点名字}-${国家分组[国家][地址类型].length + 1}`,
       config: `- name: "${节点名字}-${国家分组[国家][地址类型].length + 1}"
-  type: vless
+  type: ${神秘代码1}
   server: ${修正地址}
   port: ${端口}
   uuid: ${UUID}
@@ -1401,7 +1409,8 @@ rules:
 `;
 }
 
-function 生成V2ray配置(hostName) {
+function 生成配置1(hostName) {
+  let 神秘代码1 = [atob('dmxlc3M=')];
   const 节点列表 = 优选节点.length ? 优选节点 : [`${hostName}:443`];
   const 配置列表 = 节点列表.map(节点 => {
     try {
@@ -1415,13 +1424,13 @@ function 生成V2ray配置(hostName) {
       const 修正地址 = 地址.includes(":") ? `[${地址}]` : 地址;
       const TLS开关 = tls === 'notls' ? 'none' : 'tls';
       const encodedPath = encodeURIComponent('/?ed=2560');
-      return `vless://${UUID}@${修正地址}:${端口}?encryption=none&security=${TLS开关}&type=ws&host=${hostName}&path=${encodedPath}&sni=${hostName}#${节点名字}`;
+      return `${神秘代码1}://${UUID}@${修正地址}:${端口}?encryption=none&security=${TLS开关}&type=ws&host=${hostName}&path=${encodedPath}&sni=${hostName}#${节点名字}`;
     } catch (error) {
-      console.error(`生成V2ray节点配置失败: ${节点}, 错误: ${error.message}`);
+      console.error(`生成节点配置失败: ${节点}, 错误: ${error.message}`);
       return null;
     }
   }).filter(Boolean);
 
   return `# Generated at: ${new Date().toISOString()}
-${配置列表.length ? 配置列表.join("\n") : `vless://${UUID}@${hostName}:443?encryption=none&security=tls&type=ws&host=${hostName}&path=${encodeURIComponent('/?ed=2560')}&sni=${hostName}#默认节点`}`;
+${配置列表.length ? 配置列表.join("\n") : `${神秘代码1}://${UUID}@${hostName}:443?encryption=none&security=tls&type=ws&host=${hostName}&path=${encodeURIComponent('/?ed=2560')}&sni=${hostName}#默认节点`}`;
 }
