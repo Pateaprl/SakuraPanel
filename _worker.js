@@ -324,11 +324,92 @@ async function 升级请求(请求, env) {
   const 创建接口 = new WebSocketPair();
   const [客户端, 服务端] = Object.values(创建接口);
   服务端.accept();
+
   const 结果 = await 解析头(解密(请求.headers.get('sec-websocket-protocol')), env);
   if (!结果) return new Response('Invalid request', { status: 400 });
+
   const { TCP接口, 初始数据 } = 结果;
-  建立管道(服务端, TCP接口, 初始数据);
+
+  // 设置超时
+  const 超时 = setTimeout(() => {
+    console.error('连接超时');
+    服务端.close(1002, '连接超时');
+    TCP接口.close();
+  }, 30000); // 30秒超时
+
+  服务端.addEventListener('message', () => clearTimeout(超时)); // 有数据时重置超时
+  服务端.addEventListener('close', () => clearTimeout(超时));
+
+  await 建立管道(服务端, TCP接口, 初始数据);
   return new Response(null, { status: 101, webSocket: 客户端 });
+}
+
+async function 建立管道(服务端, TCP接口, 初始数据) {
+  let 已关闭 = false;
+
+  const 关闭所有 = () => {
+    if (!已关闭) {
+      已关闭 = true;
+      TCP接口.close();
+      服务端.close(1000);
+    }
+  };
+
+  await 服务端.send(new Uint8Array([0, 0]).buffer); // 发送初始响应
+
+  const 数据流 = new ReadableStream({
+    start(控制器) {
+      if (初始数据) 控制器.enqueue(初始数据);
+      服务端.addEventListener('message', event => 控制器.enqueue(event.data));
+      服务端.addEventListener('close', () => 控制器.close());
+      服务端.addEventListener('error', (err) => {
+        console.error('WebSocket 错误:', err);
+        控制器.error(err);
+      });
+    }
+  });
+
+  const 服务端写入流 = new WritableStream({
+    async write(数据) {
+      await 服务端.send(数据);
+    },
+    close() {
+      服务端.close(1000); // 正常关闭 WebSocket
+    },
+    abort(err) {
+      console.error('服务端写入流中止:', err);
+      服务端.close(1001); // 异常关闭
+    }
+  });
+
+  const TCP写入流 = new WritableStream({
+    async write(数据) {
+      const 写入器 = TCP接口.writable.getWriter();
+      await 写入器.write(数据);
+      写入器.releaseLock();
+    },
+    async close() {
+      await TCP接口.writable.getWriter().close(); // 确保 TCP 写入完成
+      TCP接口.close(); // 关闭 TCP 连接
+    },
+    abort(err) {
+      console.error('TCP 写入流中止:', err);
+      TCP接口.close();
+    }
+  });
+
+  服务端.addEventListener('close', 关闭所有);
+  服务端.addEventListener('error', (err) => {
+    console.error('WebSocket 错误:', err);
+    关闭所有();
+  });
+
+  await Promise.all([
+    数据流.pipeTo(TCP写入流, { preventClose: false }).catch(err => console.error('客户端到TCP错误:', err)),
+    TCP接口.readable.pipeTo(服务端写入流, { preventClose: false }).catch(err => console.error('TCP到客户端错误:', err))
+  ]);
+
+  关闭所有();
 }
 
 function 解密(混淆字符) {
@@ -440,30 +521,6 @@ async function 尝试直连(地址, 端口) {
 
 function 验证密钥(arr) {
   return Array.from(arr.slice(0, 16), b => b.toString(16).padStart(2, '0')).join('').match(/(.{8})(.{4})(.{4})(.{4})(.{12})/).slice(1).join('-').toLowerCase();
-}
-
-async function 建立管道(服务端, TCP接口, 初始数据) {
-  await 服务端.send(new Uint8Array([0, 0]).buffer);
-  const 数据流 = new ReadableStream({
-    async start(控制器) {
-      if (初始数据) 控制器.enqueue(初始数据);
-      服务端.addEventListener('message', event => 控制器.enqueue(event.data));
-      服务端.addEventListener('close', () => { 控制器.close(); TCP接口.close(); setTimeout(() => 服务端.close(1000), 2); });
-      服务端.addEventListener('error', () => { 控制器.close(); TCP接口.close(); setTimeout(() => 服务端.close(1001), 2); });
-    }
-  });
-  数据流.pipeTo(new WritableStream({
-    async write(数据) {
-      const 写入器 = TCP接口.writable.getWriter();
-      await 写入器.write(数据);
-      写入器.releaseLock();
-    }
-  }));
-  TCP接口.readable.pipeTo(new WritableStream({
-    async write(数据) {
-      await 服务端.send(数据);
-    }
-  }));
 }
 
 async function 创建SOCKS5(地址类型, 地址, 端口, env) {
@@ -1014,7 +1071,7 @@ function 生成订阅页面(配置路径, hostName) {
         progressFill.style.width = '100%';
         progressText.textContent = '100%';
         try {
-          const response = JSON时候(xhr.responseText);
+          const response = JSON.parse(xhr.responseText);
           if (xhr.status === 200) {
             if (response.message) {
               setTimeout(() => {
