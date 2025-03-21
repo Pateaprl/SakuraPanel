@@ -143,12 +143,40 @@ async function 处理WebSocket升级(请求, env) {
   const { 客户端WebSocket, 服务端WebSocket } = 创建WebSocket对();
   服务端WebSocket.accept();
 
-  const 协议头 = 请求.headers.get('sec-websocket-protocol') || 'default';
-  console.log('WebSocket 请求:', { 路径: new URL(请求.url).pathname, 协议头 });
+  const url = new URL(请求.url);
+  const hostName = 请求.headers.get('Host');
 
-  const 连接结果 = await 建立连接(协议头, env);
+  // 从 URL 查询参数中提取连接信息
+  const uuid = url.searchParams.get('uuid');
+  const 地址 = url.searchParams.get('addr') || hostName; // 默认使用 Host
+  const 端口 = url.searchParams.get('port') || '443';
+  const 地址类型 = url.searchParams.get('addrType') || (地址.includes(':') ? 3 : 1); // 1: IPv4, 3: IPv6
+
+  // 验证 UUID
+  const 当前UUID = await env.LOGIN_STATE.get('current_uuid');
+  if (!uuid || !验证UUID(uuid, 当前UUID)) {
+    服务端WebSocket.close(1002, '无效的 UUID');
+    return new Response('无效的 WebSocket 请求', { status: 400 });
+  }
+
+  // 检查 WebSocket 路径是否匹配配置
+  const 配置路径匹配 = url.pathname === '/?ed=2560' || url.pathname === '/';
+  if (!配置路径匹配) {
+    服务端WebSocket.close(1002, '路径不匹配');
+    return new Response('无效的 WebSocket 路径', { status: 400 });
+  }
+
+  // 检查 Host 头是否匹配
+  const 配置Host = 请求.headers.get('Host');
+  if (配置Host !== hostName) {
+    服务端WebSocket.close(1002, 'Host 不匹配');
+    return new Response('无效的 Host', { status: 400 });
+  }
+
+  // 建立 TCP 连接
+  const 连接结果 = await 建立连接({ 地址, 端口, 地址类型 }, env);
   if (!连接结果) {
-    服务端WebSocket.close(1002, '无效的连接数据');
+    服务端WebSocket.close(1002, '无法建立连接');
     return new Response('无效请求', { status: 400 });
   }
 
@@ -166,19 +194,13 @@ function 创建WebSocket对() {
   };
 }
 
-async function 建立连接(编码协议, env) {
+async function 建立连接(连接数据, env) {
   try {
-    const 解码数据 = 解码协议(编码协议);
-    const 连接数据 = 解析连接数据(解码数据);
-
-    if (!连接数据 || !验证UUID(连接数据.uuid, await env.LOGIN_STATE.get('current_uuid'))) {
-      return null;
-    }
-
-    const tcp连接 = await 智能连接(连接数据.地址, 连接数据.端口, 连接数据.地址类型, env);
+    const { 地址, 端口, 地址类型 } = 连接数据;
+    const tcp连接 = await 智能连接(地址, 端口, 地址类型, env);
     return {
       tcp连接,
-      初始数据: 连接数据.初始数据
+      初始数据: new Uint8Array() // Clash 通常不携带额外初始数据
     };
   } catch (错误) {
     console.error(`建立连接失败: ${错误.message}`);
@@ -186,65 +208,12 @@ async function 建立连接(编码协议, env) {
   }
 }
 
-function 解码协议(编码数据) {
-  const 清理数据 = 编码数据.replace(/-/g, '+').replace(/_/g, '/');
-  return Uint8Array.from(atob(清理数据), char => char.charCodeAt(0)).buffer;
-}
-
-function 解析连接数据(数据缓冲区) {
-  const 数据视图 = new Uint8Array(数据缓冲区);
-  const uuid字节 = 数据视图.slice(1, 17);
-  const 地址类型 = 数据视图[17];
-  const 端口 = new DataView(数据缓冲区).getUint16(18, false);
-  const 地址起始 = 20;
-
-  let 地址 = '';
-  let 初始数据起始;
-
-  switch (地址类型) {
-    case 1: // IPv4
-      地址 = 数据视图.slice(地址起始, 地址起始 + 4).join('.');
-      初始数据起始 = 地址起始 + 4;
-      break;
-    case 2: // Domain
-      const 域名长度 = 数据视图[地址起始];
-      地址 = new TextDecoder().decode(数据视图.slice(地址起始 + 1, 地址起始 + 1 + 域名长度));
-      初始数据起始 = 地址起始 + 1 + 域名长度;
-      break;
-    case 3: // IPv6
-      地址 = Array.from({ length: 8 }, (_, i) =>
-        new DataView(数据缓冲区.slice(地址起始, 地址起始 + 16)).getUint16(i * 2).toString(16)
-      ).join(':');
-      初始数据起始 = 地址起始 + 16;
-      break;
-    default:
-      return null;
-  }
-
-  const 初始数据 = 数据缓冲区.slice(初始数据起始);
-  console.log('解析连接数据:', { uuid: uuid字节, 地址, 端口, 地址类型 });
-  return {
-    uuid: uuid字节,
-    地址,
-    端口,
-    地址类型,
-    初始数据
-  };
-}
-
-function 验证UUID(uuid字节, UUID) {
-  const 格式化UUID = Array.from(uuid字节, byte => byte.toString(16).padStart(2, '0'))
-    .join('')
-    .match(/(.{8})(.{4})(.{4})(.{4})(.{12})/)
-    ?.slice(1)
-    .join('-')
-    .toLowerCase();
-  return 格式化UUID === UUID;
+function 验证UUID(输入UUID, 存储UUID) {
+  return 输入UUID.toLowerCase() === 存储UUID.toLowerCase();
 }
 
 function 设置WebSocket管道(服务端WebSocket, tcp连接, 初始数据) {
-  服务端WebSocket.send(new Uint8Array([0, 0]).buffer);
-  console.log('WebSocket 管道建立，初始数据:', 初始数据?.byteLength);
+  服务端WebSocket.send(new Uint8Array([0, 0]).buffer); // 发送成功标志
 
   const WebSocket到TCP流 = new ReadableStream({
     start(控制器) {
@@ -295,177 +264,172 @@ export default {
       const 请求头 = 请求.headers.get('Upgrade');
       const url = new URL(请求.url);
       const hostName = 请求.headers.get('Host');
-
-      if (请求头 === 'websocket') {
-        if (url.pathname !== '/?ed=2560') {
-          console.log(`路径不匹配: ${url.pathname}`);
-          return new Response('路径错误', { status: 400 });
-        }
-        return await 处理WebSocket升级(请求, env);
-      }
-
       const UA = 请求.headers.get('User-Agent') || 'unknown';
       const IP = 请求.headers.get('CF-Connecting-IP') || 'unknown';
       const 设备标识 = `${UA}_${IP}`;
       let formData;
 
-      switch (url.pathname) {
-        case '/reset-login-failures':
-          await env.LOGIN_STATE.put(`fail_${设备标识}`, '0');
-          await env.LOGIN_STATE.delete(`lock_${设备标识}`);
-          return new Response(null, { status: 200 });
-        case `/${配置路径}`:
-          const Token = 请求.headers.get('Cookie')?.split('=')[1];
-          const 有效Token = await env.LOGIN_STATE.get('current_token');
-          if (!Token || Token !== 有效Token) return 创建重定向响应('/login');
-          return 创建HTML响应(生成订阅页面(配置路径, hostName));
-        case '/login':
-          const 锁定状态 = await 检查锁定(env, 设备标识);
-          if (锁定状态.被锁定) return 创建HTML响应(生成登录界面(true, 锁定状态.剩余时间));
-          if (请求.headers.get('Cookie')?.split('=')[1] === await env.LOGIN_STATE.get('current_token')) {
-            return 创建重定向响应(`/${配置路径}`);
-          }
-          const 失败次数 = Number(await env.LOGIN_STATE.get(`fail_${设备标识}`) || 0);
-          return 创建HTML响应(生成登录界面(false, 0, 失败次数 > 0, 最大失败次数 - 失败次数));
-        case '/login/submit':
-          const 锁定 = await 检查锁定(env, 设备标识);
-          if (锁定.被锁定) return 创建重定向响应('/login');
-          formData = await 请求.formData();
-          const 输入用户名 = formData.get('username');
-          const 输入密码 = formData.get('password');
-          if (输入用户名 === 用户名 && 输入密码 === 密码) {
-            const 新Token = Math.random().toString(36).substring(2);
-            await env.LOGIN_STATE.put('current_token', 新Token, { expirationTtl: 300 });
+      if (!请求头 || 请求头 !== 'websocket') {
+        switch (url.pathname) {
+          case '/reset-login-failures':
             await env.LOGIN_STATE.put(`fail_${设备标识}`, '0');
-            return 创建重定向响应(`/${配置路径}`, { 'Set-Cookie': `token=${新Token}; Path=/; HttpOnly; SameSite=Strict` });
-          } else {
-            let 失败次数 = Number(await env.LOGIN_STATE.get(`fail_${设备标识}`) || 0) + 1;
-            await env.LOGIN_STATE.put(`fail_${设备标识}`, String(失败次数));
-            if (失败次数 >= 最大失败次数) {
-              await env.LOGIN_STATE.put(`lock_${设备标识}`, String(Date.now() + 锁定时间), { expirationTtl: 300 });
-              return 创建HTML响应(生成登录界面(true, 锁定时间 / 1000));
+            await env.LOGIN_STATE.delete(`lock_${设备标识}`);
+            return new Response(null, { status: 200 });
+          case `/${配置路径}`:
+            const Token = 请求.headers.get('Cookie')?.split('=')[1];
+            const 有效Token = await env.LOGIN_STATE.get('current_token');
+            if (!Token || Token !== 有效Token) return 创建重定向响应('/login');
+            return 创建HTML响应(生成订阅页面(配置路径, hostName));
+          case '/login':
+            const 锁定状态 = await 检查锁定(env, 设备标识);
+            if (锁定状态.被锁定) return 创建HTML响应(生成登录界面(true, 锁定状态.剩余时间));
+            if (请求.headers.get('Cookie')?.split('=')[1] === await env.LOGIN_STATE.get('current_token')) {
+              return 创建重定向响应(`/${配置路径}`);
             }
-            return 创建HTML响应(生成登录界面(false, 0, true, 最大失败次数 - 失败次数));
-          }
-        case `/${配置路径}/logout`:
-          await env.LOGIN_STATE.delete('current_token');
-          return 创建重定向响应('/login', { 'Set-Cookie': 'token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Strict' });
-        case `/${配置路径}/` + atob('Y2xhc2g='):
-          await 加载节点和配置(env, hostName);
-          const config2 = await 获取配置(env, atob('Y2xhc2g='), hostName);
-          return new Response(config2, { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8" } });
-        case `/${配置路径}/` + atob('djJyYXluZw=='):
-          await 加载节点和配置(env, hostName);
-          const config1 = await 获取配置(env, atob('dmxlc3M='), hostName);
-          return new Response(config1, { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8" } });
-        case `/${配置路径}/upload`:
-          const uploadToken = 请求.headers.get('Cookie')?.split('=')[1];
-          const 有效UploadToken = await env.LOGIN_STATE.get('current_token');
-          if (!uploadToken || uploadToken !== 有效UploadToken) {
-            return 创建JSON响应({ error: '未登录或Token无效，请重新登录' }, 401);
-          }
-          formData = await 请求.formData();
-          const ipFiles = formData.getAll('ipFiles');
-          if (!ipFiles || ipFiles.length === 0) {
-            return 创建JSON响应({ error: '未选择任何文件' }, 400);
-          }
-          let allIpList = [];
-          try {
-            for (const ipFile of ipFiles) {
-              if (!ipFile || !ipFile.text) throw new Error(`文件 ${ipFile.name} 无效`);
-              const ipText = await ipFile.text();
-              const ipList = ipText.split('\n').map(line => line.trim()).filter(Boolean);
-              if (ipList.length === 0) console.warn(`文件 ${ipFile.name} 内容为空`);
-              allIpList = allIpList.concat(ipList);
-            }
-            if (allIpList.length === 0) {
-              return 创建JSON响应({ error: '所有上传文件内容为空' }, 400);
-            }
-            const uniqueIpList = [...new Set(allIpList)];
-
-            const 当前手动节点 = await env.LOGIN_STATE.get('manual_preferred_ips');
-            const 当前节点列表 = 当前手动节点 ? JSON.parse(当前手动节点) : [];
-            const 是重复上传 = JSON.stringify(当前节点列表.sort()) === JSON.stringify(uniqueIpList.sort());
-            if (是重复上传) {
-              return 创建JSON响应({ message: '上传内容与现有节点相同，无需更新' }, 200);
-            }
-
-            await env.LOGIN_STATE.put('manual_preferred_ips', JSON.stringify(uniqueIpList));
-            const 新版本 = String(Date.now());
-            await env.LOGIN_STATE.put('ip_preferred_ips_version', 新版本);
-            await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g='), 生成配置2(hostName, UUID));
-            await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g=') + '_version', 新版本);
-            await env.LOGIN_STATE.put('config_' + atob('dmxlc3M='), 生成配置1(hostName, UUID));
-            await env.LOGIN_STATE.put('config_' + atob('dmxlc3M=') + '_version', 新版本);
-            return 创建JSON响应({ message: '上传成功，即将跳转' }, 200, { 'Location': `/${配置路径}` });
-          } catch (错误) {
-            console.error(`上传处理失败: ${错误.message}`);
-            return 创建JSON响应({ error: `上传处理失败: ${错误.message}` }, 500);
-          }
-        case '/set-proxy-state':
-          formData = await 请求.formData();
-          const proxyEnabled = formData.get('proxyEnabled');
-          const proxyType = formData.get('proxyType');
-          await env.LOGIN_STATE.put('proxyEnabled', proxyEnabled);
-          await env.LOGIN_STATE.put('proxyType', proxyType);
-          return new Response(null, { status: 200 });
-        case '/get-proxy-status':
-          const 代理启用 = await env.LOGIN_STATE.get('proxyEnabled') === 'true';
-          const 代理类型 = await env.LOGIN_STATE.get('proxyType') || 'reverse';
-          const 反代地址 = env.PROXYIP || 'ts.hpc.tw';
-          const SOCKS5账号 = env.SOCKS5 || '';
-          let status = '直连模式';
-          let available = null;
-          let connectedTo = '';
-
-          if (代理启用) {
-            if (代理类型 === 'reverse') {
-              status = '反代';
-              connectedTo = 反代地址;
-              available = await 测试代理(
-                (addr, port) => connect({ hostname: 反代地址.split(':')[0], port: 反代地址.split(':')[1] || port }),
-                `反代 ${反代地址}`,
-                env
-              );
-            } else if (代理类型 === 'socks5' && SOCKS5账号) {
-              status = 'SOCKS5';
-              const { hostname, port } = await 解析SOCKS5账号(SOCKS5账号);
-              connectedTo = `${hostname}:${port}`;
-              available = await 测试代理(
-                () => 创建SOCKS5(2, "www.google.com", 443, env),
-                `SOCKS5 ${SOCKS5账号}`,
-                env
-              );
-            }
-          } else {
-            const 直连地址 = await env.LOGIN_STATE.get('direct_connected_to');
-            if (直连地址) {
-              connectedTo = 直连地址;
+            const 失败次数 = Number(await env.LOGIN_STATE.get(`fail_${设备标识}`) || 0);
+            return 创建HTML响应(生成登录界面(false, 0, 失败次数 > 0, 最大失败次数 - 失败次数));
+          case '/login/submit':
+            const 锁定 = await 检查锁定(env, 设备标识);
+            if (锁定.被锁定) return 创建重定向响应('/login');
+            formData = await 请求.formData();
+            const 输入用户名 = formData.get('username');
+            const 输入密码 = formData.get('password');
+            if (输入用户名 === 用户名 && 输入密码 === 密码) {
+              const 新Token = Math.random().toString(36).substring(2);
+              await env.LOGIN_STATE.put('current_token', 新Token, { expirationTtl: 300 });
+              await env.LOGIN_STATE.put(`fail_${设备标识}`, '0');
+              return 创建重定向响应(`/${配置路径}`, { 'Set-Cookie': `token=${新Token}; Path=/; HttpOnly; SameSite=Strict` });
             } else {
-              connectedTo = `${hostName}:443`;
+              let 失败次数 = Number(await env.LOGIN_STATE.get(`fail_${设备标识}`) || 0) + 1;
+              await env.LOGIN_STATE.put(`fail_${设备标识}`, String(失败次数));
+              if (失败次数 >= 最大失败次数) {
+                await env.LOGIN_STATE.put(`lock_${设备标识}`, String(Date.now() + 锁定时间), { expirationTtl: 300 });
+                return 创建HTML响应(生成登录界面(true, 锁定时间 / 1000));
+              }
+              return 创建HTML响应(生成登录界面(false, 0, true, 最大失败次数 - 失败次数));
             }
-            status = '直连模式';
-          }
+          case `/${配置路径}/logout`:
+            await env.LOGIN_STATE.delete('current_token');
+            return 创建重定向响应('/login', { 'Set-Cookie': 'token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Strict' });
+          case `/${配置路径}/` + atob('Y2xhc2g='):
+            await 加载节点和配置(env, hostName);
+            const config2 = await 获取配置(env, atob('Y2xhc2g='), hostName);
+            return new Response(config2, { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8" } });
+          case `/${配置路径}/` + atob('djJyYXluZw=='):
+            await 加载节点和配置(env, hostName);
+            const config1 = await 获取配置(env, atob('dmxlc3M='), hostName);
+            return new Response(config1, { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8" } });
+          case `/${配置路径}/upload`:
+            const uploadToken = 请求.headers.get('Cookie')?.split('=')[1];
+            const 有效UploadToken = await env.LOGIN_STATE.get('current_token');
+            if (!uploadToken || uploadToken !== 有效UploadToken) {
+              return 创建JSON响应({ error: '未登录或Token无效，请重新登录' }, 401);
+            }
+            formData = await 请求.formData();
+            const ipFiles = formData.getAll('ipFiles');
+            if (!ipFiles || ipFiles.length === 0) {
+              return 创建JSON响应({ error: '未选择任何文件' }, 400);
+            }
+            let allIpList = [];
+            try {
+              for (const ipFile of ipFiles) {
+                if (!ipFile || !ipFile.text) throw new Error(`文件 ${ipFile.name} 无效`);
+                const ipText = await ipFile.text();
+                const ipList = ipText.split('\n').map(line => line.trim()).filter(Boolean);
+                if (ipList.length === 0) console.warn(`文件 ${ipFile.name} 内容为空`);
+                allIpList = allIpList.concat(ipList);
+              }
+              if (allIpList.length === 0) {
+                return 创建JSON响应({ error: '所有上传文件内容为空' }, 400);
+              }
+              const uniqueIpList = [...new Set(allIpList)];
 
-          return 创建JSON响应({ status, available, connectedTo });
-        case '/get-uuid':
-          return 创建JSON响应({ uuid: UUID });
-        case '/regenerate-uuid':
-          if (请求.method !== 'POST') return 创建JSON响应({ error: '方法不允许' }, 405);
-          const regenToken = 请求.headers.get('Cookie')?.split('=')[1];
-          const 有效RegenToken = await env.LOGIN_STATE.get('current_token');
-          if (!regenToken || regenToken !== 有效RegenToken) {
-            return 创建JSON响应({ error: '未登录或Token无效' }, 401);
-          }
-          UUID = generateUUID();
-          await env.LOGIN_STATE.put('current_uuid', UUID);
-          await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g='), 生成配置2(hostName, UUID));
-          await env.LOGIN_STATE.put('config_' + atob('dmxlc3M='), 生成配置1(hostName, UUID));
-          return 创建JSON响应({ uuid: UUID });
-        default:
-          url.hostname = 伪装域名;
-          url.protocol = 'https:';
-          return fetch(new Request(url, 请求));
+              const 当前手动节点 = await env.LOGIN_STATE.get('manual_preferred_ips');
+              const 当前节点列表 = 当前手动节点 ? JSON.parse(当前手动节点) : [];
+              const 是重复上传 = JSON.stringify(当前节点列表.sort()) === JSON.stringify(uniqueIpList.sort());
+              if (是重复上传) {
+                return 创建JSON响应({ message: '上传内容与现有节点相同，无需更新' }, 200);
+              }
+
+              await env.LOGIN_STATE.put('manual_preferred_ips', JSON.stringify(uniqueIpList));
+              const 新版本 = String(Date.now());
+              await env.LOGIN_STATE.put('ip_preferred_ips_version', 新版本);
+              await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g='), 生成配置2(hostName, UUID));
+              await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g=') + '_version', 新版本);
+              await env.LOGIN_STATE.put('config_' + atob('dmxlc3M='), 生成配置1(hostName, UUID));
+              await env.LOGIN_STATE.put('config_' + atob('dmxlc3M=') + '_version', 新版本);
+              return 创建JSON响应({ message: '上传成功，即将跳转' }, 200, { 'Location': `/${配置路径}` });
+            } catch (错误) {
+              console.error(`上传处理失败: ${错误.message}`);
+              return 创建JSON响应({ error: `上传处理失败: ${错误.message}` }, 500);
+            }
+          case '/set-proxy-state':
+            formData = await 请求.formData();
+            const proxyEnabled = formData.get('proxyEnabled');
+            const proxyType = formData.get('proxyType');
+            await env.LOGIN_STATE.put('proxyEnabled', proxyEnabled);
+            await env.LOGIN_STATE.put('proxyType', proxyType);
+            return new Response(null, { status: 200 });
+          case '/get-proxy-status':
+            const 代理启用 = await env.LOGIN_STATE.get('proxyEnabled') === 'true';
+            const 代理类型 = await env.LOGIN_STATE.get('proxyType') || 'reverse';
+            const 反代地址 = env.PROXYIP || 'ts.hpc.tw';
+            const SOCKS5账号 = env.SOCKS5 || '';
+            let status = '直连模式';
+            let available = null;
+            let connectedTo = '';
+
+            if (代理启用) {
+              if (代理类型 === 'reverse') {
+                status = '反代';
+                connectedTo = 反代地址;
+                available = await 测试代理(
+                  (addr, port) => connect({ hostname: 反代地址.split(':')[0], port: 反代地址.split(':')[1] || port }),
+                  `反代 ${反代地址}`,
+                  env
+                );
+              } else if (代理类型 === 'socks5' && SOCKS5账号) {
+                status = 'SOCKS5';
+                const { hostname, port } = await 解析SOCKS5账号(SOCKS5账号);
+                connectedTo = `${hostname}:${port}`;
+                available = await 测试代理(
+                  () => 创建SOCKS5(2, "www.google.com", 443, env),
+                  `SOCKS5 ${SOCKS5账号}`,
+                  env
+                );
+              }
+            } else {
+              const 直连地址 = await env.LOGIN_STATE.get('direct_connected_to');
+              if (直连地址) {
+                connectedTo = 直连地址;
+              } else {
+                connectedTo = `${hostName}:443`;
+              }
+              status = '直连模式';
+            }
+
+            return 创建JSON响应({ status, available, connectedTo });
+          case '/get-uuid':
+            return 创建JSON响应({ uuid: UUID });
+          case '/regenerate-uuid':
+            if (请求.method !== 'POST') return 创建JSON响应({ error: '方法不允许' }, 405);
+            const regenToken = 请求.headers.get('Cookie')?.split('=')[1];
+            const 有效RegenToken = await env.LOGIN_STATE.get('current_token');
+            if (!regenToken || regenToken !== 有效RegenToken) {
+              return 创建JSON响应({ error: '未登录或Token无效' }, 401);
+            }
+            UUID = generateUUID();
+            await env.LOGIN_STATE.put('current_uuid', UUID);
+            await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g='), 生成配置2(hostName, UUID));
+            await env.LOGIN_STATE.put('config_' + atob('dmxlc3M='), 生成配置1(hostName, UUID));
+            return 创建JSON响应({ uuid: UUID });
+          default:
+            url.hostname = 伪装域名;
+            url.protocol = 'https:';
+            return fetch(new Request(url, 请求));
+        }
+      } else if (请求头 === 'websocket') {
+        return await 处理WebSocket升级(请求, env);
       }
     } catch (错误) {
       console.error(`全局错误: ${错误.message}`);
@@ -500,28 +464,67 @@ async function 智能连接(地址, 端口, 地址类型, env) {
     throw new Error('目标地址为空');
   }
 
-  console.log(`强制使用反代模式，目标: ${地址}:${端口}`);
-  const [反代主机, 反代端口] = 反代地址.split(':');
-  const 连接 = connect({ hostname: 反代主机, port: 反代端口 || 端口 });
-  const timeoutPromise = new Promise((_, reject) =>
-    setTimeout(() => reject(new Error('反代连接超时')), 5000)
-  );
-  await Promise.race([连接.opened, timeoutPromise]);
-  console.log(`通过反代连接成功: ${反代地址}`);
-  return 连接;
+  const 是域名 = 地址类型 === 2 && !地址.match(/^\d+\.\d+\.\d+\.\d+$/);
+  const 是IP = 地址类型 === 1 || (地址类型 === 2 && 地址.match(/^\d+\.\d+\.\d+\.\d+$/)) || 地址类型 === 3;
+
+  if (是域名 || 是IP) {
+    const 代理启用 = await env.LOGIN_STATE.get('proxyEnabled') === 'true';
+    const 代理类型 = await env.LOGIN_STATE.get('proxyType') || 'reverse';
+
+    if (!代理启用) {
+      console.log(`代理未启用，使用直连: ${地址}:${端口}`);
+      await env.LOGIN_STATE.put('direct_connected_to', `${地址}:${端口}`, { expirationTtl: 300 });
+      return await 尝试直连(地址, 端口);
+    }
+
+    if (代理类型 === 'reverse' && 反代地址) {
+      const 反代可用 = await 测试代理(
+        (addr, port) => connect({ hostname: 反代地址.split(':')[0], port: 反代地址.split(':')[1] || port }),
+        `反代 ${反代地址}`,
+        env
+      );
+      if (反代可用) {
+        const [反代主机, 反代端口] = 反代地址.split(':');
+        const 连接 = connect({ hostname: 反代主机, port: 反代端口 || 端口 });
+        await 连接.opened;
+        console.log(`通过反代连接: ${反代地址}`);
+        return 连接;
+      } else {
+        console.log(`反代不可用，回退到直连: ${地址}:${端口}`);
+        await env.LOGIN_STATE.put('direct_connected_to', `${地址}:${端口}`, { expirationTtl: 300 });
+        return await 尝试直连(地址, 端口);
+      }
+    } else if (代理类型 === 'socks5' && SOCKS5账号) {
+      const SOCKS5可用 = await 测试代理(
+        () => 创建SOCKS5(2, "www.google.com", 443, env),
+        `SOCKS5 ${SOCKS5账号}`,
+        env
+      );
+      if (SOCKS5可用) {
+        const SOCKS5连接 = await 创建SOCKS5(地址类型, 地址, 端口, env);
+        console.log(`通过 SOCKS5 连接: ${地址}:${端口}`);
+        return SOCKS5连接;
+      } else {
+        console.log(`SOCKS5不可用，回退到直连: ${地址}:${端口}`);
+        await env.LOGIN_STATE.put('direct_connected_to', `${地址}:${端口}`, { expirationTtl: 300 });
+        return await 尝试直连(地址, 端口);
+      }
+    }
+  }
+
+  console.log(`默认使用直连: ${地址}:${端口}`);
+  await env.LOGIN_STATE.put('direct_connected_to', `${地址}:${端口}`, { expirationTtl: 300 });
+  return await 尝试直连(地址, 端口);
 }
 
 async function 尝试直连(地址, 端口) {
   try {
     const 连接 = connect({ hostname: 地址, port: 端口 });
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('连接超时')), 5000)
-    );
-    await Promise.race([连接.opened, timeoutPromise]);
-    console.log(`直连成功: ${地址}:${端口}`);
+    await 连接.opened;
+    console.log(`回退到直连: ${地址}:${端口}`);
     return 连接;
   } catch (错误) {
-    console.error(`直连失败: ${地址}:${端口}, 错误: ${错误.message}`);
+    console.error(`直连失败: ${错误.message}`);
     throw new Error(`无法连接: ${错误.message}`);
   }
 }
@@ -1405,50 +1408,39 @@ function 生成KV未绑定提示页面() {
   `;
 }
 
-function 生成配置2(hostName, UUID) {
-  let 神秘代码1 = [atob('dmxlc3M=')];
+function 生成配置1(hostName, UUID) {
   const 节点列表 = 优选节点.length ? 优选节点 : [`${hostName}:443`];
-  const 国家分组 = {};
+  const 配置列表 = 节点列表.map(节点 => {
+    const [地址端口, 节点名字 = 节点名称] = 节点.split("#");
+    const [地址, 端口 = "443"] = 地址端口.split(":");
+    const 修正地址 = 地址.includes(":") ? `[${地址}]` : 地址;
+    return `vless://${UUID}@${修正地址}:${端口}?type=ws&security=tls&path=/?ed=2560&uuid=${UUID}&addr=${修正地址}&port=${端口}&sni=${hostName}#${节点名字}`;
+  }).filter(Boolean);
 
-  节点列表.forEach((节点, 索引) => {
-    const [主内容, tls] = 节点.split("@");
-    const [地址端口, 节点名字 = 节点名称] = 主内容.split("#");
-    const [, 地址, 端口 = "443"] = 地址端口.match(/^\[(.*?)\](?::(\d+))?$/) || 地址端口.match(/^(.*?)(?::(\d+))?$/);
-    const 修正地址 = 地址.includes(":") ? 地址.replace(/^\[|\]$/g, '') : 地址;
-    const TLS开关 = tls === 'notls' ? 'false' : 'true';
-    const 国家 = 节点名字.split('-')[0] || '默认';
-    const 地址类型 = 修正地址.includes(":") ? "IPv6" : "IPv4";
+  return `# Generated at: ${new Date().toISOString()}\n${配置列表.join("\n")}`;
+}
 
-    国家分组[国家] = 国家分组[国家] || { IPv4: [], IPv6: [] };
-    国家分组[国家][地址类型].push({
-      name: `${节点名字}-${国家分组[国家][地址类型].length + 1}`,
-      config: `- name: "${节点名字}-${国家分组[国家][地址类型].length + 1}"
-  type: ${神秘代码1}
-  server: ${修正地址}
+function 生成配置2(hostName, UUID) {
+  const 节点列表 = 优选节点.length ? 优选节点 : [`${hostName}:443`];
+  const proxies = 节点列表.map((节点, 索引) => {
+    const [地址端口, 节点名字 = 节点名称] = 节点.split("#");
+    const [地址, 端口 = "443"] = 地址端口.split(":");
+    return `
+- name: "${节点名字}-${索引 + 1}"
+  type: vless
+  server: ${地址}
   port: ${端口}
   uuid: ${UUID}
   udp: false
-  tls: ${TLS开关}
+  tls: true
   sni: ${hostName}
   network: ws
   ws-opts:
-    path: "/?ed=2560"
+    path: "/?ed=2560&uuid=${UUID}&addr=${地址}&port=${端口}"
     headers:
-      Host: ${hostName}`
-    });
-  });
-
-  const 国家列表 = Object.keys(国家分组).sort();
-  const 节点配置 = 国家列表.flatMap(国家 => [...国家分组[国家].IPv4, ...国家分组[国家].IPv6].map(n => n.config)).join("\n");
-  const 国家分组配置 = 国家列表.map(国家 => `
-  - name: "${国家}"
-    type: url-test
-    url: "http://www.gstatic.com/generate_204"
-    interval: 120
-    tolerance: 50
-    proxies:
-${[...国家分组[国家].IPv4, ...国家分组[国家].IPv6].map(n => `      - "${n.name}"`).join("\n")}
-`).join("");
+      Host: ${hostName}
+    `;
+  }).join("\n");
 
   return `# Generated at: ${new Date().toISOString()}
 mixed-port: 7890
@@ -1475,7 +1467,7 @@ dns:
       - 240.0.0.0/4
 
 proxies:
-${节点配置}
+${proxies}
 
 proxy-groups:
   - name: "🚀节点选择"
@@ -1483,7 +1475,7 @@ proxy-groups:
     proxies:
       - "🤪自动选择"
       - "🥰负载均衡"
-${国家列表.map(国家 => `      - "${国家}"`).join("\n")}
+${节点列表.map((_, i) => `      - "${节点名称}-${i + 1}"`).join("\n")}
 
   - name: "🤪自动选择"
     type: url-test
@@ -1491,15 +1483,13 @@ ${国家列表.map(国家 => `      - "${国家}"`).join("\n")}
     interval: 120
     tolerance: 50
     proxies:
-${国家列表.map(国家 => `      - "${国家}"`).join("\n")}
+${节点列表.map((_, i) => `      - "${节点名称}-${i + 1}"`).join("\n")}
 
   - name: "🥰负载均衡"
     type: load-balance
     strategy: round-robin
     proxies:
-${国家列表.map(国家 => `      - "${国家}"`).join("\n")}
-
-${国家分组配置}
+${节点列表.map((_, i) => `      - "${节点名称}-${i + 1}"`).join("\n")}
 
 rules:
   - GEOIP,LAN,DIRECT
@@ -1507,29 +1497,4 @@ rules:
   - GEOIP,CN,DIRECT
   - MATCH,🚀节点选择
 `;
-}
-
-function 生成配置1(hostName, UUID) {
-  let 神秘代码1 = [atob('dmxlc3M=')];
-  const 节点列表 = 优选节点.length ? 优选节点 : [`${hostName}:443`];
-  const 配置列表 = 节点列表.map(节点 => {
-    try {
-      const [主内容, tls = 'tls'] = 节点.split("@");
-      const [地址端口, 节点名字 = 节点名称] = 主内容.split("#");
-      const match = 地址端口.match(/^(?:\[([0-9a-fA-F:]+)\]|([^:]+))(?:\:(\d+))?$/);
-      if (!match) return null;
-      const 地址 = match[1] || match[2];
-      const 端口 = match[3] || "443";
-      if (!地址) return null;
-      const 修正地址 = 地址.includes(":") ? `[${地址}]` : 地址;
-      const TLS开关 = tls === 'notls' ? 'none' : 'tls';
-      const encodedPath = encodeURIComponent('/?ed=2560');
-      return `${神秘代码1}://${UUID}@${修正地址}:${端口}?encryption=none&security=${TLS开关}&type=ws&host=${hostName}&path=${encodedPath}&sni=${hostName}#${节点名字}`;
-    } catch (错误) {
-      console.error(`生成节点配置失败: ${节点}, 错误: ${错误.message}`);
-      return null;
-    }
-  }).filter(Boolean); // 过滤掉 null 值
-
-  return 配置列表.join('\n');
 }
