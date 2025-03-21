@@ -398,13 +398,10 @@ export default {
           case '/set-proxy-state':
             formData = await 请求.formData();
             const proxyEnabled = formData.get('proxyEnabled');
-            const proxyType = formData.get('proxyType');
             await env.LOGIN_STATE.put('proxyEnabled', proxyEnabled);
-            await env.LOGIN_STATE.put('proxyType', proxyType);
             return new Response(null, { status: 200 });
           case '/get-proxy-status':
             const 代理启用 = await env.LOGIN_STATE.get('proxyEnabled') === 'true';
-            const 代理类型 = await env.LOGIN_STATE.get('proxyType') || 'reverse';
             const 反代地址 = env.PROXYIP || '';
             const SOCKS5账号 = env.SOCKS5 || '';
             let status = '直连模式';
@@ -412,7 +409,7 @@ export default {
             let connectedTo = '';
 
             if (代理启用) {
-              if (代理类型 === 'reverse' && 反代地址) {
+              if (反代地址) {
                 status = '反代';
                 connectedTo = 反代地址;
                 available = await 测试代理(
@@ -420,7 +417,9 @@ export default {
                   `反代 ${反代地址}`,
                   env
                 );
-              } else if (代理类型 === 'socks5' && SOCKS5账号) {
+                if (available) return 创建JSON响应({ status, available, connectedTo });
+              }
+              if (SOCKS5账号) {
                 status = 'SOCKS5';
                 const { hostname, port } = await 解析SOCKS5账号(SOCKS5账号);
                 connectedTo = `${hostname}:${port}`;
@@ -429,17 +428,12 @@ export default {
                   `SOCKS5 ${SOCKS5账号}`,
                   env
                 );
+                if (available) return 创建JSON响应({ status, available, connectedTo });
               }
-            } else {
-              const 直连地址 = await env.LOGIN_STATE.get('direct_connected_to');
-              if (直连地址) {
-                connectedTo = 直连地址;
-              } else {
-                connectedTo = `${hostName}:443`;
-              }
-              status = '直连模式';
             }
-
+            const 直连地址 = await env.LOGIN_STATE.get('direct_connected_to') || `${hostName}:443`;
+            connectedTo = 直连地址;
+            status = '直连模式';
             return 创建JSON响应({ status, available, connectedTo });
           case '/get-uuid':
             return 创建JSON响应({ uuid: UUID });
@@ -488,7 +482,7 @@ async function 测试代理(连接函数, 描述, env) {
 }
 
 async function 智能连接(地址, 端口, 地址类型, env) {
-  const 反代地址 = env.PROXYIP || ''; // 默认空字符串
+  const 反代地址 = env.PROXYIP || '';
   const SOCKS5账号 = env.SOCKS5 || '';
 
   if (!地址 || 地址.trim() === '') {
@@ -502,9 +496,7 @@ async function 智能连接(地址, 端口, 地址类型, env) {
   if (是域名 || 是IP) {
     const 代理启用 = await env.LOGIN_STATE.get('proxyEnabled') === 'true';
 
-    // 如果代理启用且有配置的代理，优先尝试代理
     if (代理启用) {
-      // 优先级1：尝试反代
       if (反代地址) {
         const 反代可用 = await 测试代理(
           (addr, port) => connect({ hostname: 反代地址.split(':')[0], port: 反代地址.split(':')[1] || port }),
@@ -521,7 +513,6 @@ async function 智能连接(地址, 端口, 地址类型, env) {
         console.log(`反代 ${反代地址} 不可用，继续尝试其他连接方式`);
       }
 
-      // 优先级2：尝试SOCKS5
       if (SOCKS5账号) {
         const SOCKS5可用 = await 测试代理(
           () => 创建SOCKS5(2, "www.google.com", 443, env),
@@ -536,19 +527,16 @@ async function 智能连接(地址, 端口, 地址类型, env) {
         console.log(`SOCKS5 ${SOCKS5账号} 不可用，继续尝试其他连接方式`);
       }
 
-      // 如果代理都不可用，回退到直连
       console.log(`所有代理不可用，回退到直连: ${地址}:${端口}`);
       await env.LOGIN_STATE.put('direct_connected_to', `${地址}:${端口}`, { expirationTtl: 300 });
       return await 尝试直连(地址, 端口);
     }
 
-    // 如果代理未启用或无代理配置，直接使用直连
     console.log(`代理未启用或未配置，使用直连: ${地址}:${端口}`);
     await env.LOGIN_STATE.put('direct_connected_to', `${地址}:${端口}`, { expirationTtl: 300 });
     return await 尝试直连(地址, 端口);
   }
 
-  // 默认情况下的直连
   console.log(`默认使用直连: ${地址}:${端口}`);
   await env.LOGIN_STATE.put('direct_connected_to', `${地址}:${端口}`, { expirationTtl: 300 });
   return await 尝试直连(地址, 端口);
@@ -766,45 +754,6 @@ function 生成订阅页面(配置路径, hostName) {
     }
     input:checked + .slider { background-color: #ff69b4; }
     input:checked + .slider:before { transform: translateX(26px); }
-    .proxy-capsule {
-      display: flex;
-      border-radius: 20px;
-      overflow: hidden;
-      background: #ffe6f0;
-      box-shadow: 0 4px 10px rgba(255, 182, 193, 0.2);
-    }
-    .proxy-option {
-      width: 80px;
-      padding: 10px 0;
-      text-align: center;
-      cursor: pointer;
-      color: #ff6f91;
-      transition: all 0.3s ease;
-      position: relative;
-      font-size: 1em;
-    }
-    .proxy-option.active {
-      background: linear-gradient(to right, #ffb6c1, #ff69b4);
-      color: white;
-      box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.1);
-    }
-    .proxy-option[data-type="socks5"].active {
-      background: linear-gradient(to right, #ffd1dc, #ff85a2);
-    }
-    .proxy-option:not(.active):hover { background: #ffd1dc; }
-    .proxy-option::before {
-      content: '';
-      position: absolute;
-      top: -50%;
-      left: -50%;
-      width: 200%;
-      height: 200%;
-      background: rgba(255, 255, 255, 0.2);
-      transform: rotate(30deg);
-      transition: all 0.5s ease;
-      pointer-events: none;
-    }
-    .proxy-option:hover::before { top: 100%; left: 100%; }
     .proxy-status {
       margin-top: 20px;
       padding: 15px;
@@ -815,7 +764,7 @@ function 生成订阅页面(配置路径, hostName) {
       width: 100%;
       box-sizing: border-box;
     }
-    .proxy-status.success { background: rgba(212, 237, 218, 0.9); color: #155724; }
+    .proxy-status.success { background: rgba(212, 237, 218, 0.9);会被用户通过 UI 启用/禁用代理，并查看当前连接状态。 color: #155724; }
     .proxy-status.direct { background: rgba(233, 236, 239, 0.9); color: #495057; }
     .proxy-status.error { background: rgba(248, 215, 218, 0.9); color: #721c24; }
     .link-box {
@@ -904,7 +853,6 @@ function 生成订阅页面(配置路径, hostName) {
       .card-title { font-size: 1.3em; }
       .switch-container { gap: 10px; }
       .toggle-row { gap: 10px; }
-      .proxy-option { width: 70px; padding: 8px 0; font-size: 0.9em; }
       .proxy-status { font-size: 0.9em; padding: 12px; }
       .link-box { font-size: 0.9em; padding: 12px; }
       .cute-button, .upload-label, .upload-submit { padding: 10px 20px; font-size: 0.9em; }
@@ -935,10 +883,6 @@ function 生成订阅页面(配置路径, hostName) {
             <input type="checkbox" id="proxyToggle" onchange="toggleProxy()">
             <span class="slider"></span>
           </label>
-        </div>
-        <div class="proxy-capsule" id="proxyCapsule">
-          <div class="proxy-option active" data-type="reverse" onclick="switchProxyType('reverse')">反代</div>
-          <div class="proxy-option" data-type="socks5" onclick="switchProxyType('socks5')">SOCKS5</div>
         </div>
       </div>
       <div class="proxy-status" id="proxyStatus">直连模式 (未知)</div>
@@ -995,33 +939,14 @@ function 生成订阅页面(配置路径, hostName) {
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
 
     let proxyEnabled = localStorage.getItem('proxyEnabled') === 'true';
-    let proxyType = localStorage.getItem('proxyType') || 'reverse';
     document.getElementById('proxyToggle').checked = proxyEnabled;
-    updateProxyCapsuleUI();
     updateProxyStatus();
 
     function toggleProxy() {
       proxyEnabled = document.getElementById('proxyToggle').checked;
       localStorage.setItem('proxyEnabled', proxyEnabled);
-      updateProxyCapsuleUI();
       saveProxyState();
       updateProxyStatus();
-    }
-
-    function switchProxyType(type) {
-      proxyType = type;
-      localStorage.setItem('proxyType', proxyType);
-      updateProxyCapsuleUI();
-      saveProxyState();
-      updateProxyStatus();
-    }
-
-    function updateProxyCapsuleUI() {
-      const options = document.querySelectorAll('.proxy-option');
-      options.forEach(opt => {
-        opt.classList.toggle('active', opt.dataset.type === proxyType);
-      });
-      document.getElementById('proxyCapsule').style.display = proxyEnabled ? 'flex' : 'none';
     }
 
     function updateProxyStatus() {
@@ -1057,7 +982,6 @@ function 生成订阅页面(配置路径, hostName) {
     function saveProxyState() {
       const formData = new FormData();
       formData.append('proxyEnabled', proxyEnabled);
-      formData.append('proxyType', proxyType);
       fetch('/set-proxy-state', { method: 'POST', body: formData })
         .then(() => updateProxyStatus());
     }
