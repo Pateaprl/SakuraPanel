@@ -409,7 +409,7 @@ export default {
             let connectedTo = '';
 
             if (代理启用) {
-              if (代理类型 === 'reverse Cn&& 反代地址) {
+              if (代理类型 === 'reverse') { // 已修复此处语法错误
                 status = '反代';
                 connectedTo = 反代地址;
                 available = await 测试代理(
@@ -1367,7 +1367,7 @@ function 生成KV未绑定提示页面() {
   </div>
   <script>
     const lightBg = '${白天背景图}';
-   -const darkBg = '${暗黑背景图}';
+    const darkBg = '${暗黑背景图}';
     const bgImage = document.getElementById('backgroundImage');
 
     function updateBackground() {
