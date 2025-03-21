@@ -131,6 +131,158 @@ async function 检查锁定(env, 设备标识) {
   };
 }
 
+// 处理 WebSocket 升级请求
+async function handleWebSocketUpgrade(request, env) {
+  const { clientWebSocket, serverWebSocket } = createWebSocketPair();
+  serverWebSocket.accept();
+
+  const protocolHeader = request.headers.get('sec-websocket-protocol');
+  if (!protocolHeader) {
+    serverWebSocket.close(1002, 'Missing WebSocket protocol header');
+    return new Response('Invalid WebSocket request', { status: 400 });
+  }
+
+  const connectionResult = await establishConnection(protocolHeader, env);
+  if (!connectionResult) {
+    serverWebSocket.close(1002, 'Invalid connection data');
+    return new Response('Invalid request', { status: 400 });
+  }
+
+  const { tcpConnection, initialData } = connectionResult;
+  setupWebSocketPipeline(serverWebSocket, tcpConnection, initialData);
+
+  return new Response(null, { status: 101, webSocket: clientWebSocket });
+}
+
+// 创建 WebSocket 对
+function createWebSocketPair() {
+  const pair = new WebSocketPair();
+  return {
+    clientWebSocket: pair[0],
+    serverWebSocket: pair[1]
+  };
+}
+
+// 解析协议头并建立 TCP 连接
+async function establishConnection(encodedProtocol, env) {
+  try {
+    const decodedData = decodeProtocol(encodedProtocol);
+    const connectionData = parseConnectionData(decodedData);
+
+    if (!connectionData || !verifyUUID(connectionData.uuid)) {
+      return null;
+    }
+
+    const tcpConnection = await 智能连接(connectionData.address, connectionData.port, connectionData.addressType, env);
+    return {
+      tcpConnection,
+      initialData: connectionData.initialData
+    };
+  } catch (error) {
+    console.error(`Failed to establish connection: ${error.message}`);
+    return null;
+  }
+}
+
+// 解码 WebSocket 协议头
+function decodeProtocol(encodedData) {
+  const cleanedData = encodedData.replace(/-/g, '+').replace(/_/g, '/');
+  return Uint8Array.from(atob(cleanedData), char => char.charCodeAt(0)).buffer;
+}
+
+// 解析连接数据
+function parseConnectionData(dataBuffer) {
+  const dataView = new Uint8Array(dataBuffer);
+  const uuidBytes = dataView.slice(1, 17);
+  const addressType = dataView[17];
+  const port = new DataView(dataBuffer).getUint16(18, false);
+  const addressStart = 20;
+
+  let address = '';
+  let initialDataStart;
+
+  switch (addressType) {
+    case 1: // IPv4
+      address = dataView.slice(addressStart, addressStart + 4).join('.');
+      initialDataStart = addressStart + 4;
+      break;
+    case 2: // Domain
+      const domainLength = dataView[addressStart];
+      address = new TextDecoder().decode(dataView.slice(addressStart + 1, addressStart + 1 + domainLength));
+      initialDataStart = addressStart + 1 + domainLength;
+      break;
+    case 3: // IPv6
+      address = Array.from({ length: 8 }, (_, i) =>
+        new DataView(dataBuffer.slice(addressStart, addressStart + 16)).getUint16(i * 2).toString(16)
+      ).join(':');
+      initialDataStart = addressStart + 16;
+      break;
+    default:
+      return null;
+  }
+
+  const initialData = dataBuffer.slice(initialDataStart);
+  return {
+    uuid: uuidBytes,
+    address,
+    port,
+    addressType,
+    initialData
+  };
+}
+
+// 验证 UUID
+function verifyUUID(uuidBytes) {
+  const formattedUUID = Array.from(uuidBytes, byte => byte.toString(16).padStart(2, '0'))
+    .join('')
+    .match(/(.{8})(.{4})(.{4})(.{4})(.{12})/)
+    ?.slice(1)
+    .join('-')
+    .toLowerCase();
+  return formattedUUID === UUID;
+}
+
+// 设置 WebSocket 和 TCP 之间的数据管道
+function setupWebSocketPipeline(serverWebSocket, tcpConnection, initialData) {
+  // 发送初始响应
+  serverWebSocket.send(new Uint8Array([0, 0]).buffer);
+
+  // 从 WebSocket 到 TCP 的数据流
+  const webSocketToTcpStream = new ReadableStream({
+    start(controller) {
+      if (initialData && initialData.byteLength > 0) {
+        controller.enqueue(initialData);
+      }
+      serverWebSocket.addEventListener('message', ({ data }) => controller.enqueue(data));
+      serverWebSocket.addEventListener('close', () => {
+        controller.close();
+        tcpConnection.close();
+      });
+      serverWebSocket.addEventListener('error', () => {
+        controller.close();
+        tcpConnection.close();
+      });
+    }
+  });
+
+  // 从 TCP 到 WebSocket 的数据流
+  const tcpToWebSocketStream = tcpConnection.readable;
+
+  // 建立双向管道
+  Promise.all([
+    webSocketToTcpStream.pipeTo(tcpConnection.writable),
+    tcpToWebSocketStream.pipeTo(new WritableStream({
+      write(chunk) {
+        serverWebSocket.send(chunk);
+      }
+    }))
+  ]).catch(error => {
+    console.error(`Pipeline error: ${error.message}`);
+    serverWebSocket.close(1001, 'Pipeline failure');
+    tcpConnection.close();
+  });
+}
+
 export default {
   async fetch(请求, env) {
     try {
@@ -253,8 +405,8 @@ export default {
             const 反代地址 = env.PROXYIP || 'ts.hpc.tw';
             const SOCKS5账号 = env.SOCKS5 || '';
             let status = '直连模式';
-            let available = null; // null 表示直连模式
-            let connectedTo = ''; // 连接目标
+            let available = null;
+            let connectedTo = '';
 
             if (代理启用) {
               if (代理类型 === 'reverse' && 反代地址) {
@@ -280,7 +432,7 @@ export default {
               if (直连地址) {
                 connectedTo = 直连地址;
               } else {
-                connectedTo = `${hostName}:443`; // 默认使用 Workers 域名
+                connectedTo = `${hostName}:443`;
               }
               status = '直连模式';
             }
@@ -292,9 +444,7 @@ export default {
             return fetch(new Request(url, 请求));
         }
       } else if (请求头 === 'websocket') {
-        反代地址 = env.PROXYIP || 反代地址;
-        SOCKS5账号 = env.SOCKS5 || SOCKS5账号;
-        return await 升级请求(请求, env);
+        return await handleWebSocketUpgrade(请求, env);
       }
     } catch (error) {
       console.error(`全局错误: ${error.message}`);
@@ -318,131 +468,6 @@ async function 测试代理(连接函数, 描述, env) {
     await env.LOGIN_STATE.put(`${描述}_status`, 'unavailable', { expirationTtl: 300 });
     return false;
   }
-}
-
-async function 升级请求(请求, env) {
-  const 创建接口 = new WebSocketPair();
-  const [客户端, 服务端] = Object.values(创建接口);
-  服务端.accept();
-
-  const 结果 = await 解析头(解密(请求.headers.get('sec-websocket-protocol')), env);
-  if (!结果) return new Response('Invalid request', { status: 400 });
-
-  const { TCP接口, 初始数据 } = 结果;
-
-  // 设置超时
-  const 超时 = setTimeout(() => {
-    console.error('连接超时');
-    服务端.close(1002, '连接超时');
-    TCP接口.close();
-  }, 30000); // 30秒超时
-
-  服务端.addEventListener('message', () => clearTimeout(超时)); // 有数据时重置超时
-  服务端.addEventListener('close', () => clearTimeout(超时));
-
-  await 建立管道(服务端, TCP接口, 初始数据);
-  return new Response(null, { status: 101, webSocket: 客户端 });
-}
-
-async function 建立管道(服务端, TCP接口, 初始数据) {
-  let 已关闭 = false;
-
-  const 关闭所有 = () => {
-    if (!已关闭) {
-      已关闭 = true;
-      TCP接口.close();
-      服务端.close(1000);
-    }
-  };
-
-  await 服务端.send(new Uint8Array([0, 0]).buffer); // 发送初始响应
-
-  const 数据流 = new ReadableStream({
-    start(控制器) {
-      if (初始数据) 控制器.enqueue(初始数据);
-      服务端.addEventListener('message', event => 控制器.enqueue(event.data));
-      服务端.addEventListener('close', () => 控制器.close());
-      服务端.addEventListener('error', (err) => {
-        console.error('WebSocket 错误:', err);
-        控制器.error(err);
-      });
-    }
-  });
-
-  const 服务端写入流 = new WritableStream({
-    async write(数据) {
-      await 服务端.send(数据);
-    },
-    close() {
-      服务端.close(1000); // 正常关闭 WebSocket
-    },
-    abort(err) {
-      console.error('服务端写入流中止:', err);
-      服务端.close(1001); // 异常关闭
-    }
-  });
-
-  const TCP写入流 = new WritableStream({
-    async write(数据) {
-      const 写入器 = TCP接口.writable.getWriter();
-      await 写入器.write(数据);
-      写入器.releaseLock();
-    },
-    async close() {
-      await TCP接口.writable.getWriter().close(); // 确保 TCP 写入完成
-      TCP接口.close(); // 关闭 TCP 连接
-    },
-    abort(err) {
-      console.error('TCP 写入流中止:', err);
-      TCP接口.close();
-    }
-  });
-
-  服务端.addEventListener('close', 关闭所有);
-  服务端.addEventListener('error', (err) => {
-    console.error('WebSocket 错误:', err);
-    关闭所有();
-  });
-
-  await Promise.all([
-    数据流.pipeTo(TCP写入流, { preventClose: false }).catch(err => console.error('客户端到TCP错误:', err)),
-    TCP接口.readable.pipeTo(服务端写入流, { preventClose: false }).catch(err => console.error('TCP到客户端错误:', err))
-  ]);
-
-  关闭所有();
-}
-
-function 解密(混淆字符) {
-  混淆字符 = 混淆字符.replace(/-/g, '+').replace(/_/g, '/');
-  return Uint8Array.from(atob(混淆字符), c => c.charCodeAt(0)).buffer;
-}
-
-async function 解析头(数据, env) {
-  const 数据数组 = new Uint8Array(数据);
-  if (验证密钥(数据数组.slice(1, 17)) !== UUID) return null;
-
-  const 数据定位 = 数据数组[17];
-  const 端口 = new DataView(数据.slice(18 + 数据定位 + 1, 20 + 数据定位 + 1)).getUint16(0);
-  const 地址索引 = 20 + 数据定位 + 1;
-  const 地址类型 = 数据数组[地址索引];
-  let 地址 = '';
-  const 地址信息索引 = 地址索引 + 1;
-
-  switch (地址类型) {
-    case 1: 地址 = new Uint8Array(数据.slice(地址信息索引, 地址信息索引 + 4)).join('.'); break;
-    case 2:
-      const 地址长度 = 数据数组[地址信息索引];
-      地址 = new TextDecoder().decode(数据.slice(地址信息索引 + 1, 地址信息索引 + 1 + 地址长度));
-      break;
-    case 3:
-      地址 = Array.from({ length: 8 }, (_, i) => new DataView(数据.slice(地址信息索引, 地址信息索引 + 16)).getUint16(i * 2).toString(16)).join(':');
-      break;
-    default: return null;
-  }
-
-  const 初始数据 = 数据.slice(地址信息索引 + (地址类型 === 2 ? 数据数组[地址信息索引] + 1 : 地址类型 === 1 ? 4 : 16));
-  const TCP接口 = await 智能连接(地址, 端口, 地址类型, env);
-  return { TCP接口, 初始数据 };
 }
 
 async function 智能连接(地址, 端口, 地址类型, env) {
@@ -517,10 +542,6 @@ async function 尝试直连(地址, 端口) {
     console.error(`直连失败: ${错误.message}`);
     throw new Error(`无法连接: ${错误.message}`);
   }
-}
-
-function 验证密钥(arr) {
-  return Array.from(arr.slice(0, 16), b => b.toString(16).padStart(2, '0')).join('').match(/(.{8})(.{4})(.{4})(.{4})(.{12})/).slice(1).join('-').toLowerCase();
 }
 
 async function 创建SOCKS5(地址类型, 地址, 端口, env) {
