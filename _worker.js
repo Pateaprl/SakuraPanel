@@ -1584,4 +1584,4 @@ function 生成配置1(hostName, UUID) {
       console.error(`生成节点配置失败: ${节点}, 错误: ${错误.message}`);
       return null;
     }
-  }).
+  })
