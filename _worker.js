@@ -8,7 +8,6 @@ let 节点文件路径 = [
 ];
 let 优选节点 = [];
 let 反代地址 = 'ts.hpc.tw';
-let SOCKS5账号 = '';
 let 节点名称 = '🌸樱花';
 let 伪装域名 = 'lkssite.vip';
 let 用户名 = 'andypan';
@@ -395,46 +394,25 @@ export default {
               console.error(`上传处理失败: ${错误.message}`);
               return 创建JSON响应({ error: `上传处理失败: ${错误.message}` }, 500);
             }
-          case '/set-proxy-state':
-            formData = await 请求.formData();
-            const proxyEnabled = formData.get('proxyEnabled');
-            await env.LOGIN_STATE.put('proxyEnabled', proxyEnabled);
-            return new Response(null, { status: 200 });
           case '/get-proxy-status':
-            const 代理启用 = await env.LOGIN_STATE.get('proxyEnabled') === 'true';
-            const 反代地址 = env.PROXYIP || '';
-            const SOCKS5账号 = env.SOCKS5 || '';
+            const 反代地址 = env.PROXYIP || 'ts.hpc.tw';
             let status = '直连模式';
+            let connectedTo = `${hostName}:443`;
             let available = null;
-            let connectedTo = '';
 
-            if (代理启用) {
-              if (反代地址) {
+            if (反代地址) {
+              available = await 测试代理(
+                (addr, port) => connect({ hostname: 反代地址.split(':')[0], port: 反代地址.split(':')[1] || port }),
+                `反代 ${反代地址}`,
+                env
+              );
+              if (available) {
                 status = '反代';
                 connectedTo = 反代地址;
-                available = await 测试代理(
-                  (addr, port) => connect({ hostname: 反代地址.split(':')[0], port: 反代地址.split(':')[1] || port }),
-                  `反代 ${反代地址}`,
-                  env
-                );
-                if (available) return 创建JSON响应({ status, available, connectedTo });
-              }
-              if (SOCKS5账号) {
-                status = 'SOCKS5';
-                const { hostname, port } = await 解析SOCKS5账号(SOCKS5账号);
-                connectedTo = `${hostname}:${port}`;
-                available = await 测试代理(
-                  () => 创建SOCKS5(2, "www.google.com", 443, env),
-                  `SOCKS5 ${SOCKS5账号}`,
-                  env
-                );
-                if (available) return 创建JSON响应({ status, available, connectedTo });
               }
             }
-            const 直连地址 = await env.LOGIN_STATE.get('direct_connected_to') || `${hostName}:443`;
-            connectedTo = 直连地址;
-            status = '直连模式';
-            return 创建JSON响应({ status, available, connectedTo });
+
+            return 创建JSON响应({ status, connectedTo });
           case '/get-uuid':
             return 创建JSON响应({ uuid: UUID });
           case '/regenerate-uuid':
@@ -482,11 +460,10 @@ async function 测试代理(连接函数, 描述, env) {
 }
 
 async function 智能连接(地址, 端口, 地址类型, env) {
-  const 反代地址 = env.PROXYIP || '';
-  const SOCKS5账号 = env.SOCKS5 || '';
+  const 反代地址 = env.PROXYIP || 'ts.hpc.tw';
 
   if (!地址 || 地址.trim() === '') {
-    console.log(`目标地址为空，默认直连失败`);
+    console.log(`地址为空，默认直连失败`);
     throw new Error('目标地址为空');
   }
 
@@ -494,51 +471,25 @@ async function 智能连接(地址, 端口, 地址类型, env) {
   const 是IP = 地址类型 === 1 || (地址类型 === 2 && 地址.match(/^\d+\.\d+\.\d+\.\d+$/)) || 地址类型 === 3;
 
   if (是域名 || 是IP) {
-    const 代理启用 = await env.LOGIN_STATE.get('proxyEnabled') === 'true';
-
-    if (代理启用) {
-      if (反代地址) {
-        const 反代可用 = await 测试代理(
-          (addr, port) => connect({ hostname: 反代地址.split(':')[0], port: 反代地址.split(':')[1] || port }),
-          `反代 ${反代地址}`,
-          env
-        );
-        if (反代可用) {
-          const [反代主机, 反代端口] = 反代地址.split(':');
-          const 连接 = connect({ hostname: 反代主机, port: 反代端口 || 端口 });
-          await 连接.opened;
-          console.log(`通过反代连接: ${反代地址} -> ${地址}:${端口}`);
-          return 连接;
-        }
-        console.log(`反代 ${反代地址} 不可用，继续尝试其他连接方式`);
+    if (反代地址) {
+      const 反代可用 = await 测试代理(
+        (addr, port) => connect({ hostname: 反代地址.split(':')[0], port: 反代地址.split(':')[1] || port }),
+        `反代 ${反代地址}`,
+        env
+      );
+      if (反代可用) {
+        const [反代主机, 反代端口] = 反代地址.split(':');
+        const 连接 = connect({ hostname: 反代主机, port: 反代端口 || 端口 });
+        await 连接.opened;
+        console.log(`通过反代连接: ${反代地址}`);
+        return 连接;
       }
-
-      if (SOCKS5账号) {
-        const SOCKS5可用 = await 测试代理(
-          () => 创建SOCKS5(2, "www.google.com", 443, env),
-          `SOCKS5 ${SOCKS5账号}`,
-          env
-        );
-        if (SOCKS5可用) {
-          const SOCKS5连接 = await 创建SOCKS5(地址类型, 地址, 端口, env);
-          console.log(`通过 SOCKS5 连接: ${SOCKS5账号} -> ${地址}:${端口}`);
-          return SOCKS5连接;
-        }
-        console.log(`SOCKS5 ${SOCKS5账号} 不可用，继续尝试其他连接方式`);
-      }
-
-      console.log(`所有代理不可用，回退到直连: ${地址}:${端口}`);
-      await env.LOGIN_STATE.put('direct_connected_to', `${地址}:${端口}`, { expirationTtl: 300 });
-      return await 尝试直连(地址, 端口);
     }
-
-    console.log(`代理未启用或未配置，使用直连: ${地址}:${端口}`);
-    await env.LOGIN_STATE.put('direct_connected_to', `${地址}:${端口}`, { expirationTtl: 300 });
+    console.log(`反代不可用或未设置，回退到直连: ${地址}:${端口}`);
     return await 尝试直连(地址, 端口);
   }
 
   console.log(`默认使用直连: ${地址}:${端口}`);
-  await env.LOGIN_STATE.put('direct_connected_to', `${地址}:${端口}`, { expirationTtl: 300 });
   return await 尝试直连(地址, 端口);
 }
 
@@ -546,64 +497,12 @@ async function 尝试直连(地址, 端口) {
   try {
     const 连接 = connect({ hostname: 地址, port: 端口 });
     await 连接.opened;
-    console.log(`回退到直连: ${地址}:${端口}`);
+    console.log(`直连成功: ${地址}:${端口}`);
     return 连接;
   } catch (错误) {
     console.error(`直连失败: ${错误.message}`);
     throw new Error(`无法连接: ${错误.message}`);
   }
-}
-
-async function 创建SOCKS5(地址类型, 地址, 端口, env) {
-  const SOCKS5账号 = env.SOCKS5 || '';
-  const { username, password, hostname, port } = await 解析SOCKS5账号(SOCKS5账号 || '');
-  const SOCKS5接口 = connect({ hostname, port });
-  try {
-    await SOCKS5接口.opened;
-  } catch {
-    return new Response('SOCKS5未连通', { status: 400 });
-  }
-  const writer = SOCKS5接口.writable.getWriter();
-  const reader = SOCKS5接口.readable.getReader();
-  const encoder = new TextEncoder();
-  await writer.write(new Uint8Array([5, 2, 0, 2]));
-  let res = (await reader.read()).value;
-  if (res[1] === 0x02) {
-    if (!username || !password) return 关闭接口();
-    await writer.write(new Uint8Array([1, username.length, ...encoder.encode(username), password.length, ...encoder.encode(password)]));
-    res = (await reader.read()).value;
-    if (res[0] !== 0x01 || res[1] !== 0x00) return 关闭接口();
-  }
-  let 转换地址;
-  switch (地址类型) {
-    case 1: 转换地址 = new Uint8Array([1, ...地址.split('.').map(Number)]); break;
-    case 2: 转换地址 = new Uint8Array([3, 地址.length, ...encoder.encode(地址)]); break;
-    case 3: 转换地址 = new Uint8Array([4, ...地址.split(':').flatMap(x => [parseInt(x.slice(0, 2), 16), parseInt(x.slice(2), 16)])]); break;
-    default: return 关闭接口();
-  }
-  await writer.write(new Uint8Array([5, 1, 0, ...转换地址, 端口 >> 8, 端口 & 0xff]));
-  res = (await reader.read()).value;
-  if (res[0] !== 0x05 || res[1] !== 0x00) return 关闭接口();
-  writer.releaseLock();
-  reader.releaseLock();
-  return SOCKS5接口;
-
-  function 关闭接口() {
-    writer.releaseLock();
-    reader.releaseLock();
-    SOCKS5接口.close();
-    return new Response('SOCKS5握手失败', { status: 400 });
-  }
-}
-
-async function 解析SOCKS5账号(SOCKS5) {
-  const [latter, former] = SOCKS5.split("@").reverse();
-  let username, password, hostname, port;
-  if (former) [username, password] = former.split(":");
-  const latters = latter.split(":");
-  port = Number(latters.pop());
-  hostname = latters.join(":");
-  return { username, password, hostname, port };
 }
 
 function 生成订阅页面(配置路径, hostName) {
@@ -708,52 +607,6 @@ function 生成订阅页面(配置路径, hostName) {
       margin-bottom: 15px;
       text-shadow: 1px 1px 3px rgba(255, 105, 180, 0.2);
     }
-    .switch-container {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 15px;
-    }
-    .toggle-row {
-      display: flex;
-      align-items: center;
-      gap: 15px;
-    }
-    .toggle-switch {
-      position: relative;
-      display: inline-block;
-      width: 60px;
-      height: 34px;
-    }
-    .toggle-switch input {
-      opacity: 0;
-      width: 0;
-      height: 0;
-    }
-    .slider {
-      position: absolute;
-      cursor: pointer;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background-color: #ccc;
-      transition: .4s;
-      border-radius: 34px;
-    }
-    .slider:before {
-      position: absolute;
-      content: "";
-      height: 26px;
-      width: 26px;
-      left: 4px;
-      bottom: 4px;
-      background-color: white;
-      transition: .4s;
-      border-radius: 50%;
-    }
-    input:checked + .slider { background-color: #ff69b4; }
-    input:checked + .slider:before { transform: translateX(26px); }
     .proxy-status {
       margin-top: 20px;
       padding: 15px;
@@ -764,9 +617,8 @@ function 生成订阅页面(配置路径, hostName) {
       width: 100%;
       box-sizing: border-box;
     }
-    .proxy-status.success { background: rgba(212, 237, 218, 0.9);会被用户通过 UI 启用/禁用代理，并查看当前连接状态。 color: #155724; }
     .proxy-status.direct { background: rgba(233, 236, 239, 0.9); color: #495057; }
-    .proxy-status.error { background: rgba(248, 215, 218, 0.9); color: #721c24; }
+    .proxy-status.success { background: rgba(212, 237, 218, 0.9); color: #155724; }
     .link-box {
       border-radius: 15px;
       padding: 15px;
@@ -851,8 +703,6 @@ function 生成订阅页面(配置路径, hostName) {
     @media (max-width: 600px) {
       .card { padding: 15px; max-width: 90%; }
       .card-title { font-size: 1.3em; }
-      .switch-container { gap: 10px; }
-      .toggle-row { gap: 10px; }
       .proxy-status { font-size: 0.9em; padding: 12px; }
       .link-box { font-size: 0.9em; padding: 12px; }
       .cute-button, .upload-label, .upload-submit { padding: 10px 20px; font-size: 0.9em; }
@@ -875,17 +725,8 @@ function 生成订阅页面(配置路径, hostName) {
       </div>
     </div>
     <div class="card">
-      <h2 class="card-title">🌟 代理设置</h2>
-      <div class="switch-container">
-        <div class="toggle-row">
-          <label>代理开关</label>
-          <label class="toggle-switch">
-            <input type="checkbox" id="proxyToggle" onchange="toggleProxy()">
-            <span class="slider"></span>
-          </label>
-        </div>
-      </div>
-      <div class="proxy-status" id="proxyStatus">直连模式 (未知)</div>
+      <h2 class="card-title">🌟 连接状态</h2>
+      <div class="proxy-status" id="proxyStatus">加载中...</div>
     </div>
     <div class="card">
       <h2 class="card-title">🐾 ${神秘代码2} 订阅</h2>
@@ -938,17 +779,6 @@ function 生成订阅页面(配置路径, hostName) {
     updateBackground();
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
 
-    let proxyEnabled = localStorage.getItem('proxyEnabled') === 'true';
-    document.getElementById('proxyToggle').checked = proxyEnabled;
-    updateProxyStatus();
-
-    function toggleProxy() {
-      proxyEnabled = document.getElementById('proxyToggle').checked;
-      localStorage.setItem('proxyEnabled', proxyEnabled);
-      saveProxyState();
-      updateProxyStatus();
-    }
-
     function updateProxyStatus() {
       const statusElement = document.getElementById('proxyStatus');
       fetch('/get-proxy-status')
@@ -958,16 +788,11 @@ function 生成订阅页面(配置路径, hostName) {
           let className = 'proxy-status';
 
           if (data.status === '直连模式') {
-            displayText = \`直连模式 (已连接 \${data.connectedTo})\`;
+            displayText = \`直连模式 (\${data.connectedTo})\`;
             className += ' direct';
-          } else if (data.available !== null) {
-            if (data.available) {
-              displayText = \`\${data.status}可用 (已连接 \${data.connectedTo})\`;
-              className += ' success';
-            } else {
-              displayText = \`\${data.status}不可用 (目前为直连模式)\`;
-              className += ' error';
-            }
+          } else if (data.status === '反代') {
+            displayText = \`反代 (\${data.connectedTo})\`;
+            className += ' success';
           }
 
           statusElement.textContent = displayText;
@@ -978,13 +803,8 @@ function 生成订阅页面(配置路径, hostName) {
           statusElement.className = 'proxy-status direct';
         });
     }
-
-    function saveProxyState() {
-      const formData = new FormData();
-      formData.append('proxyEnabled', proxyEnabled);
-      fetch('/set-proxy-state', { method: 'POST', body: formData })
-        .then(() => updateProxyStatus());
-    }
+    updateProxyStatus();
+    setInterval(updateProxyStatus, 30000); // 每30秒刷新状态
 
     function 导入配置2(配置路径, hostName) {
       window.location.href = '${神秘代码2}://install-config?url=https://' + hostName + '/${配置路径}/${神秘代码2}';
