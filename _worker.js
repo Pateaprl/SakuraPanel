@@ -1,7 +1,6 @@
 import { connect } from 'cloudflare:sockets';
 
 let 配置路径 = "config";
-let UUID = "03978e2f-2129-4c0c-8f15-22175dd0aba6";
 let 节点文件路径 = [
   'https://v2.i-sweet.us.kg/ips.txt',
   'https://v2.i-sweet.us.kg/url.txt',
@@ -18,6 +17,14 @@ let 最大失败次数 = 5;
 let 锁定时间 = 5 * 60 * 1000;
 let 白天背景图 = 'https://github-9d8.pages.dev/image/day.jpg';
 let 暗黑背景图 = 'https://github-9d8.pages.dev/image/night.jpg';
+
+// 生成随机 UUID 的函数
+function generateUUID() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
 
 function 创建HTML响应(内容, 状态码 = 200) {
   return new Response(内容, {
@@ -85,9 +92,9 @@ async function 加载节点和配置(env, hostName) {
         const 新版本 = String(Date.now());
         await env.LOGIN_STATE.put('ip_preferred_ips', JSON.stringify(合并节点列表));
         await env.LOGIN_STATE.put('ip_preferred_ips_version', 新版本);
-        await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g='), 生成配置2(hostName));
+        await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g='), 生成配置2(hostName, await env.LOGIN_STATE.get('current_uuid')));
         await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g=') + '_version', 新版本);
-        await env.LOGIN_STATE.put('config_' + atob('dmxlc3M='), 生成配置1(hostName));
+        await env.LOGIN_STATE.put('config_' + atob('dmxlc3M='), 生成配置1(hostName, await env.LOGIN_STATE.get('current_uuid')));
         await env.LOGIN_STATE.put('config_' + atob('dmxlc3M=') + '_version', 新版本);
       }
     } else {
@@ -115,7 +122,8 @@ async function 获取配置(env, 类型, hostName) {
     return 缓存配置;
   }
 
-  const 新配置 = 类型 === atob('Y2xhc2g=') ? 生成配置2(hostName) : 生成配置1(hostName);
+  const UUID = await env.LOGIN_STATE.get('current_uuid');
+  const 新配置 = 类型 === atob('Y2xhc2g=') ? 生成配置2(hostName, UUID) : 生成配置1(hostName, UUID);
   await env.LOGIN_STATE.put(缓存键, 新配置);
   await env.LOGIN_STATE.put(版本键, 节点版本);
   return 新配置;
@@ -131,7 +139,6 @@ async function 检查锁定(env, 设备标识) {
   };
 }
 
-// 处理 WebSocket 升级请求
 async function 处理WebSocket升级(请求, env) {
   const { 客户端WebSocket, 服务端WebSocket } = 创建WebSocket对();
   服务端WebSocket.accept();
@@ -154,7 +161,6 @@ async function 处理WebSocket升级(请求, env) {
   return new Response(null, { status: 101, webSocket: 客户端WebSocket });
 }
 
-// 创建 WebSocket 对
 function 创建WebSocket对() {
   const 对 = new WebSocketPair();
   return {
@@ -163,13 +169,12 @@ function 创建WebSocket对() {
   };
 }
 
-// 解析协议头并建立 TCP 连接
 async function 建立连接(编码协议, env) {
   try {
     const 解码数据 = 解码协议(编码协议);
     const 连接数据 = 解析连接数据(解码数据);
 
-    if (!连接数据 || !验证UUID(连接数据.uuid)) {
+    if (!连接数据 || !验证UUID(连接数据.uuid, await env.LOGIN_STATE.get('current_uuid'))) {
       return null;
     }
 
@@ -184,13 +189,11 @@ async function 建立连接(编码协议, env) {
   }
 }
 
-// 解码 WebSocket 协议头
 function 解码协议(编码数据) {
   const 清理数据 = 编码数据.replace(/-/g, '+').replace(/_/g, '/');
   return Uint8Array.from(atob(清理数据), char => char.charCodeAt(0)).buffer;
 }
 
-// 解析连接数据
 function 解析连接数据(数据缓冲区) {
   const 数据视图 = new Uint8Array(数据缓冲区);
   const uuid字节 = 数据视图.slice(1, 17);
@@ -231,8 +234,7 @@ function 解析连接数据(数据缓冲区) {
   };
 }
 
-// 验证 UUID
-function 验证UUID(uuid字节) {
+function 验证UUID(uuid字节, UUID) {
   const 格式化UUID = Array.from(uuid字节, byte => byte.toString(16).padStart(2, '0'))
     .join('')
     .match(/(.{8})(.{4})(.{4})(.{4})(.{12})/)
@@ -242,12 +244,9 @@ function 验证UUID(uuid字节) {
   return 格式化UUID === UUID;
 }
 
-// 设置 WebSocket 和 TCP 之间的数据管道
 function 设置WebSocket管道(服务端WebSocket, tcp连接, 初始数据) {
-  // 发送初始响应
   服务端WebSocket.send(new Uint8Array([0, 0]).buffer);
 
-  // 从 WebSocket 到 TCP 的数据流
   const WebSocket到TCP流 = new ReadableStream({
     start(控制器) {
       if (初始数据 && 初始数据.byteLength > 0) {
@@ -265,10 +264,8 @@ function 设置WebSocket管道(服务端WebSocket, tcp连接, 初始数据) {
     }
   });
 
-  // 从 TCP 到 WebSocket 的数据流
   const TCP到WebSocket流 = tcp连接.readable;
 
-  // 建立双向管道
   Promise.all([
     WebSocket到TCP流.pipeTo(tcp连接.writable),
     TCP到WebSocket流.pipeTo(new WritableStream({
@@ -288,6 +285,12 @@ export default {
     try {
       if (!env.LOGIN_STATE) {
         return 创建HTML响应(生成KV未绑定提示页面());
+      }
+
+      let UUID = await env.LOGIN_STATE.get('current_uuid');
+      if (!UUID) {
+        UUID = generateUUID();
+        await env.LOGIN_STATE.put('current_uuid', UUID);
       }
 
       const 请求头 = 请求.headers.get('Upgrade');
@@ -383,9 +386,9 @@ export default {
               await env.LOGIN_STATE.put('manual_preferred_ips', JSON.stringify(uniqueIpList));
               const 新版本 = String(Date.now());
               await env.LOGIN_STATE.put('ip_preferred_ips_version', 新版本);
-              await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g='), 生成配置2(hostName));
+              await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g='), 生成配置2(hostName, UUID));
               await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g=') + '_version', 新版本);
-              await env.LOGIN_STATE.put('config_' + atob('dmxlc3M='), 生成配置1(hostName));
+              await env.LOGIN_STATE.put('config_' + atob('dmxlc3M='), 生成配置1(hostName, UUID));
               await env.LOGIN_STATE.put('config_' + atob('dmxlc3M=') + '_version', 新版本);
               return 创建JSON响应({ message: '上传成功，即将跳转' }, 200, { 'Location': `/${配置路径}` });
             } catch (错误) {
@@ -409,7 +412,7 @@ export default {
             let connectedTo = '';
 
             if (代理启用) {
-              if (代理类型 === 'reverse') { // 已修复此处语法错误
+              if (代理类型 === 'reverse') {
                 status = '反代';
                 connectedTo = 反代地址;
                 available = await 测试代理(
@@ -438,6 +441,20 @@ export default {
             }
 
             return 创建JSON响应({ status, available, connectedTo });
+          case '/get-uuid':
+            return 创建JSON响应({ uuid: UUID });
+          case '/regenerate-uuid':
+            if (请求.method !== 'POST') return 创建JSON响应({ error: '方法不允许' }, 405);
+            const regenToken = 请求.headers.get('Cookie')?.split('=')[1];
+            const 有效RegenToken = await env.LOGIN_STATE.get('current_token');
+            if (!regenToken || regenToken !== 有效RegenToken) {
+              return 创建JSON响应({ error: '未登录或Token无效' }, 401);
+            }
+            UUID = generateUUID();
+            await env.LOGIN_STATE.put('current_uuid', UUID);
+            await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g='), 生成配置2(hostName, UUID));
+            await env.LOGIN_STATE.put('config_' + atob('dmxlc3M='), 生成配置1(hostName, UUID));
+            return 创建JSON响应({ uuid: UUID });
           default:
             url.hostname = 伪装域名;
             url.protocol = 'https:';
@@ -898,6 +915,13 @@ function 生成订阅页面(配置路径, hostName) {
       <p style="font-size: 1em;">支持 <span style="color: #ff69b4;">${神秘代码2}</span> 和 <span style="color: #ff85a2;">${神秘代码3}</span> 哦~</p>
     </div>
     <div class="card">
+      <h2 class="card-title">🔑 当前 UUID</h2>
+      <div class="link-box" id="uuidDisplay">加载中...</div>
+      <div class="button-group">
+        <button class="cute-button btn2" onclick="regenerateUUID()">更换 UUID</button>
+      </div>
+    </div>
+    <div class="card">
       <h2 class="card-title">🌟 代理设置</h2>
       <div class="switch-container">
         <div class="toggle-row">
@@ -1038,6 +1062,39 @@ function 生成订阅页面(配置路径, hostName) {
     }
     function 导入配置1(配置路径, hostName) {
       window.location.href = '${神秘代码3}://install-config?url=https://' + hostName + '/${配置路径}/${神秘代码3}';
+    }
+
+    function fetchUUID() {
+      fetch('/get-uuid')
+        .then(response => response.json())
+        .then(data => {
+          document.getElementById('uuidDisplay').textContent = data.uuid;
+        })
+        .catch(() => {
+          document.getElementById('uuidDisplay').textContent = '获取 UUID 失败';
+        });
+    }
+    fetchUUID();
+
+    function regenerateUUID() {
+      fetch('/regenerate-uuid', { method: 'POST', credentials: 'include' })
+        .then(response => {
+          if (response.status === 401) {
+            alert('请先登录哦~');
+            window.location.href = '/login';
+            return;
+          }
+          return response.json();
+        })
+        .then(data => {
+          if (data && data.uuid) {
+            document.getElementById('uuidDisplay').textContent = data.uuid;
+            alert('UUID 已更新，请重新导入订阅哦~');
+          }
+        })
+        .catch(() => {
+          alert('更换 UUID 失败，小仙女请稍后再试~');
+        });
     }
 
     function 显示文件() {
@@ -1383,7 +1440,7 @@ function 生成KV未绑定提示页面() {
   `;
 }
 
-function 生成配置2(hostName) {
+function 生成配置2(hostName, UUID) {
   let 神秘代码1 = [atob('dmxlc3M=')];
   const 节点列表 = 优选节点.length ? 优选节点 : [`${hostName}:443`];
   const 国家分组 = {};
@@ -1487,7 +1544,7 @@ rules:
 `;
 }
 
-function 生成配置1(hostName) {
+function 生成配置1(hostName, UUID) {
   let 神秘代码1 = [atob('dmxlc3M=')];
   const 节点列表 = 优选节点.length ? 优选节点 : [`${hostName}:443`];
   const 配置列表 = 节点列表.map(节点 => {
