@@ -405,14 +405,14 @@ export default {
           case '/get-proxy-status':
             const 代理启用 = await env.LOGIN_STATE.get('proxyEnabled') === 'true';
             const 代理类型 = await env.LOGIN_STATE.get('proxyType') || 'reverse';
-            const 反代地址 = env.PROXYIP || 'ts.hpc.tw';
+            const 反代地址 = env.PROXYIP || '';
             const SOCKS5账号 = env.SOCKS5 || '';
             let status = '直连模式';
             let available = null;
             let connectedTo = '';
 
             if (代理启用) {
-              if (代理类型 === 'reverse') {
+              if (代理类型 === 'reverse' && 反代地址) {
                 status = '反代';
                 connectedTo = 反代地址;
                 available = await 测试代理(
@@ -488,11 +488,11 @@ async function 测试代理(连接函数, 描述, env) {
 }
 
 async function 智能连接(地址, 端口, 地址类型, env) {
-  const 反代地址 = env.PROXYIP || 'ts.hpc.tw';
+  const 反代地址 = env.PROXYIP || ''; // 默认空字符串
   const SOCKS5账号 = env.SOCKS5 || '';
 
   if (!地址 || 地址.trim() === '') {
-    console.log(`地址为空，默认直连失败`);
+    console.log(`目标地址为空，默认直连失败`);
     throw new Error('目标地址为空');
   }
 
@@ -501,49 +501,54 @@ async function 智能连接(地址, 端口, 地址类型, env) {
 
   if (是域名 || 是IP) {
     const 代理启用 = await env.LOGIN_STATE.get('proxyEnabled') === 'true';
-    const 代理类型 = await env.LOGIN_STATE.get('proxyType') || 'reverse';
 
-    if (!代理启用) {
-      console.log(`代理未启用，使用直连: ${地址}:${端口}`);
+    // 如果代理启用且有配置的代理，优先尝试代理
+    if (代理启用) {
+      // 优先级1：尝试反代
+      if (反代地址) {
+        const 反代可用 = await 测试代理(
+          (addr, port) => connect({ hostname: 反代地址.split(':')[0], port: 反代地址.split(':')[1] || port }),
+          `反代 ${反代地址}`,
+          env
+        );
+        if (反代可用) {
+          const [反代主机, 反代端口] = 反代地址.split(':');
+          const 连接 = connect({ hostname: 反代主机, port: 反代端口 || 端口 });
+          await 连接.opened;
+          console.log(`通过反代连接: ${反代地址} -> ${地址}:${端口}`);
+          return 连接;
+        }
+        console.log(`反代 ${反代地址} 不可用，继续尝试其他连接方式`);
+      }
+
+      // 优先级2：尝试SOCKS5
+      if (SOCKS5账号) {
+        const SOCKS5可用 = await 测试代理(
+          () => 创建SOCKS5(2, "www.google.com", 443, env),
+          `SOCKS5 ${SOCKS5账号}`,
+          env
+        );
+        if (SOCKS5可用) {
+          const SOCKS5连接 = await 创建SOCKS5(地址类型, 地址, 端口, env);
+          console.log(`通过 SOCKS5 连接: ${SOCKS5账号} -> ${地址}:${端口}`);
+          return SOCKS5连接;
+        }
+        console.log(`SOCKS5 ${SOCKS5账号} 不可用，继续尝试其他连接方式`);
+      }
+
+      // 如果代理都不可用，回退到直连
+      console.log(`所有代理不可用，回退到直连: ${地址}:${端口}`);
       await env.LOGIN_STATE.put('direct_connected_to', `${地址}:${端口}`, { expirationTtl: 300 });
       return await 尝试直连(地址, 端口);
     }
 
-    if (代理类型 === 'reverse' && 反代地址) {
-      const 反代可用 = await 测试代理(
-        (addr, port) => connect({ hostname: 反代地址.split(':')[0], port: 反代地址.split(':')[1] || port }),
-        `反代 ${反代地址}`,
-        env
-      );
-      if (反代可用) {
-        const [反代主机, 反代端口] = 反代地址.split(':');
-        const 连接 = connect({ hostname: 反代主机, port: 反代端口 || 端口 });
-        await 连接.opened;
-        console.log(`通过反代连接: ${反代地址}`);
-        return 连接;
-      } else {
-        console.log(`反代不可用，回退到直连: ${地址}:${端口}`);
-        await env.LOGIN_STATE.put('direct_connected_to', `${地址}:${端口}`, { expirationTtl: 300 });
-        return await 尝试直连(地址, 端口);
-      }
-    } else if (代理类型 === 'socks5' && SOCKS5账号) {
-      const SOCKS5可用 = await 测试代理(
-        () => 创建SOCKS5(2, "www.google.com", 443, env),
-        `SOCKS5 ${SOCKS5账号}`,
-        env
-      );
-      if (SOCKS5可用) {
-        const SOCKS5连接 = await 创建SOCKS5(地址类型, 地址, 端口, env);
-        console.log(`通过 SOCKS5 连接: ${地址}:${端口}`);
-        return SOCKS5连接;
-      } else {
-        console.log(`SOCKS5不可用，回退到直连: ${地址}:${端口}`);
-        await env.LOGIN_STATE.put('direct_connected_to', `${地址}:${端口}`, { expirationTtl: 300 });
-        return await 尝试直连(地址, 端口);
-      }
-    }
+    // 如果代理未启用或无代理配置，直接使用直连
+    console.log(`代理未启用或未配置，使用直连: ${地址}:${端口}`);
+    await env.LOGIN_STATE.put('direct_connected_to', `${地址}:${端口}`, { expirationTtl: 300 });
+    return await 尝试直连(地址, 端口);
   }
 
+  // 默认情况下的直连
   console.log(`默认使用直连: ${地址}:${端口}`);
   await env.LOGIN_STATE.put('direct_connected_to', `${地址}:${端口}`, { expirationTtl: 300 });
   return await 尝试直连(地址, 端口);
