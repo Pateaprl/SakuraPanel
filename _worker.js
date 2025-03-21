@@ -143,8 +143,8 @@ async function 处理WebSocket升级(请求, env) {
   const { 客户端WebSocket, 服务端WebSocket } = 创建WebSocket对();
   服务端WebSocket.accept();
 
-  const 协议头 = 请求.headers.get('sec-websocket-protocol') || 'default'; // 添加默认值
-  console.log('WebSocket 请求:', { 路径: new URL(请求.url).pathname, 协议头 }); // 添加日志
+  const 协议头 = 请求.headers.get('sec-websocket-protocol') || 'default';
+  console.log('WebSocket 请求:', { 路径: new URL(请求.url).pathname, 协议头 });
 
   const 连接结果 = await 建立连接(协议头, env);
   if (!连接结果) {
@@ -222,7 +222,7 @@ function 解析连接数据(数据缓冲区) {
   }
 
   const 初始数据 = 数据缓冲区.slice(初始数据起始);
-  console.log('解析连接数据:', { uuid: uuid字节, 地址, 端口, 地址类型 }); // 添加日志
+  console.log('解析连接数据:', { uuid: uuid字节, 地址, 端口, 地址类型 });
   return {
     uuid: uuid字节,
     地址,
@@ -244,7 +244,7 @@ function 验证UUID(uuid字节, UUID) {
 
 function 设置WebSocket管道(服务端WebSocket, tcp连接, 初始数据) {
   服务端WebSocket.send(new Uint8Array([0, 0]).buffer);
-  console.log('WebSocket 管道建立，初始数据:', 初始数据?.byteLength); // 添加日志
+  console.log('WebSocket 管道建立，初始数据:', 初始数据?.byteLength);
 
   const WebSocket到TCP流 = new ReadableStream({
     start(控制器) {
@@ -509,61 +509,6 @@ async function 智能连接(地址, 端口, 地址类型, env) {
   await Promise.race([连接.opened, timeoutPromise]);
   console.log(`通过反代连接成功: ${反代地址}`);
   return 连接;
-
-  // 注释掉原有逻辑，强制反代
-  /*
-  const 是域名 = 地址类型 === 2 && !地址.match(/^\d+\.\d+\.\d+\.\d+$/);
-  const 是IP = 地址类型 === 1 || (地址类型 === 2 && 地址.match(/^\d+\.\d+\.\d+\.\d+$/)) || 地址类型 === 3;
-
-  if (是域名 || 是IP) {
-    const 代理启用 = await env.LOGIN_STATE.get('proxyEnabled') === 'true';
-    const 代理类型 = await env.LOGIN_STATE.get('proxyType') || 'reverse';
-
-    if (!代理启用) {
-      console.log(`代理未启用，使用直连: ${地址}:${端口}`);
-      await env.LOGIN_STATE.put('direct_connected_to', `${地址}:${端口}`, { expirationTtl: 300 });
-      return await 尝试直连(地址, 端口);
-    }
-
-    if (代理类型 === 'reverse' && 反代地址) {
-      const 反代可用 = await 测试代理(
-        (addr, port) => connect({ hostname: 反代地址.split(':')[0], port: 反代地址.split(':')[1] || port }),
-        `反代 ${反代地址}`,
-        env
-      );
-      if (反代可用) {
-        const [反代主机, 反代端口] = 反代地址.split(':');
-        const 连接 = connect({ hostname: 反代主机, port: 反代端口 || 端口 });
-        await 连接.opened;
-        console.log(`通过反代连接: ${反代地址}`);
-        return 连接;
-      } else {
-        console.log(`反代不可用，回退到直连: ${地址}:${端口}`);
-        await env.LOGIN_STATE.put('direct_connected_to', `${地址}:${端口}`, { expirationTtl: 300 });
-        return await 尝试直连(地址, 端口);
-      }
-    } else if (代理类型 === 'socks5' && SOCKS5账号) {
-      const SOCKS5可用 = await 测试代理(
-        () => 创建SOCKS5(2, "www.google.com", 443, env),
-        `SOCKS5 ${SOCKS5账号}`,
-        env
-      );
-      if (SOCKS5可用) {
-        const SOCKS5连接 = await 创建SOCKS5(地址类型, 地址, 端口, env);
-        console.log(`通过 SOCKS5 连接: ${地址}:${端口}`);
-        return SOCKS5连接;
-      } else {
-        console.log(`SOCKS5不可用，回退到直连: ${地址}:${端口}`);
-        await env.LOGIN_STATE.put('direct_connected_to', `${地址}:${端口}`, { expirationTtl: 300 });
-        return await 尝试直连(地址, 端口);
-      }
-    }
-  }
-
-  console.log(`默认使用直连: ${地址}:${端口}`);
-  await env.LOGIN_STATE.put('direct_connected_to', `${地址}:${端口}`, { expirationTtl: 300 });
-  return await 尝试直连(地址, 端口);
-  */
 }
 
 async function 尝试直连(地址, 端口) {
@@ -1584,4 +1529,7 @@ function 生成配置1(hostName, UUID) {
       console.error(`生成节点配置失败: ${节点}, 错误: ${错误.message}`);
       return null;
     }
-  })
+  }).filter(Boolean); // 过滤掉 null 值
+
+  return 配置列表.join('\n');
+}
