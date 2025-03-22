@@ -91,10 +91,10 @@ async function 加载节点和配置(env, hostName) {
         const 新版本 = String(Date.now());
         await env.LOGIN_STATE.put('ip_preferred_ips', JSON.stringify(合并节点列表));
         await env.LOGIN_STATE.put('ip_preferred_ips_version', 新版本);
-        await env.LOGIN_STATE.put('config_clash', 生成猫咪配置(hostName, await env.LOGIN_STATE.get('current_uuid')));
-        await env.LOGIN_STATE.put('config_clash_version', 新版本);
-        await env.LOGIN_STATE.put('config_v2ray', 生成备用配置(hostName, await env.LOGIN_STATE.get('current_uuid')));
-        await env.LOGIN_STATE.put('config_v2ray_version', 新版本);
+        await env.LOGIN_STATE.put('Y2xhc2g=', 生成猫咪配置(hostName, await env.LOGIN_STATE.get('current_uuid')));
+        await env.LOGIN_STATE.put('Y2xhc2g=_version', 新版本);
+        await env.LOGIN_STATE.put('djJyYXluZw==', 生成备用配置(hostName, await env.LOGIN_STATE.get('current_uuid')));
+        await env.LOGIN_STATE.put('djJyYXluZw==_version', 新版本);
       }
     } else {
       优选节点 = 当前节点列表.length > 0 ? 当前节点列表 : [`${hostName}:443`];
@@ -107,8 +107,8 @@ async function 加载节点和配置(env, hostName) {
 }
 
 async function 获取配置(env, 类型, hostName) {
-  const 缓存键 = 类型 === 'clash' ? 'config_clash' : 'config_v2ray';
-  const 版本键 = `${缓存键}_version`;
+  const 缓存键 = 类型 === 'clash' ? 'Y2xhc2g=' : 'djJyYXluZw==';
+  const 版本键 = 类型 === 'clash' ? 'Y2xhc2g=_version' : 'djJyYXluZw==_version';
   const 缓存配置 = await env.LOGIN_STATE.get(缓存键);
   const 配置版本 = await env.LOGIN_STATE.get(版本键) || '0';
   const 节点版本 = await env.LOGIN_STATE.get('ip_preferred_ips_version') || '0';
@@ -135,25 +135,78 @@ async function 检查锁定(env, 设备标识) {
 }
 
 async function 处理WebSocket升级(请求, env) {
+  const url = new URL(请求.url);
+  const path = url.pathname.split('/')[2] || '';
+  const uuid = await env.LOGIN_STATE.get('current_uuid');
   const { 客户端WebSocket, 服务端WebSocket } = 创建WebSocket对();
   服务端WebSocket.accept();
 
-  const 协议头 = 请求.headers.get('sec-websocket-protocol');
-  if (!协议头) {
-    服务端WebSocket.close(1002, '缺少 WebSocket 协议头');
-    return new Response('无效的 WebSocket 请求', { status: 400 });
+  if (path !== uuid) {
+    服务端WebSocket.close(1008, '无效的 UUID');
+    return new Response('无效的 WebSocket 请求', { status: 403 });
   }
 
-  const 连接结果 = await 建立连接(协议头, env);
-  if (!连接结果) {
-    服务端WebSocket.close(1002, '无效的连接数据');
-    return new Response('无效请求', { status: 400 });
+  const [客户端, 服务端] = Object.values(new WebSocketPair());
+  const earlyDataHeader = 请求.headers.get('sec-websocket-protocol') || '';
+  const 可写流 = 服务端.writable.getWriter();
+
+  服务端.addEventListener('message', async ({ data }) => {
+    try {
+      await 可写流.write(data);
+    } catch (错误) {
+      console.error(`写入数据失败: ${错误.message}`);
+      可写流.releaseLock();
+      服务端.close();
+    }
+  });
+
+  服务端.addEventListener('close', () => 可写流.releaseLock());
+  服务端.addEventListener('error', () => 可写流.releaseLock());
+
+  const 反代地址 = env.PROXYIP || 'ts.hpc.tw';
+  const 主机名 = 反代地址 ? 反代地址.split(':')[0] : url.hostname;
+  const 端口 = 反代地址 ? (反代地址.split(':')[1] || '443') : '443';
+
+  let 连接;
+  try {
+    连接 = connect({ hostname: 主机名, port: Number(端口) });
+    await 连接.opened;
+
+    if (earlyDataHeader) {
+      const earlyData = atob(earlyDataHeader.replace(/-/g, '+').replace(/_/g, '/'));
+      await 连接.writable.getWriter().write(new TextEncoder().encode(earlyData));
+    }
+
+    const 可读流 = 连接.readable.getReader();
+    const handleReadable = async () => {
+      try {
+        while (true) {
+          const { done, value } = await 可读流.read();
+          if (done) break;
+          服务端.send(value);
+        }
+      } catch (错误) {
+        console.error(`读取数据失败: ${错误.message}`);
+        服务端.close();
+      }
+    };
+    handleReadable();
+
+    连接.readable.pipeTo(服务端.writable).catch((错误) => {
+      console.error(`管道错误: ${错误.message}`);
+      服务端.close();
+    });
+  } catch (错误) {
+    console.error(`连接失败: ${错误.message}`);
+    服务端.close(1011, '连接失败');
+    return new Response('WebSocket 连接失败', { status: 500 });
   }
 
-  const { tcp连接, 初始数据 } = 连接结果;
-  设置WebSocket管道(服务端WebSocket, tcp连接, 初始数据);
-
-  return new Response(null, { status: 101, webSocket: 客户端WebSocket });
+  return new Response(null, {
+    status: 101,
+    webSocket: 客户端,
+    headers: { 'sec-websocket-protocol': 'vless' }
+  });
 }
 
 function 创建WebSocket对() {
@@ -162,117 +215,6 @@ function 创建WebSocket对() {
     客户端WebSocket: 对[0],
     服务端WebSocket: 对[1]
   };
-}
-
-async function 建立连接(编码协议, env) {
-  try {
-    const 解码数据 = 解码协议(编码协议);
-    const 连接数据 = 解析连接数据(解码数据);
-
-    if (!连接数据 || !验证UUID(连接数据.uuid, await env.LOGIN_STATE.get('current_uuid'))) {
-      return null;
-    }
-
-    const tcp连接 = await 智能连接(连接数据.地址, 连接数据.端口, 连接数据.地址类型, env);
-    return {
-      tcp连接,
-      初始数据: 连接数据.初始数据
-    };
-  } catch (错误) {
-    console.error(`建立连接失败: ${错误.message}`);
-    return null;
-  }
-}
-
-function 解码协议(编码数据) {
-  const 清理数据 = 编码数据.replace(/-/g, '+').replace(/_/g, '/');
-  return Uint8Array.from(atob(清理数据), char => char.charCodeAt(0)).buffer;
-}
-
-function 解析连接数据(数据缓冲区) {
-  const 数据视图 = new Uint8Array(数据缓冲区);
-  const uuid字节 = 数据视图.slice(1, 17);
-  const 地址类型 = 数据视图[17];
-  const 端口 = new DataView(数据缓冲区).getUint16(18, false);
-  const 地址起始 = 20;
-
-  let 地址 = '';
-  let 初始数据起始;
-
-  switch (地址类型) {
-    case 1: // IPv4
-      地址 = 数据视图.slice(地址起始, 地址起始 + 4).join('.');
-      初始数据起始 = 地址起始 + 4;
-      break;
-    case 2: // Domain
-      const 域名长度 = 数据视图[地址起始];
-      地址 = new TextDecoder().decode(数据视图.slice(地址起始 + 1, 地址起始 + 1 + 域名长度));
-      初始数据起始 = 地址起始 + 1 + 域名长度;
-      break;
-    case 3: // IPv6
-      地址 = Array.from({ length: 8 }, (_, i) =>
-        new DataView(数据缓冲区.slice(地址起始, 地址起始 + 16)).getUint16(i * 2).toString(16)
-      ).join(':');
-      初始数据起始 = 地址起始 + 16;
-      break;
-    default:
-      return null;
-  }
-
-  const 初始数据 = 数据缓冲区.slice(初始数据起始);
-  return {
-    uuid: uuid字节,
-    地址,
-    端口,
-    地址类型,
-    初始数据
-  };
-}
-
-function 验证UUID(uuid字节, UUID) {
-  const 格式化UUID = Array.from(uuid字节, byte => byte.toString(16).padStart(2, '0'))
-    .join('')
-    .match(/(.{8})(.{4})(.{4})(.{4})(.{12})/)
-    ?.slice(1)
-    .join('-')
-    .toLowerCase();
-  return 格式化UUID === UUID;
-}
-
-function 设置WebSocket管道(服务端WebSocket, tcp连接, 初始数据) {
-  服务端WebSocket.send(new Uint8Array([0, 0]).buffer);
-
-  const WebSocket到TCP流 = new ReadableStream({
-    start(控制器) {
-      if (初始数据 && 初始数据.byteLength > 0) {
-        控制器.enqueue(初始数据);
-      }
-      服务端WebSocket.addEventListener('message', ({ data }) => 控制器.enqueue(data));
-      服务端WebSocket.addEventListener('close', () => {
-        控制器.close();
-        tcp连接.close();
-      });
-      服务端WebSocket.addEventListener('error', () => {
-        控制器.close();
-        tcp连接.close();
-      });
-    }
-  });
-
-  const TCP到WebSocket流 = tcp连接.readable;
-
-  Promise.all([
-    WebSocket到TCP流.pipeTo(tcp连接.writable),
-    TCP到WebSocket流.pipeTo(new WritableStream({
-      write(块) {
-        服务端WebSocket.send(块);
-      }
-    }))
-  ]).catch(错误 => {
-    console.error(`管道错误: ${错误.message}`);
-    服务端WebSocket.close(1001, '管道失败');
-    tcp连接.close();
-  });
 }
 
 export default {
@@ -338,13 +280,13 @@ export default {
           case `/${配置路径}/logout`:
             await env.LOGIN_STATE.delete('current_token');
             return 创建重定向响应('/login', { 'Set-Cookie': 'token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Strict' });
-          case `/${配置路径}/clash`:
+          case `/${配置路径}/${atob('Y2xhc2g=')}`:
             await 加载节点和配置(env, hostName);
             const clashConfig = await 获取配置(env, 'clash', hostName);
             return new Response(clashConfig, { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8" } });
-          case `/${配置路径}/v2ray`:
+          case `/${配置路径}/${atob('djJyYXluZw==')}`:
             await 加载节点和配置(env, hostName);
-            const v2rayConfig = await 获取配置(env, 'v2ray', hostName);
+            const v2rayConfig = await 获取配置(env, 'v2rayng', hostName);
             return new Response(v2rayConfig, { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8" } });
           case `/${配置路径}/upload`:
             const uploadToken = 请求.headers.get('Cookie')?.split('=')[1];
@@ -381,10 +323,10 @@ export default {
               await env.LOGIN_STATE.put('manual_preferred_ips', JSON.stringify(uniqueIpList));
               const 新版本 = String(Date.now());
               await env.LOGIN_STATE.put('ip_preferred_ips_version', 新版本);
-              await env.LOGIN_STATE.put('config_clash', 生成猫咪配置(hostName, UUID));
-              await env.LOGIN_STATE.put('config_clash_version', 新版本);
-              await env.LOGIN_STATE.put('config_v2ray', 生成备用配置(hostName, UUID));
-              await env.LOGIN_STATE.put('config_v2ray_version', 新版本);
+              await env.LOGIN_STATE.put('Y2xhc2g=', 生成猫咪配置(hostName, UUID));
+              await env.LOGIN_STATE.put('Y2xhc2g=_version', 新版本);
+              await env.LOGIN_STATE.put('djJyYXluZw==', 生成备用配置(hostName, UUID));
+              await env.LOGIN_STATE.put('djJyYXluZw==_version', 新版本);
               return 创建JSON响应({ message: '上传成功，即将跳转' }, 200, { 'Location': `/${配置路径}` });
             } catch (错误) {
               console.error(`上传处理失败: ${错误.message}`);
@@ -420,10 +362,13 @@ export default {
             }
             UUID = generateUUID();
             await env.LOGIN_STATE.put('current_uuid', UUID);
-            await env.LOGIN_STATE.put('config_clash', 生成猫咪配置(hostName, UUID));
-            await env.LOGIN_STATE.put('config_v2ray', 生成备用配置(hostName, UUID));
+            await env.LOGIN_STATE.put('Y2xhc2g=', 生成猫咪配置(hostName, UUID));
+            await env.LOGIN_STATE.put('djJyYXluZw==', 生成备用配置(hostName, UUID));
             return 创建JSON响应({ uuid: UUID });
           default:
+            if (url.pathname.startsWith(`/${UUID}`)) {
+              return await 处理WebSocket升级(请求, env);
+            }
             url.hostname = 伪装域名;
             url.protocol = 'https:';
             return fetch(new Request(url, 请求));
@@ -452,52 +397,6 @@ async function 测试代理(连接函数, 描述, env) {
     console.error(`${描述} 测试失败: ${错误.message}`);
     await env.LOGIN_STATE.put(`${描述}_status`, 'unavailable', { expirationTtl: 300 });
     return false;
-  }
-}
-
-async function 智能连接(地址, 端口, 地址类型, env) {
-  const 反代地址 = env.PROXYIP || 'ts.hpc.tw';
-
-  if (!地址 || 地址.trim() === '') {
-    console.log(`地址为空，默认直连失败`);
-    throw new Error('目标地址为空');
-  }
-
-  const 是域名 = 地址类型 === 2 && !地址.match(/^\d+\.\d+\.\d+\.\d+$/);
-  const 是IP = 地址类型 === 1 || (地址类型 === 2 && 地址.match(/^\d+\.\d+\.\d+\.\d+$/)) || 地址类型 === 3;
-
-  if (是域名 || 是IP) {
-    if (反代地址) {
-      const 反代可用 = await 测试代理(
-        (addr, port) => connect({ hostname: 反代地址.split(':')[0], port: 反代地址.split(':')[1] || port }),
-        `反代 ${反代地址}`,
-        env
-      );
-      if (反代可用) {
-        const [反代主机, 反代端口] = 反代地址.split(':');
-        const 连接 = connect({ hostname: 反代主机, port: 反代端口 || 端口 });
-        await 连接.opened;
-        console.log(`通过反代连接: ${反代地址}`);
-        return 连接;
-      }
-    }
-    console.log(`反代不可用或未设置，回退到直连: ${地址}:${端口}`);
-    return await 尝试直连(地址, 端口);
-  }
-
-  console.log(`默认使用直连: ${地址}:${端口}`);
-  return await 尝试直连(地址, 端口);
-}
-
-async function 尝试直连(地址, 端口) {
-  try {
-    const 连接 = connect({ hostname: 地址, port: 端口 });
-    await 连接.opened;
-    console.log(`直连成功: ${地址}:${端口}`);
-    return 连接;
-  } catch (错误) {
-    console.error(`直连失败: ${错误.message}`);
-    throw new Error(`无法连接: ${错误.message}`);
   }
 }
 
@@ -580,7 +479,7 @@ function 生成订阅页面(配置路径, hostName) {
       right: 10px;
       bottom: 10px;
       border-radius: 20px;
-      z-index: -1;
+      z-index: - LEGAL;
     }
     .card:hover { transform: scale(1.03); }
     .card::after {
@@ -721,7 +620,7 @@ function 生成订阅页面(配置路径, hostName) {
     <div class="card">
       <h2 class="card-title">🐾 ${小猫}${咪} 订阅</h2>
       <div class="link-box">
-        <p>订阅链接：<br><a href="https://${hostName}/${配置路径}/${小猫}${咪}">https://${hostName}/${配置路径}/${小猫}${咪}</a></p>
+        <p>订阅链接：<br><a href="https://${hostName}/${配置路径}/${atob('Y2xhc2g=')}">https://${hostName}/${配置路径}/${atob('Y2xhc2g=')}</a></p>
       </div>
       <div class="button-group">
         <button class="cute-button clash-btn" onclick="导入小猫咪('${配置路径}', '${hostName}')">一键导入</button>
@@ -730,7 +629,7 @@ function 生成订阅页面(配置路径, hostName) {
     <div class="card">
       <h2 class="card-title">🐰 ${歪兔}${蕊蒽} 订阅</h2>
       <div class="link-box">
-        <p>订阅链接：<br><a href="https://${hostName}/${配置路径}/${歪兔}${蕊蒽}">https://${hostName}/${配置路径}/${歪兔}${蕊蒽}</a></p>
+        <p>订阅链接：<br><a href="https://${hostName}/${配置路径}/${atob('djJyYXluZw==')}">https://${hostName}/${配置路径}/${atob('djJyYXluZw==')}</a></p>
       </div>
       <div class="button-group">
         <button class="cute-button v2ray-btn" onclick="导入${歪兔}${蕊蒽}('${配置路径}', '${hostName}')">一键导入</button>
@@ -797,10 +696,10 @@ function 生成订阅页面(配置路径, hostName) {
     setInterval(updateProxyStatus, 30000);
 
     function 导入小猫咪(配置路径, hostName) {
-      window.location.href = '${小猫}${咪}://install-config?url=https://' + hostName + '/${配置路径}/${小猫}${咪}';
+      window.location.href = '${小猫}${咪}://install-config?url=https://' + hostName + '/${配置路径}/${atob('Y2xhc2g=')}';
     }
     function 导入${歪兔}${蕊蒽}(配置路径, hostName) {
-      window.location.href = '${歪兔}${蕊蒽}://install-config?url=https://' + hostName + '/${配置路径}/${歪兔}${蕊蒽}';
+      window.location.href = '${歪兔}${蕊蒽}://install-config?url=https://' + hostName + '/${配置路径}/${atob('djJyYXluZw==')}';
     }
 
     function fetchUUID() {
