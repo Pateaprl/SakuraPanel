@@ -27,6 +27,14 @@ jobs:
           echo "NDK=$HOME/ndk/android-ndk-r26b" >> $GITHUB_ENV
           echo "$HOME/ndk/android-ndk-r26b/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
 
+      # 安装本地 Python（用于构建）
+      - name: Install Build Python
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3.12 python3.12-dev python3-pip
+          python3.12 --version
+          sudo ln -sf /usr/bin/python3.12 /usr/bin/python3  # 确保 python3 指向 3.12
+
       # 下载 Python 3.12 源码
       - name: Download Python Source
         run: |
@@ -49,7 +57,7 @@ jobs:
           export LDFLAGS="-pie"
           mkdir -p python_install
           cd cpython
-          ./configure --host=$TARGET --build=x86_64-linux-gnu --prefix=$PWD/../python_install --enable-shared --disable-ipv6
+          ./configure --host=$TARGET --build=x86_64-linux-gnu --prefix=$PWD/../python_install --enable-shared --disable-ipv6 --with-build-python=/usr/bin/python3
 
       # 编译并安装 Python
       - name: Build and Install Python
@@ -70,27 +78,30 @@ jobs:
         run: |
           mkdir -p magisk_module/system/bin
           mkdir -p magisk_module/system/lib
+          mkdir -p magisk_module/system/lib/python3.12  # 用于存放 Python 标准库
           # 复制可执行文件
           cp python_install/bin/python3 magisk_module/system/bin/python3
           cp python_install/bin/pip3 magisk_module/system/bin/pip3
           # 复制共享库
           cp python_install/lib/libpython3.12.so magisk_module/system/lib/
+          # 复制 Python 标准库
+          cp -r python_install/lib/python3.12 magisk_module/system/lib/
           # 创建模块元数据
           cat << EOF > magisk_module/module.prop
-          id=python-arm64
-          name=Python 3.12 for Android ARM64
-          version=v3.12.2
-          versionCode=31202
-          author=YourName
-          description=Python 3.12 and pip for Android ARM64, built with NDK r26b
-          EOF
-          # 创建自定义脚本（可选）
+id=python-arm64
+name=Python 3.12 for Android ARM64
+version=v3.12.2
+versionCode=31202
+author=Alien-Et
+description=Python 3.12 and pip for Android ARM64, built with NDK r26b
+EOF
+          # 创建自定义脚本（设置环境变量）
           mkdir -p magisk_module/common
           cat << EOF > magisk_module/common/post-fs-data.sh
-          #!/system/bin/sh
-          # 设置环境变量
-          export PYTHONPATH=/system/lib/python3.12
-          EOF
+#!/system/bin/sh
+# 设置环境变量以确保 Python 和 pip 正常工作
+export PYTHONPATH=/system/lib/python3.12:/system/lib/python3.12/lib-dynload
+EOF
           chmod +x magisk_module/common/post-fs-data.sh
 
       # 打包 Magisk 模块
