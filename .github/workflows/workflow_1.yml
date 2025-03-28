@@ -1,4 +1,4 @@
-name: Build Python and Pip for Android ARM64
+name: Build Python 3.12 and Pip for Android ARM64
 
 on:
   push:
@@ -6,128 +6,143 @@ on:
   workflow_dispatch:  # 支持手动触发
 
 jobs:
-  build:
+  build-and-release:
     runs-on: ubuntu-latest
     steps:
-      # 检出代码
-      - uses: actions/checkout@v4
+      # 1. 检出代码
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-      # 安装基本工具（避免缺失 wget、unzip 等）
+      # 2. 安装基本工具
       - name: Install Prerequisites
         run: |
           sudo apt-get update
-          sudo apt-get install -y wget unzip
+          sudo apt-get install -y wget unzip git build-essential
 
-      # 设置 JDK（NDK 需要 Java）
+      # 3. 设置 Java 环境（NDK 依赖）
       - name: Setup Java JDK
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      # 下载并设置 Android NDK (r26b)
+      # 4. 下载和配置 Android NDK
       - name: Setup Android NDK
         run: |
-          wget https://dl.google.com/android/repository/android-ndk-r26b-linux.zip
-          unzip android-ndk-r26b-linux.zip -d $HOME/ndk
+          wget -q https://dl.google.com/android/repository/android-ndk-r26b-linux.zip
+          unzip -q android-ndk-r26b-linux.zip -d $HOME/ndk
           echo "NDK=$HOME/ndk/android-ndk-r26b" >> $GITHUB_ENV
           echo "$HOME/ndk/android-ndk-r26b/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
-          # 验证 NDK 路径
-          ls -l $NDK/toolchains/llvm/prebuilt/linux-x86_64/bin || echo "NDK path not found"
+          # 验证 NDK 是否可用
+          which aarch64-linux-android24-clang || echo "NDK toolchain not found"
 
-      # 安装本地 Python（用于构建）
-      - name: Install Build Python
+      # 5. 安装本地 Python（用于交叉编译）
+      - name: Install Local Python
         run: |
-          sudo apt-get update
           sudo apt-get install -y python3.12 python3.12-dev python3-pip
           python3.12 --version
-          sudo ln -sf /usr/bin/python3.12 /usr/bin/python3
-          python3 --version  # 验证 python3 指向正确版本
+          sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1
+          python3 --version  # 确认指向 Python 3.12
 
-      # 下载 Python 3.12 源码
-      - name: Download Python Source
+      # 6. 下载 Python 源码
+      - name: Fetch Python Source
         run: |
-          git clone --depth 1 --branch v3.12.2 https://github.com/python/cpython.git
-          cd cpython
+          git clone --depth 1 --branch v3.12.2 https://github.com/python/cpython.git python-src
+          cd python-src
           git submodule update --init
 
-      # 配置交叉编译环境 (ARM64)
-      - name: Configure Cross-Compile Environment
+      # 7. 配置交叉编译环境
+      - name: Configure Python Build
+        working-directory: python-src
         run: |
           export PATH=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH
           export TARGET=aarch64-linux-android
-          export API=24  # 安卓 7.0+，支持 ARM64
+          export API=24
           export CC=$TARGET$API-clang
           export CXX=$TARGET$API-clang++
-          export AR=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
+          export AR=llvm-ar
           export LD=$TARGET-ld
-          export RANLIB=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ranlib
+          export RANLIB=llvm-ranlib
           export CFLAGS="-fPIE -fPIC"
           export LDFLAGS="-pie"
-          mkdir -p python_install
-          cd cpython
-          ./configure --host=$TARGET --build=x86_64-linux-gnu --prefix=$PWD/../python_install --enable-shared --disable-ipv6 --with-build-python=/usr/bin/python3
+          mkdir -p ../python-install
+          ./configure \
+            --host=$TARGET \
+            --build=x86_64-linux-gnu \
+            --prefix=$PWD/../python-install \
+            --enable-shared \
+            --disable-ipv6 \
+            --with-build-python=/usr/bin/python3
+          # 输出配置结果
+          cat config.log | tail -n 20
 
-      # 编译并安装 Python
+      # 8. 编译和安装 Python
       - name: Build and Install Python
+        working-directory: python-src
         run: |
-          cd cpython
           make -j$(nproc)
           make install
+          # 验证安装
+          ls -lh ../python-install/bin/python3
 
-      # 下载并安装最新 pip
-      - name: Install pip
+      # 9. 安装 pip
+      - name: Install Pip
+        working-directory: python-install
         run: |
-          wget https://bootstrap.pypa.io/get-pip.py
-          cd python_install
+          wget -q https://bootstrap.pypa.io/get-pip.py
           ./bin/python3 get-pip.py
+          # 验证 pip
+          ls -lh bin/pip3
 
-      # 创建 Magisk 模块结构
-      - name: Create Magisk Module Structure
+      # 10. 创建 Magisk 模块
+      - name: Create Magisk Module
         run: |
-          mkdir -p magisk_module/system/bin
-          mkdir -p magisk_module/system/lib
-          mkdir -p magisk_module/system/lib/python3.12
-          # 复制可执行文件
-          cp python_install/bin/python3 magisk_module/system/bin/python3
-          cp python_install/bin/pip3 magisk_module/system/bin/pip3
+          mkdir -p magisk-module/system/bin
+          mkdir -p magisk-module/system/lib
+          mkdir -p magisk-module/system/lib/python3.12
+          # 复制二进制文件
+          cp python-install/bin/python3 magisk-module/system/bin/python3
+          cp python-install/bin/pip3 magisk-module/system/bin/pip3
           # 复制共享库
-          cp python_install/lib/libpython3.12.so magisk_module/system/lib/
-          # 复制 Python 标准库
-          cp -r python_install/lib/python3.12 magisk_module/system/lib/
-          # 创建模块元数据
-          cat << EOF > magisk_module/module.prop
-id=python-arm64
+          cp python-install/lib/libpython3.12.so magisk-module/system/lib/
+          # 复制标准库
+          cp -r python-install/lib/python3.12 magisk-module/system/lib/
+          # 创建模块配置文件
+          cat << EOF > magisk-module/module.prop
+id=python3-arm64
 name=Python 3.12 for Android ARM64
 version=v3.12.2
 versionCode=31202
 author=Alien-Et
 description=Python 3.12 and pip for Android ARM64, built with NDK r26b
 EOF
-          # 创建自定义脚本（设置环境变量）
-          mkdir -p magisk_module/common
-          cat << EOF > magisk_module/common/post-fs-data.sh
+          # 添加环境变量脚本
+          mkdir -p magisk-module/common
+          cat << EOF > magisk-module/common/post-fs-data.sh
 #!/system/bin/sh
-# 设置环境变量以确保 Python 和 pip 正常工作
 export PYTHONPATH=/system/lib/python3.12:/system/lib/python3.12/lib-dynload
 EOF
-          chmod +x magisk_module/common/post-fs-data.sh
+          chmod +x magisk-module/common/post-fs-data.sh
 
-      # 打包 Magisk 模块
+      # 11. 打包 Magisk 模块
       - name: Package Magisk Module
         run: |
-          cd magisk_module
-          zip -r ../python-arm64-magisk.zip .
-          ls -lh ../python-arm64-magisk.zip  # 验证打包结果
+          cd magisk-module
+          zip -r ../python3-arm64-magisk.zip .
+          ls -lh ../python3-arm64-magisk.zip
 
-      # 上传到 GitHub Releases
-      - name: Create Release and Upload
+      # 12. 发布到 GitHub Releases
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
-          tag_name: "v3.12.2-${{ github.sha }}"
-          name: "Python 3.12 ARM64 Magisk Module"
-          body: "Compiled Python 3.12 and pip for Android ARM64 using NDK r26b"
-          files: python-arm64-magisk.zip
+          tag_name: "v3.12.2-${{ github.run_number }}"
+          name: "Python 3.12 ARM64 Magisk Module #${{ github.run_number }}"
+          body: |
+            Compiled Python 3.12 and pip for Android ARM64 using NDK r26b.
+            - Python Version: 3.12.2
+            - NDK Version: r26b
+            - Architecture: ARM64 (aarch64)
+          files: python3-arm64-magisk.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
