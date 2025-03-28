@@ -12,6 +12,12 @@ jobs:
       # 检出代码
       - uses: actions/checkout@v4
 
+      # 安装基本工具（避免缺失 wget、unzip 等）
+      - name: Install Prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget unzip
+
       # 设置 JDK（NDK 需要 Java）
       - name: Setup Java JDK
         uses: actions/setup-java@v4
@@ -19,13 +25,15 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      # 下载并设置最新 Android NDK (r26b)
+      # 下载并设置 Android NDK (r26b)
       - name: Setup Android NDK
         run: |
           wget https://dl.google.com/android/repository/android-ndk-r26b-linux.zip
           unzip android-ndk-r26b-linux.zip -d $HOME/ndk
           echo "NDK=$HOME/ndk/android-ndk-r26b" >> $GITHUB_ENV
           echo "$HOME/ndk/android-ndk-r26b/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
+          # 验证 NDK 路径
+          ls -l $NDK/toolchains/llvm/prebuilt/linux-x86_64/bin || echo "NDK path not found"
 
       # 安装本地 Python（用于构建）
       - name: Install Build Python
@@ -33,7 +41,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y python3.12 python3.12-dev python3-pip
           python3.12 --version
-          sudo ln -sf /usr/bin/python3.12 /usr/bin/python3  # 确保 python3 指向 3.12
+          sudo ln -sf /usr/bin/python3.12 /usr/bin/python3
+          python3 --version  # 验证 python3 指向正确版本
 
       # 下载 Python 3.12 源码
       - name: Download Python Source
@@ -78,7 +87,7 @@ jobs:
         run: |
           mkdir -p magisk_module/system/bin
           mkdir -p magisk_module/system/lib
-          mkdir -p magisk_module/system/lib/python3.12  # 用于存放 Python 标准库
+          mkdir -p magisk_module/system/lib/python3.12
           # 复制可执行文件
           cp python_install/bin/python3 magisk_module/system/bin/python3
           cp python_install/bin/pip3 magisk_module/system/bin/pip3
@@ -109,6 +118,7 @@ EOF
         run: |
           cd magisk_module
           zip -r ../python-arm64-magisk.zip .
+          ls -lh ../python-arm64-magisk.zip  # 验证打包结果
 
       # 上传到 GitHub Releases
       - name: Create Release and Upload
