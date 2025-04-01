@@ -669,7 +669,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
   </style>
 </head>
 <body>
-  <img id="backgroundImage" class="background-media" alt="Background">
+  <img id="backgroundImage" class="background-media">
   <div class="container">
     <div class="card">
       <h1 class="card-title">🌸 欢迎来到樱花订阅站 🌸</h1>
@@ -748,6 +748,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
     function updateBackground() {
       const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
       bgImage.src = isDarkMode ? darkBg : lightBg;
+      bgImage.onerror = () => { bgImage.style.display = 'none'; };
     }
     updateBackground();
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
@@ -1035,7 +1036,7 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
   </style>
 </head>
 <body>
-  <img id="backgroundImage" class="background-media" alt="Background">
+  <img id="backgroundImage" class="background-media">
   <div class="content">
     <h1>🌸樱花面板🌸</h1>
     ${锁定状态 ? `
@@ -1059,8 +1060,8 @@ function 生成登录界面(锁定状态 = false, 剩余时间 = 0, 输错密码
     function updateBackground() {
       const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
       bgImage.src = isDarkMode ? darkBg : lightBg;
+      bgImage.onerror = () => { bgImage.style.display = 'none'; };
     }
-
     updateBackground();
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
 
@@ -1164,7 +1165,7 @@ function 生成KV未绑定提示页面() {
   </style>
 </head>
 <body>
-  <img id="backgroundImage" class="background-media" alt="Background">
+  <img id="backgroundImage" class="background-media">
   <div class="content">
     <h1>💔 哎呀，KV没绑定哦</h1>
     <p>小仙女，你的 <span class="highlight">Cloudflare KV 存储空间</span> 还没绑定呢~<br>快去 <span class="highlight">Cloudflare Workers</span> 设置里绑一个 KV 命名空间（比如 <span class="highlight">LOGIN_STATE</span>），然后重新部署一下吧！</p>
@@ -1178,8 +1179,8 @@ function 生成KV未绑定提示页面() {
     function updateBackground() {
       const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
       bgImage.src = isDarkMode ? darkBg : lightBg;
+      bgImage.onerror = () => { bgImage.style.display = 'none'; };
     }
-
     updateBackground();
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
   </script>
