@@ -202,12 +202,12 @@ export default {
             return 创建重定向响应('/login', { 'Set-Cookie': 'token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Strict' });
           case `/${配置路径}/` + atob('Y2xhc2g='):
             await 加载节点和配置(env, hostName);
-            const clashConfig = await 获取配置(env, atob('Y2xhc2g='), hostName);
-            return new Response(clashConfig, { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8" } });
-          case `/${配置路径}/v2rayng`:
+            const config = await 获取配置(env, atob('Y2xhc2g='), hostName);
+            return new Response(config, { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8" } });
+          case `/${配置路径}/` + atob('djJyYXluZw=='):
             await 加载节点和配置(env, hostName);
-            const v2rayConfig = await 获取配置(env, atob('djJyYXk='), hostName);
-            return new Response(v2rayConfig, { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8" } });
+            const vConfig = await 获取配置(env, atob('djJyYXk='), hostName);
+            return new Response(vConfig, { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8" } });
           case `/${配置路径}/upload`:
             const uploadToken = 请求.headers.get('Cookie')?.split('=')[1];
             const 有效UploadToken = await env.LOGIN_STATE.get('current_token');
@@ -673,7 +673,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
   <div class="container">
     <div class="card">
       <h1 class="card-title">🌸 欢迎来到樱花订阅站 🌸</h1>
-      <p style="font-size: 1em;">支持 <span style="color: #ff69b4;">${atob('Y2xhc2g=')}</span> 和 <span style="color: #ff85a2;">${atob('djJyYXk=')}ng</span> 哦~</p>
+      <p style="font-size: 1em;">支持 <span style="color: #ff69b4;">${atob('Y2xhc2g=')}</span> 和 <span style="color: #ff85a2;">${atob('djJyYXluZw==')}</span> 哦~</p>
     </div>
     <div class="card">
       <h2 class="card-title">🔑 当前 UUID</h2>
@@ -707,16 +707,16 @@ function 生成订阅页面(配置路径, hostName, uuid) {
         <p>订阅链接：<br><a href="https://${hostName}/${配置路径}/${atob('Y2xhc2g=')}">https://${hostName}/${配置路径}/${atob('Y2xhc2g=')}</a></p>
       </div>
       <div class="button-group">
-        <button class="cute-button clash-btn" onclick="导入Clash('${配置路径}', '${hostName}')">一键导入</button>
+        <button class="cute-button clash-btn" onclick="导入Config('${配置路径}', '${hostName}', '${atob('Y2xhc2g=')}')">一键导入</button>
       </div>
     </div>
     <div class="card">
-      <h2 class="card-title">🐰 ${atob('djJyYXk=')}ng 订阅</h2>
+      <h2 class="card-title">🐰 ${atob('djJyYXluZw==')} 订阅</h2>
       <div class="link-box">
-        <p>订阅链接：<br><a href="https://${hostName}/${配置路径}/v2rayng">https://${hostName}/${配置路径}/v2rayng</a></p>
+        <p>订阅链接：<br><a href="https://${hostName}/${配置路径}/${atob('djJyYXluZw==')}">https://${hostName}/${配置路径}/${atob('djJyYXluZw==')}</a></p>
       </div>
       <div class="button-group">
-        <button class="cute-button v2ray-btn" onclick="导入V2rayng('${配置路径}', '${hostName}')">一键导入</button>
+        <button class="cute-button v2ray-btn" onclick="导入Config('${配置路径}', '${hostName}', '${atob('djJyYXluZw==')}')">一键导入</button>
       </div>
     </div>
     <div class="card">
@@ -810,11 +810,8 @@ function 生成订阅页面(配置路径, hostName, uuid) {
         .then(() => updateProxyStatus());
     }
 
-    function 导入Clash(配置路径, hostName) {
-      window.location.href = atob('Y2xhc2g=') + '://install-config?url=https://' + hostName + '/${配置路径}/' + atob('Y2xhc2g=');
-    }
-    function 导入V2rayng(配置路径, hostName) {
-      window.location.href = atob('djJyYXk=') + 'ng://install-config?url=https://' + hostName + '/${配置路径}/v2rayng';
+    function 导入Config(配置路径, hostName, type) {
+      window.location.href = type + '://install-config?url=https://' + hostName + '/${配置路径}/' + type;
     }
 
     function 更换UUID() {
