@@ -15,8 +15,8 @@ let 用户名 = 'andypan';
 let 密码 = 'Yyds@2023';
 let 最大失败次数 = 5;
 let 锁定时间 = 5 * 60 * 1000;
-let 白天背景图 = 'https://github-9d8.pages.dev/image/day.jpg';
-let 暗黑背景图 = 'https://github-9d8.pages.dev/image/night.jpg';
+let 白天背景图 = 'https://i.meee.com.tw/el91luR.png';
+let 暗黑背景图 = 'https://i.meee.com.tw/QPWx8nX.png';
 
 function 创建HTML响应(内容, 状态码 = 200) {
   return new Response(内容, {
