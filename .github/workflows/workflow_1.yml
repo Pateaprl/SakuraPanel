@@ -1,148 +1,83 @@
-name: Build Python 3.12 and Pip for Android ARM64
+name: Build Python for Android (arm64-v8a) with NDK
 
 on:
   push:
-    branches: [main]
-  workflow_dispatch:  # 支持手动触发
+    branches:
+      - main
+  workflow_dispatch:
 
 jobs:
-  build-and-release:
+  build:
     runs-on: ubuntu-latest
+
     steps:
       # 1. 检出代码
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. 安装基本工具
-      - name: Install Prerequisites
+      # 2. 设置默认 Python 环境（用于构建工具）
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'  # 使用 GitHub 默认最新版本
+
+      # 3. 安装基本依赖
+      - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y wget unzip git build-essential
+          sudo apt-get install -y build-essential wget unzip
 
-      # 3. 设置 Java 环境（NDK 依赖）
-      - name: Setup Java JDK
-        uses: actions/setup-java@v4
+      # 4. 设置 Android NDK
+      - name: Set up Android NDK
+        uses: android-actions/setup-android@v3
         with:
-          java-version: '17'
-          distribution: 'temurin'
+          ndk-version: 'r26d'  # 使用 NDK r26d（最新稳定版）
 
-      # 4. 下载和配置 Android NDK
-      - name: Setup Android NDK
+      # 5. 下载 Python 源代码
+      - name: Download Python source
         run: |
-          wget -q https://dl.google.com/android/repository/android-ndk-r26b-linux.zip
-          unzip -q android-ndk-r26b-linux.zip -d $HOME/ndk
-          echo "NDK=$HOME/ndk/android-ndk-r26b" >> $GITHUB_ENV
-          echo "$HOME/ndk/android-ndk-r26b/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
-          # 验证 NDK 是否可用
-          which aarch64-linux-android24-clang || echo "NDK toolchain not found"
+          wget https://www.python.org/ftp/python/3.11.8/Python-3.11.8.tgz
+          tar -xzf Python-3.11.8.tgz
+          mv Python-3.11.8 python-src
 
-      # 5. 安装本地 Python（用于交叉编译）
-      - name: Install Local Python
+      # 6. 配置 NDK 工具链环境（针对 arm64-v8a）
+      - name: Configure NDK toolchain for arm64-v8a
         run: |
-          sudo apt-get install -y python3.12 python3.12-dev python3-pip
-          python3.12 --version
-          sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1
-          python3 --version  # 确认指向 Python 3.12
-
-      # 6. 下载 Python 源码
-      - name: Fetch Python Source
-        run: |
-          git clone --depth 1 --branch v3.12.2 https://github.com/python/cpython.git python-src
-          cd python-src
-          git submodule update --init
-
-      # 7. 配置交叉编译环境
-      - name: Configure Python Build
-        working-directory: python-src
-        run: |
-          export PATH=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH
+          export NDK=${ANDROID_HOME}/ndk/r26d
+          export TOOLCHAIN=$NDK/toolchains/llvm/prebuilt/linux-x86_64
           export TARGET=aarch64-linux-android
-          export API=24
-          export CC=$TARGET$API-clang
-          export CXX=$TARGET$API-clang++
-          export AR=llvm-ar
-          export LD=$TARGET-ld
-          export RANLIB=llvm-ranlib
-          export CFLAGS="-fPIE -fPIC"
-          export LDFLAGS="-pie"
-          mkdir -p ../python-install
+          export API=21  # 最低支持 Android 5.0
+          export AR=$TOOLCHAIN/bin/llvm-ar
+          export CC=$TOOLCHAIN/bin/$TARGET$API-clang
+          export CXX=$TOOLCHAIN/bin/$TARGET$API-clang++
+          export LD=$TOOLCHAIN/bin/ld
+          export RANLIB=$TOOLCHAIN/bin/llvm-ranlib
+          export STRIP=$TOOLCHAIN/bin/llvm-strip
+          # 将工具链路径添加到 PATH
+          echo "$TOOLCHAIN/bin" >> $GITHUB_PATH
+
+      # 7. 配置和编译 Python
+      - name: Configure and build Python for Android arm64-v8a
+        run: |
+          cd python-src
           ./configure \
             --host=$TARGET \
             --build=x86_64-linux-gnu \
-            --prefix=$PWD/../python-install \
-            --enable-shared \
-            --disable-ipv6 \
-            --with-build-python=/usr/bin/python3
-          # 输出配置结果
-          cat config.log | tail -n 20
-
-      # 8. 编译和安装 Python
-      - name: Build and Install Python
-        working-directory: python-src
-        run: |
+            --prefix=/python-android \
+            --enable-optimizations \
+            ac_cv_file__ DEV_ptmx=no \
+            ac_cv_file__dev_ptc=no
           make -j$(nproc)
           make install
-          # 验证安装
-          ls -lh ../python-install/bin/python3
 
-      # 9. 安装 pip
-      - name: Install Pip
-        working-directory: python-install
+      # 8. 打包编译结果
+      - name: Package Python binary
         run: |
-          wget -q https://bootstrap.pypa.io/get-pip.py
-          ./bin/python3 get-pip.py
-          # 验证 pip
-          ls -lh bin/pip3
+          tar -czf python-android-arm64.tar.gz -C python-src python-android
 
-      # 10. 创建 Magisk 模块
-      - name: Create Magisk Module
-        run: |
-          mkdir -p magisk-module/system/bin
-          mkdir -p magisk-module/system/lib
-          mkdir -p magisk-module/system/lib/python3.12
-          # 复制二进制文件
-          cp python-install/bin/python3 magisk-module/system/bin/python3
-          cp python-install/bin/pip3 magisk-module/system/bin/pip3
-          # 复制共享库
-          cp python-install/lib/libpython3.12.so magisk-module/system/lib/
-          # 复制标准库
-          cp -r python-install/lib/python3.12 magisk-module/system/lib/
-          # 创建模块配置文件
-          cat << EOF > magisk-module/module.prop
-id=python3-arm64
-name=Python 3.12 for Android ARM64
-version=v3.12.2
-versionCode=31202
-author=Alien-Et
-description=Python 3.12 and pip for Android ARM64, built with NDK r26b
-EOF
-          # 添加环境变量脚本
-          mkdir -p magisk-module/common
-          cat << EOF > magisk-module/common/post-fs-data.sh
-#!/system/bin/sh
-export PYTHONPATH=/system/lib/python3.12:/system/lib/python3.12/lib-dynload
-EOF
-          chmod +x magisk-module/common/post-fs-data.sh
-
-      # 11. 打包 Magisk 模块
-      - name: Package Magisk Module
-        run: |
-          cd magisk-module
-          zip -r ../python3-arm64-magisk.zip .
-          ls -lh ../python3-arm64-magisk.zip
-
-      # 12. 发布到 GitHub Releases
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      # 9. 上传结果
+      - name: Upload Python binary
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: "v3.12.2-${{ github.run_number }}"
-          name: "Python 3.12 ARM64 Magisk Module #${{ github.run_number }}"
-          body: |
-            Compiled Python 3.12 and pip for Android ARM64 using NDK r26b.
-            - Python Version: 3.12.2
-            - NDK Version: r26b
-            - Architecture: ARM64 (aarch64)
-          files: python3-arm64-magisk.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: python-android-arm64
+          path: python-android-arm64.tar.gz
