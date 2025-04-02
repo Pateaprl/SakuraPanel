@@ -11,52 +11,46 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. 检出代码
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. 设置默认 Python 环境（用于构建工具）
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'  # 使用 GitHub 默认最新版本
+          python-version: '3.x'
 
-      # 3. 安装基本依赖
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential wget unzip
+          sudo apt-get install -y build-essential wget unzip libffi-dev zlib1g-dev
 
-      # 4. 设置 Android NDK
       - name: Set up Android NDK
         uses: android-actions/setup-android@v3
         with:
-          ndk-version: 'r26d'  # 使用 NDK r26d（最新稳定版）
+          ndk-version: 'r25c'  # 改为 r25c 以提高兼容性
 
-      # 5. 下载 Python 源代码
       - name: Download Python source
         run: |
           wget https://www.python.org/ftp/python/3.11.8/Python-3.11.8.tgz
           tar -xzf Python-3.11.8.tgz
           mv Python-3.11.8 python-src
 
-      # 6. 配置 NDK 工具链环境（针对 arm64-v8a）
       - name: Configure NDK toolchain for arm64-v8a
         run: |
-          export NDK=${ANDROID_HOME}/ndk/r26d
+          export NDK=${ANDROID_HOME}/ndk/r25c
           export TOOLCHAIN=$NDK/toolchains/llvm/prebuilt/linux-x86_64
           export TARGET=aarch64-linux-android
-          export API=21  # 最低支持 Android 5.0
+          export API=21
           export AR=$TOOLCHAIN/bin/llvm-ar
           export CC=$TOOLCHAIN/bin/$TARGET$API-clang
           export CXX=$TOOLCHAIN/bin/$TARGET$API-clang++
           export LD=$TOOLCHAIN/bin/ld
           export RANLIB=$TOOLCHAIN/bin/llvm-ranlib
           export STRIP=$TOOLCHAIN/bin/llvm-strip
-          # 将工具链路径添加到 PATH
           echo "$TOOLCHAIN/bin" >> $GITHUB_PATH
+          # 验证工具链
+          ls -l $CC || echo "Compiler not found!"
 
-      # 7. 配置和编译 Python
       - name: Configure and build Python for Android arm64-v8a
         run: |
           cd python-src
@@ -65,17 +59,15 @@ jobs:
             --build=x86_64-linux-gnu \
             --prefix=/python-android \
             --enable-optimizations \
-            ac_cv_file__ DEV_ptmx=no \
+            ac_cv_file__dev_ptmx=no \
             ac_cv_file__dev_ptc=no
-          make -j$(nproc)
+          make -j2
           make install
 
-      # 8. 打包编译结果
       - name: Package Python binary
         run: |
           tar -czf python-android-arm64.tar.gz -C python-src python-android
 
-      # 9. 上传结果
       - name: Upload Python binary
         uses: actions/upload-artifact@v4
         with:
