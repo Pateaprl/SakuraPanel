@@ -200,14 +200,26 @@ export default {
           case `/${配置路径}/logout`:
             await env.LOGIN_STATE.delete('current_token');
             return 创建重定向响应('/login', { 'Set-Cookie': 'token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Strict' });
-          case `/${配置路径}/` + atob('Y2xhc2g='):
+          case `/${配置路径}/` + atob('Y2xhc2g='): // Clash 配置路径
             await 加载节点和配置(env, hostName);
-            const config = await 获取配置(env, atob('Y2xhc2g='), hostName);
-            return new Response(config, { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8" } });
-          case `/${配置路径}/` + atob('djJyYXluZw=='):
+            const clashConfig = await 获取配置(env, atob('Y2xhc2g='), hostName);
+            return new Response(clashConfig, {
+              status: 200,
+              headers: {
+                "Content-Type": "text/plain;charset=utf-8",
+                "Subscription-Name": `${节点名称}-Clash订阅` // 添加配置名称到响应头
+              }
+            });
+          case `/${配置路径}/` + atob('djJyYXluZw=='): // v2rayNG 配置路径
             await 加载节点和配置(env, hostName);
-            const vConfig = await 获取配置(env, atob('djJyYXk='), hostName);
-            return new Response(vConfig, { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8" } });
+            const v2rayConfig = await 获取配置(env, atob('djJyYXk='), hostName);
+            return new Response(v2rayConfig, {
+              status: 200,
+              headers: {
+                "Content-Type": "text/plain;charset=utf-8",
+                "Subscription-Name": `${节点名称}-v2rayNG订阅` // 添加配置名称到响应头
+              }
+            });
           case `/${配置路径}/upload`:
             const uploadToken = 请求.headers.get('Cookie')?.split('=')[1];
             const 有效UploadToken = await env.LOGIN_STATE.get('current_token');
