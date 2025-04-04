@@ -1190,7 +1190,6 @@ async function 生成Clash配置(env, hostName) {
   const uuid = await 获取或初始化UUID(env);
   const 节点列表 = 优选节点.length ? 优选节点 : [`${hostName}:443`];
   const 国家分组 = {};
-  const 订阅名称 = env.SUBSCRIPTION_NAME || "樱花面板订阅"; // 从环境变量获取订阅名称，如果没有则使用默认值
 
   节点列表.forEach((节点, 索引) => {
     const [主内容, tls] = 节点.split("@");
@@ -1233,7 +1232,6 @@ ${[...国家分组[国家].IPv4, ...国家分组[国家].IPv6].map(n => `      -
 `).join("");
 
   return `# Generated at: ${new Date().toISOString()}
-# Subscription Name: ${订阅名称}  # 添加订阅名称
 mixed-port: 7890
 allow-lan: true
 mode: Rule
