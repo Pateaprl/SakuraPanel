@@ -200,26 +200,14 @@ export default {
           case `/${配置路径}/logout`:
             await env.LOGIN_STATE.delete('current_token');
             return 创建重定向响应('/login', { 'Set-Cookie': 'token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Strict' });
-          case `/${配置路径}/` + atob('Y2xhc2g='): // Clash 配置路径
+          case `/${配置路径}/` + atob('Y2xhc2g='):
             await 加载节点和配置(env, hostName);
-            const clashConfig = await 获取配置(env, atob('Y2xhc2g='), hostName);
-            return new Response(clashConfig, {
-              status: 200,
-              headers: {
-                "Content-Type": "text/plain;charset=utf-8",
-                "Subscription-Name": `${节点名称}-Clash订阅` // 添加配置名称到响应头
-              }
-            });
-          case `/${配置路径}/` + atob('djJyYXluZw=='): // v2rayNG 配置路径
+            const config = await 获取配置(env, atob('Y2xhc2g='), hostName);
+            return new Response(config, { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8" } });
+          case `/${配置路径}/` + atob('djJyYXluZw=='):
             await 加载节点和配置(env, hostName);
-            const v2rayConfig = await 获取配置(env, atob('djJyYXk='), hostName);
-            return new Response(v2rayConfig, {
-              status: 200,
-              headers: {
-                "Content-Type": "text/plain;charset=utf-8",
-                "Subscription-Name": `${节点名称}-v2rayNG订阅` // 添加配置名称到响应头
-              }
-            });
+            const vConfig = await 获取配置(env, atob('djJyYXk='), hostName);
+            return new Response(vConfig, { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8" } });
           case `/${配置路径}/upload`:
             const uploadToken = 请求.headers.get('Cookie')?.split('=')[1];
             const 有效UploadToken = await env.LOGIN_STATE.get('current_token');
@@ -1207,10 +1195,8 @@ async function 生成Clash配置(env, hostName) {
   节点列表.forEach((节点, 索引) => {
     const [主内容, tls] = 节点.split("@");
     const [地址端口, 节点名字 = 节点名称] = 主内容.split("#");
-    const [, 地址, 端口 = "443"] = 地址端口.match(/^
- $$(.*?)$$ (?::(\d+))?$/) || 地址端口.match(/^(.*?)(?::(\d+))?$/);
-    const 修正地址 = 地址.includes(":") ? 地址.replace(/^
- $$|$$ $/g, '') : 地址;
+    const [, 地址, 端口 = "443"] = 地址端口.match(/^\[(.*?)\](?::(\d+))?$/) || 地址端口.match(/^(.*?)(?::(\d+))?$/);
+    const 修正地址 = 地址.includes(":") ? 地址.replace(/^\[|\]$/g, '') : 地址;
     const TLS开关 = tls === 'notls' ? 'false' : 'true';
     const 国家 = 节点名字.split('-')[0] || '默认';
     const 地址类型 = 修正地址.includes(":") ? "IPv6" : "IPv4";
@@ -1305,7 +1291,6 @@ rules:
   - MATCH,🚀节点选择
 `;
 }
-
 
 async function 生成V2ray配置(env, hostName) {
   const uuid = await 获取或初始化UUID(env);
