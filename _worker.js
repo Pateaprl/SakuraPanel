@@ -177,15 +177,17 @@ function 生成登录注册界面(类型, 额外参数 = {}) {
       background: linear-gradient(to right, #ffb6c1, #ff69b4);
       color: white;
       border: none;
- ?>
-
-      border-radius: 20px;
+      border-radius: 20px; /* 圆角矩形 */
       cursor: pointer;
       font-size: 1em;
-      transition: transform 0.3s ease;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
     }
     .auth-form button:hover {
       transform: scale(1.05);
+      box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4);
+    }
+    .auth-form button:active {
+      transform: scale(0.95);
     }
     .error-message {
       color: #ff6666;
@@ -364,7 +366,6 @@ export default {
           }), 403);
         }
 
-        // 检查 KV 中是否已有注册信息
         const 存储凭据 = await env.LOGIN_STATE.get('stored_credentials');
         if (!存储凭据) {
           return 创建重定向响应('/register');
@@ -408,6 +409,22 @@ export default {
       }
 
       switch (url.pathname) {
+        case '/login':
+          const 存储凭据 = await env.LOGIN_STATE.get('stored_credentials');
+          if (!存储凭据) {
+            return 创建重定向响应('/register');
+          }
+
+          const 锁定状态 = await 检查锁定(env, 设备标识);
+          if (锁定状态.被锁定) {
+            return 创建HTML响应(生成登录注册界面('登录', { 锁定状态: true, 剩余时间: 锁定状态.剩余时间 }));
+          }
+          if (请求.headers.get('Cookie')?.split('=')[1] === await env.LOGIN_STATE.get('current_token')) {
+            return 创建重定向响应(`/${配置路径}`);
+          }
+          const 失败次数 = Number(await env.LOGIN_STATE.get(`fail_${设备标识}`) || 0);
+          return 创建HTML响应(生成登录注册界面('登录', { 输错密码: 失败次数 > 0, 剩余次数: 最大失败次数 - 失败次数 }));
+          
         case '/reset-login-failures':
           await env.LOGIN_STATE.put(`fail_${设备标识}`, '0');
           await env.LOGIN_STATE.delete(`lock_${设备标识}`);
@@ -419,20 +436,6 @@ export default {
           if (!Token || Token !== 有效Token) return 创建重定向响应('/login');
           const uuid = await 获取或初始化UUID(env);
           return 创建HTML响应(生成订阅页面(配置路径, hostName, uuid));
-          
-        case '/login':
-          const 存储凭据 = await env.LOGIN_STATE.get('stored_credentials');
-          if (!存储凭据) {
-            return 创建重定向响应('/register');
-          }
-
-          const 锁定状态 = await 检查锁定(env, 设备标识);
-          if (锁定状态.被锁定) return 创建HTML响应(生成登录注册界面('登录', { 锁定状态: true, 剩余时间: 锁定状态.剩余时间 }));
-          if (请求.headers.get('Cookie')?.split('=')[1] === await env.LOGIN_STATE.get('current_token')) {
-            return 创建重定向响应(`/${配置路径}`);
-          }
-          const 失败次数 = Number(await env.LOGIN_STATE.get(`fail_${设备标识}`) || 0);
-          return 创建HTML响应(生成登录注册界面('登录', { 输错密码: 失败次数 > 0, 剩余次数: 最大失败次数 - 失败次数 }));
           
         case `/${配置路径}/logout`:
           await env.LOGIN_STATE.delete('current_token');
