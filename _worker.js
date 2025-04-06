@@ -11,8 +11,8 @@ let 反代地址 = 'ts.hpc.tw';
 let SOCKS5账号 = '';
 let 节点名称 = '🌸樱花';
 let 伪装域名 = 'lkssite.vip';
-let 用户名 = 'admin';
-let 密码 = 'admin';
+let 用户名 = 'andypan';
+let 密码 = 'Yyds@2023';
 let 最大失败次数 = 5;
 let 锁定时间 = 5 * 60 * 1000;
 let 白天背景图 = 'https://i.meee.com.tw/el91luR.png';
@@ -100,9 +100,9 @@ async function 加载节点和配置(env, hostName) {
         const 新版本 = String(Date.now());
         await env.LOGIN_STATE.put('ip_preferred_ips', JSON.stringify(合并节点列表));
         await env.LOGIN_STATE.put('ip_preferred_ips_version', 新版本);
-        await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g='), await 生成Clash配置(env, hostName));
+        await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g='), await 生成配置1(env, hostName));
         await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g=') + '_version', 新版本);
-        await env.LOGIN_STATE.put('config_' + atob('djJyYXk='), await 生成V2ray配置(env, hostName));
+        await env.LOGIN_STATE.put('config_' + atob('djJyYXk='), await 生成配置2(env, hostName));
         await env.LOGIN_STATE.put('config_' + atob('djJyYXk=') + '_version', 新版本);
       }
     } else {
@@ -126,7 +126,7 @@ async function 获取配置(env, 类型, hostName) {
     return 缓存配置;
   }
 
-  const 新配置 = 类型 === atob('Y2xhc2g=') ? await 生成Clash配置(env, hostName) : await 生成V2ray配置(env, hostName);
+  const 新配置 = 类型 === atob('Y2xhc2g=') ? await 生成配置1(env, hostName) : await 生成配置2(env, hostName);
   await env.LOGIN_STATE.put(缓存键, 新配置);
   await env.LOGIN_STATE.put(版本键, 节点版本);
   return 新配置;
@@ -243,9 +243,9 @@ export default {
               await env.LOGIN_STATE.put('manual_preferred_ips', JSON.stringify(uniqueIpList));
               const 新版本 = String(Date.now());
               await env.LOGIN_STATE.put('ip_preferred_ips_version', 新版本);
-              await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g='), await 生成Clash配置(env, hostName));
+              await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g='), await 生成配置1(env, hostName));
               await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g=') + '_version', 新版本);
-              await env.LOGIN_STATE.put('config_' + atob('djJyYXk='), await 生成V2ray配置(env, hostName));
+              await env.LOGIN_STATE.put('config_' + atob('djJyYXk='), await 生成配置2(env, hostName));
               await env.LOGIN_STATE.put('config_' + atob('djJyYXk=') + '_version', 新版本);
               return 创建JSON响应({ message: '上传成功，即将跳转' }, 200, { 'Location': `/${配置路径}` });
             } catch (错误) {
@@ -260,8 +260,8 @@ export default {
             }
             const 新UUID = 生成UUID();
             await env.LOGIN_STATE.put('current_uuid', 新UUID);
-            await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g='), await 生成Clash配置(env, hostName));
-            await env.LOGIN_STATE.put('config_' + atob('djJyYXk='), await 生成V2ray配置(env, hostName));
+            await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g='), await 生成配置1(env, hostName));
+            await env.LOGIN_STATE.put('config_' + atob('djJyYXk='), await 生成配置2(env, hostName));
             const 新版本 = String(Date.now());
             await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g=') + '_version', 新版本);
             await env.LOGIN_STATE.put('config_' + atob('djJyYXk=') + '_version', 新版本);
@@ -571,7 +571,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       right: -20px;
       font-size: 60px;
       color: #ff69b4;
-      transform: rotate(20deg);
+      couple-transform: rotate(20deg);
       z-index: 1;
       text-shadow: 2px 2px 4px rgba(255, 105, 180, 0.3);
       pointer-events: none;
@@ -638,8 +638,8 @@ function 生成订阅页面(配置路径, hostName, uuid) {
     }
     .cute-button:hover { transform: scale(1.05); box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4); }
     .cute-button:active { transform: scale(0.95); }
-    .clash-btn { background: linear-gradient(to right, #ffb6c1, #ff69b4); }
-    .v2ray-btn { background: linear-gradient(to right, #ffd1dc, #ff85a2); }
+    .config1-btn { background: linear-gradient(to right, #ffb6c1, #ff69b4); }
+    .config2-btn { background: linear-gradient(to right, #ffd1dc, #ff85a2); }
     .logout-btn { background: linear-gradient(to right, #ff9999, #ff6666); }
     .uuid-btn { background: linear-gradient(to right, #ffdead, #ff85a2); }
     .upload-title { font-size: 1.4em; color: #ff85a2; margin-bottom: 15px; }
@@ -702,21 +702,21 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       <div class="proxy-status" id="proxyStatus">直连</div>
     </div>
     <div class="card">
-      <h2 class="card-title">🐾 ${atob('Y2xhc2g=')} 订阅</h2>
+      <h2 class="card-title">🐾 配置1订阅</h2>
       <div class="link-box">
         <p>订阅链接：<br><a href="https://${hostName}/${配置路径}/${atob('Y2xhc2g=')}">https://${hostName}/${配置路径}/${atob('Y2xhc2g=')}</a></p>
       </div>
       <div class="button-group">
-        <button class="cute-button clash-btn" onclick="导入Config('${配置路径}', '${hostName}', '${atob('Y2xhc2g=')}')">一键导入</button>
+        <button class="cute-button config1-btn" onclick="导入Config('${配置路径}', '${hostName}', '${atob('Y2xhc2g=')}')">一键导入</button>
       </div>
     </div>
     <div class="card">
-      <h2 class="card-title">🐰 ${atob('djJyYXluZw==')} 订阅</h2>
+      <h2 class="card-title">🐰 配置2订阅</h2>
       <div class="link-box">
         <p>订阅链接：<br><a href="https://${hostName}/${配置路径}/${atob('djJyYXluZw==')}">https://${hostName}/${配置路径}/${atob('djJyYXluZw==')}</a></p>
       </div>
       <div class="button-group">
-        <button class="cute-button v2ray-btn" onclick="导入Config('${配置路径}', '${hostName}', '${atob('djJyYXluZw==')}')">一键导入</button>
+        <button class="cute-button config2-btn" onclick="导入Config('${配置路径}', '${hostName}', '${atob('djJyYXluZw==')}')">一键导入</button>
       </div>
     </div>
     <div class="card">
@@ -1186,7 +1186,7 @@ function 生成KV未绑定提示页面() {
   `;
 }
 
-async function 生成Clash配置(env, hostName) {
+async function 生成配置1(env, hostName) {
   const uuid = await 获取或初始化UUID(env);
   const 节点列表 = 优选节点.length ? 优选节点 : [`${hostName}:443`];
   const 国家分组 = {};
@@ -1290,7 +1290,7 @@ rules:
 `;
 }
 
-async function 生成V2ray配置(env, hostName) {
+async function 生成配置2(env, hostName) {
   const uuid = await 获取或初始化UUID(env);
   const 节点列表 = 优选节点.length ? 优选节点 : [`${hostName}:443`];
   const 配置列表 = 节点列表.map(节点 => {
@@ -1307,7 +1307,7 @@ async function 生成V2ray配置(env, hostName) {
       const encodedPath = encodeURIComponent('/?ed=2560');
       return `${atob('dmxlc3M=')}://${uuid}@${修正地址}:${端口}?encryption=none&security=${TLS开关}&type=ws&host=${hostName}&path=${encodedPath}&sni=${hostName}#${节点名字}`;
     } catch (error) {
-      console.error(`生成${atob('djJyYXk=')}节点配置失败: ${节点}, 错误: ${error.message}`);
+      console.error(`生成配置2节点失败: ${节点}, 错误: ${error.message}`);
       return null;
     }
   }).filter(Boolean);
