@@ -56,7 +56,6 @@ function 生成UUID() {
   });
 }
 
-// ====================== 注册/登录相关 ======================
 async function 加密密码(密码) {
   const encoder = new TextEncoder();
   const data = encoder.encode(密码);
@@ -178,6 +177,8 @@ function 生成登录注册界面(类型, 额外参数 = {}) {
       background: linear-gradient(to right, #ffb6c1, #ff69b4);
       color: white;
       border: none;
+ ?>
+
       border-radius: 20px;
       cursor: pointer;
       font-size: 1em;
@@ -363,17 +364,19 @@ export default {
           }), 403);
         }
 
+        // 检查 KV 中是否已有注册信息
+        const 存储凭据 = await env.LOGIN_STATE.get('stored_credentials');
+        if (!存储凭据) {
+          return 创建重定向响应('/register');
+        }
+
         formData = await 请求.formData();
         const 输入用户名 = formData.get('username');
         const 输入密码 = formData.get('password');
 
-        const 存储凭据 = JSON.parse(await env.LOGIN_STATE.get('stored_credentials') || '{}');
-        if (!存储凭据.用户名) {
-          return 创建重定向响应('/register');
-        }
-
-        const 密码匹配 = (await 加密密码(输入密码)) === 存储凭据.密码;
-        if (输入用户名 === 存储凭据.用户名 && 密码匹配) {
+        const 凭据对象 = JSON.parse(存储凭据 || '{}');
+        const 密码匹配 = (await 加密密码(输入密码)) === 凭据对象.密码;
+        if (输入用户名 === 凭据对象.用户名 && 密码匹配) {
           const 新Token = Math.random().toString(36).substring(2);
           await env.LOGIN_STATE.put('current_token', 新Token, { expirationTtl: 300 });
           await env.LOGIN_STATE.put(`fail_${设备标识}`, '0');
@@ -418,6 +421,11 @@ export default {
           return 创建HTML响应(生成订阅页面(配置路径, hostName, uuid));
           
         case '/login':
+          const 存储凭据 = await env.LOGIN_STATE.get('stored_credentials');
+          if (!存储凭据) {
+            return 创建重定向响应('/register');
+          }
+
           const 锁定状态 = await 检查锁定(env, 设备标识);
           if (锁定状态.被锁定) return 创建HTML响应(生成登录注册界面('登录', { 锁定状态: true, 剩余时间: 锁定状态.剩余时间 }));
           if (请求.headers.get('Cookie')?.split('=')[1] === await env.LOGIN_STATE.get('current_token')) {
@@ -1206,7 +1214,7 @@ function 生成KV未绑定提示页面() {
       font-weight: bold;
     }
     .instruction {
-      margin-top:。用20px;
+      margin-top: 20px;
       font-size: 1em;
       color: #ff69b4;
     }
