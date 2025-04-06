@@ -114,12 +114,33 @@ function 生成登录注册界面(类型, 额外参数 = {}) {
   <style>
     body {
       font-family: 'Comic Sans MS', 'Arial', sans-serif;
+      color: #ff6f91;
       margin: 0;
       height: 100vh;
       display: flex;
       justify-content: center;
       align-items: center;
-      background: linear-gradient(135deg, #ffe6f0, #fff0f5);
+      position: relative;
+      overflow: hidden;
+      transition: background 0.5s ease;
+    }
+    @media (prefers-color-scheme: light) {
+      body { background: linear-gradient(135deg, #ffe6f0, #fff0f5); }
+      .auth-container { background: rgba(255, 245, 247, 0.9); box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3); }
+    }
+    @media (prefers-color-scheme: dark) {
+      body { background: linear-gradient(135deg, #1e1e2f, #2a2a3b); }
+      .auth-container { background: rgba(30, 30, 30, 0.9); color: #ffd1dc; box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2); }
+    }
+    .background-media {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: -1;
+      transition: opacity 0.5s ease;
     }
     .auth-container {
       padding: 30px;
@@ -127,13 +148,14 @@ function 生成登录注册界面(类型, 额外参数 = {}) {
       max-width: 400px;
       width: 90%;
       text-align: center;
-      background: rgba(255, 255, 255, 0.85);
-      box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3);
+      position: relative;
+      z-index: 1;
     }
     h1 {
       font-size: 1.8em;
       color: #ff69b4;
       margin-bottom: 20px;
+      text-shadow: 1px 1px 3px rgba(255, 105, 180, 0.2);
     }
     .auth-form {
       display: flex;
@@ -174,13 +196,32 @@ function 生成登录注册界面(类型, 额外参数 = {}) {
       margin-top: 20px;
       font-size: 1.1em;
     }
+    @media (max-width: 600px) {
+      .auth-container { padding: 20px; }
+      h1 { font-size: 1.5em; }
+      .auth-form input, .auth-form button { padding: 10px; font-size: 0.95em; }
+    }
   </style>
 </head>
 <body>
+  <img id="backgroundImage" class="background-media">
   <div class="auth-container">
     <h1>${界面数据[类型].title}</h1>
     ${界面数据[类型].表单}
   </div>
+  <script>
+    const lightBg = '${白天背景图}';
+    const darkBg = '${暗黑背景图}';
+    const bgImage = document.getElementById('backgroundImage');
+
+    function updateBackground() {
+      const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      bgImage.src = isDarkMode ? darkBg : lightBg;
+      bgImage.onerror = () => { bgImage.style.display = 'none'; };
+    }
+    updateBackground();
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
+  </script>
 </body>
 </html>
   `;
@@ -230,7 +271,7 @@ async function 加载节点和配置(env, hostName) {
         const 新版本 = String(Date.now());
         await env.LOGIN_STATE.put('ip_preferred_ips', JSON.stringify(合并节点列表));
         await env.LOGIN_STATE.put('ip_preferred_ips_version', 新版本);
-        await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g='), await 生成配置1(env, pararhostName));
+        await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g='), await 生成配置1(env, hostName));
         await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g=') + '_version', 新版本);
         await env.LOGIN_STATE.put('config_' + atob('djJyYXk='), await 生成配置2(env, hostName));
         await env.LOGIN_STATE.put('config_' + atob('djJyYXk=') + '_version', 新版本);
@@ -1124,7 +1165,7 @@ function 生成KV未绑定提示页面() {
     }
     @media (prefers-color-scheme: light) {
       body { background: linear-gradient(135deg, #ffe6f0, #fff0f5); }
-      .content { background: rgba(255, 255, 255, 0.85); box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3); }
+      .content { background: rgba(255, 245, 247, 0.9); box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3); }
     }
     @media (prefers-color-scheme: dark) {
       body { background: linear-gradient(135deg, #1e1e2f, #2a2a3b); }
@@ -1146,6 +1187,8 @@ function 生成KV未绑定提示页面() {
       max-width: 500px;
       width: 90%;
       text-align: center;
+      position: relative;
+      z-index: 1;
     }
     h1 {
       font-size: 1.8em;
@@ -1163,7 +1206,7 @@ function 生成KV未绑定提示页面() {
       font-weight: bold;
     }
     .instruction {
-      margin-top: 20px;
+      margin-top:。用20px;
       font-size: 1em;
       color: #ff69b4;
     }
