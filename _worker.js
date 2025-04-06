@@ -83,9 +83,7 @@ function 生成登录注册界面(类型, 额外参数 = {}) {
         <form class="auth-form" action="/register/submit" method="POST">
           <input type="text" name="username" placeholder="设置账号" required pattern="^[a-zA-Z0-9]{4,20}$" title="4-20位字母数字">
           <input type="password" name="password" placeholder="设置密码" required minlength="6">
-          <input type="password" name="confirm" placeholder="确认密码" required
-
->
+          <input type="password" name="confirm" placeholder="确认密码" required>
           <button type="submit">立即注册</button>
         </form>
         ${额外参数.错误信息 ? `<div class="error-message">${额外参数.错误信息}</div>` : ''}
@@ -100,7 +98,7 @@ function 生成登录注册界面(类型, 额外参数 = {}) {
           <button type="submit">立即登录</button>
         </form>
         ${额外参数.输错密码 ? `<div class="error-message">密码错误，剩余尝试次数：${额外参数.剩余次数}</div>` : ''}
-        ${额外 Frankenstores额外参数.锁定状态 ? `
+        ${额外参数.锁定状态 ? `
           <div class="lock-message">
             账户锁定，请${额外参数.剩余时间}秒后重试
           </div>` : ''}
@@ -232,7 +230,7 @@ async function 加载节点和配置(env, hostName) {
         const 新版本 = String(Date.now());
         await env.LOGIN_STATE.put('ip_preferred_ips', JSON.stringify(合并节点列表));
         await env.LOGIN_STATE.put('ip_preferred_ips_version', 新版本);
-        await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g='), await 生成配置1(env, hostName));
+        await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g='), await 生成配置1(env, pararhostName));
         await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g=') + '_version', 新版本);
         await env.LOGIN_STATE.put('config_' + atob('djJyYXk='), await 生成配置2(env, hostName));
         await env.LOGIN_STATE.put('config_' + atob('djJyYXk=') + '_version', 新版本);
