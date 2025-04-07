@@ -226,12 +226,25 @@ function 生成登录注册界面(类型, 额外参数 = {}) {
     updateBackground();
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
 
+    // 防止 UA 切换触发表单提交
     document.querySelector('.auth-form')?.addEventListener('submit', function(event) {
       if (!event.isTrusted) {
         event.preventDefault();
         console.log('阻止非用户触发的表单提交');
       }
     });
+
+    // 监听 UA 变化并平滑处理
+    let lastUA = navigator.userAgent;
+    function checkUAChange() {
+      const currentUA = navigator.userAgent;
+      if (currentUA !== lastUA) {
+        console.log('UA 已切换，从', lastUA, '到', currentUA);
+        lastUA = currentUA;
+        // 可在这里添加平滑调整逻辑，例如调整样式
+      }
+    }
+    setInterval(checkUAChange, 500); // 每 500ms 检查一次 UA
   </script>
 </body>
 </html>
@@ -336,46 +349,51 @@ export default {
         return await 升级请求(请求, env);
       }
 
-      if (url.pathname === '/register/submit') {
+      // 处理意外的 /login/submit 或 /register/submit 请求
+      if (url.pathname === '/login/submit' || url.pathname === '/register/submit') {
         const contentType = 请求.headers.get('Content-Type') || '';
-        if (!contentType.includes('application/x-www-form-urlencoded')) {
-          return 创建HTML响应(生成登录注册界面('注册', { 
-            错误信息: '请求格式错误，请通过正常表单注册'
+        if (!contentType.includes('application/x-www-form-urlencoded') && !contentType.includes('multipart/form-data')) {
+          console.log(`无效请求: UA=${UA}, IP=${IP}, Path=${url.pathname}, Headers=${JSON.stringify([...请求.headers])}`);
+          return 创建HTML响应(生成登录注册界面(url.pathname === '/login/submit' ? '登录' : '注册', {
+            错误信息: '请通过正常表单提交'
           }), 400);
         }
 
         try {
           formData = await 请求.formData();
-          const 用户名 = formData.get('username');
-          const 密码 = formData.get('password');
-          const 确认密码 = formData.get('confirm');
-
-          if (!用户名 || !密码 || 密码 !== 确认密码) {
-            return 创建HTML响应(生成登录注册界面('注册', { 
-              错误信息: 密码 !== 确认密码 ? '两次密码不一致' : '请填写完整信息'
-            }), 400);
-          }
-
-          const 已有用户 = await env.LOGIN_STATE.get('stored_credentials');
-          if (已有用户) {
-            return 创建重定向响应('/login');
-          }
-
-          const 加密密码值 = await 加密密码(密码);
-          await env.LOGIN_STATE.put('stored_credentials', JSON.stringify({
-            用户名, 密码: 加密密码值
-          }));
-
-          const 新Token = Math.random().toString(36).substring(2);
-          await env.LOGIN_STATE.put('current_token', 新Token, { expirationTtl: 300 });
-          return 创建重定向响应(`/${配置路径}`, { 
-            'Set-Cookie': `token=${新Token}; Path=/; HttpOnly; SameSite=Strict` 
-          });
         } catch (错误) {
-          return 创建HTML响应(生成登录注册界面('注册', {
-            错误信息: '提交失败，请检查网络或稍后重试'
+          return 创建HTML响应(生成登录注册界面(url.pathname === '/login/submit' ? '登录' : '注册', {
+            错误信息: '提交数据格式错误，请重试'
           }), 400);
         }
+      }
+
+      if (url.pathname === '/register/submit') {
+        const 用户名 = formData.get('username');
+        const 密码 = formData.get('password');
+        const 确认密码 = formData.get('confirm');
+
+        if (!用户名 || !密码 || 密码 !== 确认密码) {
+          return 创建HTML响应(生成登录注册界面('注册', { 
+            错误信息: 密码 !== 确认密码 ? '两次密码不一致' : '请填写完整信息'
+          }), 400);
+        }
+
+        const 已有用户 = await env.LOGIN_STATE.get('stored_credentials');
+        if (已有用户) {
+          return 创建重定向响应('/login');
+        }
+
+        const 加密密码值 = await 加密密码(密码);
+        await env.LOGIN_STATE.put('stored_credentials', JSON.stringify({
+          用户名, 密码: 加密密码值
+        }));
+
+        const 新Token = Math.random().toString(36).substring(2);
+        await env.LOGIN_STATE.put('current_token', 新Token, { expirationTtl: 300 });
+        return 创建重定向响应(`/${配置路径}`, { 
+          'Set-Cookie': `token=${新Token}; Path=/; HttpOnly; SameSite=Strict` 
+        });
       }
 
       if (url.pathname === '/login/submit') {
@@ -392,49 +410,35 @@ export default {
           return 创建重定向响应('/register');
         }
 
-        const contentType = 请求.headers.get('Content-Type') || '';
-        if (!contentType.includes('application/x-www-form-urlencoded')) {
-          return 创建HTML响应(生成登录注册界面('登录', { 
-            错误信息: '请求格式错误，请通过正常表单登录'
-          }), 400);
+        const 输入用户名 = formData.get('username');
+        const 输入密码 = formData.get('password');
+
+        const 凭据对象 = JSON.parse(存储凭据 || '{}');
+        const 密码匹配 = (await 加密密码(输入密码)) === 凭据对象.密码;
+        if (输入用户名 === 凭据对象.用户名 && 密码匹配) {
+          const 新Token = Math.random().toString(36).substring(2);
+          await env.LOGIN_STATE.put('current_token', 新Token, { expirationTtl: 300 });
+          await env.LOGIN_STATE.put(`fail_${设备标识}`, '0');
+          return 创建重定向响应(`/${配置路径}`, { 
+            'Set-Cookie': `token=${新Token}; Path=/; HttpOnly; SameSite=Strict` 
+          });
         }
 
-        try {
-          formData = await 请求.formData();
-          const 输入用户名 = formData.get('username');
-          const 输入密码 = formData.get('password');
-
-          const 凭据对象 = JSON.parse(存储凭据 || '{}');
-          const 密码匹配 = (await 加密密码(输入密码)) === 凭据对象.密码;
-          if (输入用户名 === 凭据对象.用户名 && 密码匹配) {
-            const 新Token = Math.random().toString(36).substring(2);
-            await env.LOGIN_STATE.put('current_token', 新Token, { expirationTtl: 300 });
-            await env.LOGIN_STATE.put(`fail_${设备标识}`, '0');
-            return 创建重定向响应(`/${配置路径}`, { 
-              'Set-Cookie': `token=${新Token}; Path=/; HttpOnly; SameSite=Strict` 
-            });
-          }
-
-          let 失败次数 = Number(await env.LOGIN_STATE.get(`fail_${设备标识}`) || 0) + 1;
-          await env.LOGIN_STATE.put(`fail_${设备标识}`, String(失败次数));
-          
-          if (失败次数 >= 最大失败次数) {
-            await env.LOGIN_STATE.put(`lock_${设备标识}`, String(Date.now() + 锁定时间), { expirationTtl: 300 });
-            return 创建HTML响应(生成登录注册界面('登录', {
-              锁定状态: true,
-              剩余时间: 锁定时间 / 1000
-            }), 403);
-          }
-          
+        let 失败次数 = Number(await env.LOGIN_STATE.get(`fail_${设备标识}`) || 0) + 1;
+        await env.LOGIN_STATE.put(`fail_${设备标识}`, String(失败次数));
+        
+        if (失败次数 >= 最大失败次数) {
+          await env.LOGIN_STATE.put(`lock_${设备标识}`, String(Date.now() + 锁定时间), { expirationTtl: 300 });
           return 创建HTML响应(生成登录注册界面('登录', {
-            输错密码: true,
-            剩余次数: 最大失败次数 - 失败次数
-          }), 401);
-        } catch (错误) {
-          return 创建HTML响应(生成登录注册界面('登录', {
-            错误信息: '提交失败，请检查网络或稍后重试'
-          }), 400);
+            锁定状态: true,
+            剩余时间: 锁定时间 / 1000
+          }), 403);
         }
+        
+        return 创建HTML响应(生成登录注册界面('登录', {
+          输错密码: true,
+          剩余次数: 最大失败次数 - 失败次数
+        }), 401);
       }
 
       const 是否已注册 = await env.LOGIN_STATE.get('stored_credentials');
@@ -826,7 +830,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       width: 100%;
       max-width: 500px;
       text-align: center;
-      transition: transform 0.3s ease, box-shadow 0.3 Shades ease;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
       position: relative;
       overflow: visible;
     }
@@ -1183,6 +1187,39 @@ function 生成订阅页面(配置路径, hostName, uuid) {
 
       xhr.send(formData);
     }
+
+    // 平滑处理 UA 切换
+    let lastUA = navigator.userAgent;
+    function checkUAChange() {
+      const currentUA = navigator.userAgent;
+      if (currentUA !== lastUA) {
+        console.log('UA 已切换，从', lastUA, '到', currentUA);
+        lastUA = currentUA;
+        adjustLayoutForUA(); // 动态调整布局
+      }
+    }
+    setInterval(checkUAChange, 500);
+
+    function adjustLayoutForUA() {
+      const isMobile = /Mobile|Android|iPhone/i.test(navigator.userAgent);
+      const container = document.querySelector('.container');
+      const cards = document.querySelectorAll('.card');
+      
+      if (isMobile) {
+        container.style.padding = '10px';
+        cards.forEach(card => {
+          card.style.maxWidth = '100%';
+          card.style.padding = '15px';
+        });
+      } else {
+        container.style.padding = '20px';
+        cards.forEach(card => {
+          card.style.maxWidth = '500px';
+          card.style.padding = '25px';
+        });
+      }
+    }
+    adjustLayoutForUA(); // 初始调整
   </script>
 </body>
 </html>
@@ -1281,6 +1318,17 @@ function 生成KV未绑定提示页面() {
     }
     updateBackground();
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
+
+    // 平滑处理 UA 切换
+    let lastUA = navigator.userAgent;
+    function checkUAChange() {
+      const currentUA = navigator.userAgent;
+      if (currentUA !== lastUA) {
+        console.log('UA 已切换，从', lastUA, '到', currentUA);
+        lastUA = currentUA;
+      }
+    }
+    setInterval(checkUAChange, 500);
   </script>
 </body>
 </html>
