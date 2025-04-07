@@ -79,7 +79,7 @@ function 生成登录注册界面(类型, 额外参数 = {}) {
     注册: {
       title: '🌸首次使用注册🌸',
       表单: `
-        <form class="auth-form" action="/register/submit" method="POST">
+        <form class="auth-form" action="/register/submit" method="POST" enctype="application/x-www-form-urlencoded">
           <input type="text" name="username" placeholder="设置账号" required pattern="^[a-zA-Z0-9]{4,20}$" title="4-20位字母数字">
           <input type="password" name="password" placeholder="设置密码" required minlength="6">
           <input type="password" name="confirm" placeholder="确认密码" required>
@@ -91,7 +91,7 @@ function 生成登录注册界面(类型, 额外参数 = {}) {
     登录: {
       title: '🌸欢迎回来🌸',
       表单: `
-        <form class="auth-form" action="/login/submit" method="POST">
+        <form class="auth-form" action="/login/submit" method="POST" enctype="application/x-www-form-urlencoded">
           <input type="text" name="username" placeholder="登录账号" required>
           <input type="password" name="password" placeholder="登录密码" required>
           <button type="submit">立即登录</button>
@@ -101,6 +101,7 @@ function 生成登录注册界面(类型, 额外参数 = {}) {
           <div class="lock-message">
             账户锁定，请${额外参数.剩余时间}秒后重试
           </div>` : ''}
+        ${额外参数.错误信息 ? `<div class="error-message">${额外参数.错误信息}</div>` : ''}
       `
     }
   };
@@ -177,7 +178,7 @@ function 生成登录注册界面(类型, 额外参数 = {}) {
       background: linear-gradient(to right, #ffb6c1, #ff69b4);
       color: white;
       border: none;
-      border-radius: 20px; /* 圆角矩形 */
+      border-radius: 20px;
       cursor: pointer;
       font-size: 1em;
       transition: transform 0.3s ease, box-shadow 0.3s ease;
@@ -224,6 +225,13 @@ function 生成登录注册界面(类型, 额外参数 = {}) {
     }
     updateBackground();
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
+
+    document.querySelector('.auth-form')?.addEventListener('submit', function(event) {
+      if (!event.isTrusted) {
+        event.preventDefault();
+        console.log('阻止非用户触发的表单提交');
+      }
+    });
   </script>
 </body>
 </html>
@@ -329,32 +337,45 @@ export default {
       }
 
       if (url.pathname === '/register/submit') {
-        formData = await 请求.formData();
-        const 用户名 = formData.get('username');
-        const 密码 = formData.get('password');
-        const 确认密码 = formData.get('confirm');
-
-        if (!用户名 || !密码 || 密码 !== 确认密码) {
+        const contentType = 请求.headers.get('Content-Type') || '';
+        if (!contentType.includes('application/x-www-form-urlencoded')) {
           return 创建HTML响应(生成登录注册界面('注册', { 
-            错误信息: 密码 !== 确认密码 ? '两次密码不一致' : '请填写完整信息'
+            错误信息: '请求格式错误，请通过正常表单注册'
           }), 400);
         }
 
-        const 已有用户 = await env.LOGIN_STATE.get('stored_credentials');
-        if (已有用户) {
-          return 创建重定向响应('/login');
+        try {
+          formData = await 请求.formData();
+          const 用户名 = formData.get('username');
+          const 密码 = formData.get('password');
+          const 确认密码 = formData.get('confirm');
+
+          if (!用户名 || !密码 || 密码 !== 确认密码) {
+            return 创建HTML响应(生成登录注册界面('注册', { 
+              错误信息: 密码 !== 确认密码 ? '两次密码不一致' : '请填写完整信息'
+            }), 400);
+          }
+
+          const 已有用户 = await env.LOGIN_STATE.get('stored_credentials');
+          if (已有用户) {
+            return 创建重定向响应('/login');
+          }
+
+          const 加密密码值 = await 加密密码(密码);
+          await env.LOGIN_STATE.put('stored_credentials', JSON.stringify({
+            用户名, 密码: 加密密码值
+          }));
+
+          const 新Token = Math.random().toString(36).substring(2);
+          await env.LOGIN_STATE.put('current_token', 新Token, { expirationTtl: 300 });
+          return 创建重定向响应(`/${配置路径}`, { 
+            'Set-Cookie': `token=${新Token}; Path=/; HttpOnly; SameSite=Strict` 
+          });
+        } catch (错误) {
+          return 创建HTML响应(生成登录注册界面('注册', {
+            错误信息: '提交失败，请检查网络或稍后重试'
+          }), 400);
         }
-
-        const 加密密码值 = await 加密密码(密码);
-        await env.LOGIN_STATE.put('stored_credentials', JSON.stringify({
-          用户名, 密码: 加密密码值
-        }));
-
-        const 新Token = Math.random().toString(36).substring(2);
-        await env.LOGIN_STATE.put('current_token', 新Token, { expirationTtl: 300 });
-        return 创建重定向响应(`/${配置路径}`, { 
-          'Set-Cookie': `token=${新Token}; Path=/; HttpOnly; SameSite=Strict` 
-        });
       }
 
       if (url.pathname === '/login/submit') {
@@ -371,36 +392,49 @@ export default {
           return 创建重定向响应('/register');
         }
 
-        formData = await 请求.formData();
-        const 输入用户名 = formData.get('username');
-        const 输入密码 = formData.get('password');
-
-        const 凭据对象 = JSON.parse(存储凭据 || '{}');
-        const 密码匹配 = (await 加密密码(输入密码)) === 凭据对象.密码;
-        if (输入用户名 === 凭据对象.用户名 && 密码匹配) {
-          const 新Token = Math.random().toString(36).substring(2);
-          await env.LOGIN_STATE.put('current_token', 新Token, { expirationTtl: 300 });
-          await env.LOGIN_STATE.put(`fail_${设备标识}`, '0');
-          return 创建重定向响应(`/${配置路径}`, { 
-            'Set-Cookie': `token=${新Token}; Path=/; HttpOnly; SameSite=Strict` 
-          });
+        const contentType = 请求.headers.get('Content-Type') || '';
+        if (!contentType.includes('application/x-www-form-urlencoded')) {
+          return 创建HTML响应(生成登录注册界面('登录', { 
+            错误信息: '请求格式错误，请通过正常表单登录'
+          }), 400);
         }
 
-        let 失败次数 = Number(await env.LOGIN_STATE.get(`fail_${设备标识}`) || 0) + 1;
-        await env.LOGIN_STATE.put(`fail_${设备标识}`, String(失败次数));
-        
-        if (失败次数 >= 最大失败次数) {
-          await env.LOGIN_STATE.put(`lock_${设备标识}`, String(Date.now() + 锁定时间), { expirationTtl: 300 });
+        try {
+          formData = await 请求.formData();
+          const 输入用户名 = formData.get('username');
+          const 输入密码 = formData.get('password');
+
+          const 凭据对象 = JSON.parse(存储凭据 || '{}');
+          const 密码匹配 = (await 加密密码(输入密码)) === 凭据对象.密码;
+          if (输入用户名 === 凭据对象.用户名 && 密码匹配) {
+            const 新Token = Math.random().toString(36).substring(2);
+            await env.LOGIN_STATE.put('current_token', 新Token, { expirationTtl: 300 });
+            await env.LOGIN_STATE.put(`fail_${设备标识}`, '0');
+            return 创建重定向响应(`/${配置路径}`, { 
+              'Set-Cookie': `token=${新Token}; Path=/; HttpOnly; SameSite=Strict` 
+            });
+          }
+
+          let 失败次数 = Number(await env.LOGIN_STATE.get(`fail_${设备标识}`) || 0) + 1;
+          await env.LOGIN_STATE.put(`fail_${设备标识}`, String(失败次数));
+          
+          if (失败次数 >= 最大失败次数) {
+            await env.LOGIN_STATE.put(`lock_${设备标识}`, String(Date.now() + 锁定时间), { expirationTtl: 300 });
+            return 创建HTML响应(生成登录注册界面('登录', {
+              锁定状态: true,
+              剩余时间: 锁定时间 / 1000
+            }), 403);
+          }
+          
           return 创建HTML响应(生成登录注册界面('登录', {
-            锁定状态: true,
-            剩余时间: 锁定时间 / 1000
-          }), 403);
+            输错密码: true,
+            剩余次数: 最大失败次数 - 失败次数
+          }), 401);
+        } catch (错误) {
+          return 创建HTML响应(生成登录注册界面('登录', {
+            错误信息: '提交失败，请检查网络或稍后重试'
+          }), 400);
         }
-        
-        return 创建HTML响应(生成登录注册界面('登录', {
-          输错密码: true,
-          剩余次数: 最大失败次数 - 失败次数
-        }), 401);
       }
 
       const 是否已注册 = await env.LOGIN_STATE.get('stored_credentials');
@@ -792,7 +826,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       width: 100%;
       max-width: 500px;
       text-align: center;
-      transition: transform 0.3s ease, box-shadow 0.3s ease;
+      transition: transform 0.3s ease, box-shadow 0.3 Shades ease;
       position: relative;
       overflow: visible;
     }
