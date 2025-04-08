@@ -340,7 +340,7 @@ export default {
       let formData;
 
       if (请求头 && 请求头 === 'websocket') {
-        ODS5账号 = env.SOCKS5 || SOCKS5账号;
+        SOCKS5账号 = env.SOCKS5 || SOCKS5账号;
         return await 升级请求(请求, env);
       }
 
@@ -447,9 +447,9 @@ export default {
             return 创建重定向响应('/register');
           }
 
-          const Token = 请求.headers.get('Cookie')?.split('=')[1];
-          const 有效Token = await env.LOGIN_STATE.get('current_token');
-          if (Token && Token === 有效Token) {
+          const loginToken = 请求.headers.get('Cookie')?.split('=')[1];
+          const login有效Token = await env.LOGIN_STATE.get('current_token');
+          if (loginToken && loginToken === login有效Token) {
             return 创建重定向响应(`/${配置路径}`);
           }
 
@@ -464,9 +464,9 @@ export default {
           return new Response(null, { status: 200 });
 
         case `/${配置路径}`:
-          const Token = 请求.headers.get('Cookie')?.split('=')[1];
-          const 有效Token = await env.LOGIN_STATE.get('current_token');
-          if (!Token || Token !== 有效Token) return 创建重定向响应('/login');
+          const configToken = 请求.headers.get('Cookie')?.split('=')[1];
+          const config有效Token = await env.LOGIN_STATE.get('current_token');
+          if (!configToken || configToken !== config有效Token) return 创建重定向响应('/login');
           const uuid = await 获取或初始化UUID(env);
           return 创建HTML响应(生成订阅页面(配置路径, hostName, uuid));
 
@@ -476,8 +476,8 @@ export default {
 
         case `/${配置路径}/` + atob('Y2xhc2g='):
           await 加载节点和配置(env, hostName);
-          const config = await 获取配置(env, atob('Y2xhc2g='), hostName);
-          return new Response(config, { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8" } });
+          const config1 = await 获取配置(env, atob('Y2xhc2g='), hostName);
+          return new Response(config1, { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8" } });
 
         case `/${配置路径}/` + atob('djJyYXluZw=='):
           await 加载节点和配置(env, hostName);
@@ -486,8 +486,8 @@ export default {
 
         case `/${配置路径}/upload`:
           const uploadToken = 请求.headers.get('Cookie')?.split('=')[1];
-          const 有效UploadToken = await env.LOGIN_STATE.get('current_token');
-          if (!uploadToken || uploadToken !== 有效UploadToken) {
+          const upload有效Token = await env.LOGIN_STATE.get('current_token');
+          if (!uploadToken || uploadToken !== upload有效Token) {
             return 创建JSON响应({ error: '未登录或Token无效，请重新登录' }, 401);
           }
           formData = await 请求.formData();
@@ -531,8 +531,8 @@ export default {
 
         case `/${配置路径}/change-uuid`:
           const changeToken = 请求.headers.get('Cookie')?.split('=')[1];
-          const 有效ChangeToken = await env.LOGIN_STATE.get('current_token');
-          if (!changeToken || changeToken !== 有效ChangeToken) {
+          const change有效Token = await env.LOGIN_STATE.get('current_token');
+          if (!changeToken || changeToken !== change有效Token) {
             return 创建JSON响应({ error: '未登录或Token无效' }, 401);
           }
           const 新UUID = 生成UUID();
