@@ -94,12 +94,12 @@ function 生成登录注册界面(类型, 额外参数 = {}) {
         <form class="auth-form" action="/login/submit" method="POST" enctype="application/x-www-form-urlencoded">
           <input type="text" name="username" placeholder="登录账号" required>
           <input type="password" name="password" placeholder="登录密码" required>
-          <button type="submit">立即登录</button>
+          <button type="submit" id="loginButton" ${额外参数.锁定状态 ? 'disabled' : ''}>立即登录</button>
         </form>
         ${额外参数.输错密码 ? `<div class="error-message">密码错误，剩余尝试次数：${额外参数.剩余次数}</div>` : ''}
         ${额外参数.锁定状态 ? `
           <div class="lock-message">
-            账户锁定，请${额外参数.剩余时间}秒后重试
+            账户锁定，请<span id="countdown">${额外参数.剩余时间}</span>秒后重试
           </div>` : ''}
         ${额外参数.错误信息 ? `<div class="error-message">${额外参数.错误信息}</div>` : ''}
       `
@@ -190,6 +190,12 @@ function 生成登录注册界面(类型, 额外参数 = {}) {
     .auth-form button:active {
       transform: scale(0.95);
     }
+    .auth-form button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+      box-shadow: none;
+      transform: none;
+    }
     .error-message {
       color: #ff6666;
       margin-top: 15px;
@@ -199,6 +205,16 @@ function 生成登录注册界面(类型, 额外参数 = {}) {
       color: #ff6666;
       margin-top: 20px;
       font-size: 1.1em;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+    }
+    #countdown {
+      color: #ff1493;
+      font-weight: bold;
+      min-width: 50px;
+      text-align: center;
     }
     @media (max-width: 600px) {
       .auth-container { padding: 20px; }
@@ -226,6 +242,58 @@ function 生成登录注册界面(类型, 额外参数 = {}) {
     updateBackground();
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
 
+    // 倒计时逻辑
+    let remainingTime = ${额外参数.锁定状态 ? 额外参数.剩余时间 : 0};
+    const countdownElement = document.getElementById('countdown');
+    const loginButton = document.getElementById('loginButton');
+
+    function startCountdown() {
+      if (!countdownElement) return;
+
+      const interval = setInterval(() => {
+        if (remainingTime <= 0) {
+          clearInterval(interval);
+          countdownElement.textContent = '0';
+          loginButton.disabled = false;
+          document.querySelector('.lock-message').textContent = '锁定已解除，请重新尝试登录';
+          fetch('/reset-login-failures', { method: 'POST' });
+          return;
+        }
+        countdownElement.textContent = remainingTime;
+        remainingTime--;
+      }, 1000);
+    }
+
+    function syncWithServer() {
+      fetch('/check-lock')
+        .then(response => response.json())
+        .then(data => {
+          if (data.locked) {
+            remainingTime = data.remainingTime;
+            countdownElement.textContent = remainingTime;
+            loginButton.disabled = true;
+          } else {
+            remainingTime = 0;
+            countdownElement.textContent = '0';
+            loginButton.disabled = false;
+            document.querySelector('.lock-message').textContent = '锁定已解除，请重新尝试登录';
+          }
+        })
+        .catch(error => {
+          console.error('同步锁定状态失败:', error);
+        });
+    }
+
+    if (${额外参数.锁定状态}) {
+      startCountdown();
+      setInterval(syncWithServer, 10000);
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          syncWithServer();
+        }
+      });
+    }
+
     // 防止 UA 切换触发表单提交
     document.querySelector('.auth-form')?.addEventListener('submit', function(event) {
       if (!event.isTrusted) {
@@ -241,10 +309,9 @@ function 生成登录注册界面(类型, 额外参数 = {}) {
       if (currentUA !== lastUA) {
         console.log('UA 已切换，从', lastUA, '到', currentUA);
         lastUA = currentUA;
-        // 可在这里添加平滑调整逻辑，例如调整样式
       }
     }
-    setInterval(checkUAChange, 500); // 每 500ms 检查一次 UA
+    setInterval(checkUAChange, 500);
   </script>
 </body>
 </html>
@@ -349,7 +416,6 @@ export default {
         return await 升级请求(请求, env);
       }
 
-      // 处理意外的 /login/submit 或 /register/submit 请求
       if (url.pathname === '/login/submit' || url.pathname === '/register/submit') {
         const contentType = 请求.headers.get('Content-Type') || '';
         if (!contentType.includes('application/x-www-form-urlencoded') && !contentType.includes('multipart/form-data')) {
@@ -429,9 +495,10 @@ export default {
 
         if (失败次数 >= 最大失败次数) {
           await env.LOGIN_STATE.put(`lock_${设备标识}`, String(Date.now() + 锁定时间), { expirationTtl: 300 });
+          const 新锁定状态 = await 检查锁定(env, 设备标识);
           return 创建HTML响应(生成登录注册界面('登录', {
             锁定状态: true,
-            剩余时间: 锁定时间 / 1000
+            剩余时间: 新锁定状态.剩余时间
           }), 403);
         }
 
@@ -467,6 +534,13 @@ export default {
           await env.LOGIN_STATE.put(`fail_${设备标识}`, '0');
           await env.LOGIN_STATE.delete(`lock_${设备标识}`);
           return new Response(null, { status: 200 });
+
+        case '/check-lock':
+          const 锁定检查 = await 检查锁定(env, 设备标识);
+          return 创建JSON响应({
+            locked: 锁定检查.被锁定,
+            remainingTime: 锁定检查.剩余时间
+          });
 
         case `/${配置路径}`:
           const Token = 请求.headers.get('Cookie')?.split('=')[1];
@@ -1195,7 +1269,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       if (currentUA !== lastUA) {
         console.log('UA 已切换，从', lastUA, '到', currentUA);
         lastUA = currentUA;
-        adjustLayoutForUA(); // 动态调整布局
+        adjustLayoutForUA();
       }
     }
     setInterval(checkUAChange, 500);
@@ -1219,7 +1293,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
         });
       }
     }
-    adjustLayoutForUA(); // 初始调整
+    adjustLayoutForUA();
   </script>
 </body>
 </html>
@@ -1319,7 +1393,6 @@ function 生成KV未绑定提示页面() {
     updateBackground();
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
 
-    // 平滑处理 UA 切换
     let lastUA = navigator.userAgent;
     function checkUAChange() {
       const currentUA = navigator.userAgent;
