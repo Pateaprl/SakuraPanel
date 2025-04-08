@@ -99,7 +99,7 @@ function 生成登录注册界面(类型, 额外参数 = {}) {
         ${额外参数.输错密码 ? `<div class="error-message">密码错误，剩余尝试次数：${额外参数.剩余次数}</div>` : ''}
         ${额外参数.锁定状态 ? `
           <div class="lock-message">
-            账户锁定，请${额外参数.剩余时间}秒后重试
+            账户锁定，还剩 <span id="countdown">${额外参数.剩余时间}</span> 秒
           </div>` : ''}
         ${额外参数.错误信息 ? `<div class="error-message">${额外参数.错误信息}</div>` : ''}
       `
@@ -200,6 +200,13 @@ function 生成登录注册界面(类型, 额外参数 = {}) {
       margin-top: 20px;
       font-size: 1.1em;
     }
+    #countdown {
+      display: inline-block;
+      min-width: 2em;
+      text-align: center;
+      font-weight: bold;
+      color: #ff1493;
+    }
     @media (max-width: 600px) {
       .auth-container { padding: 20px; }
       h1 { font-size: 1.5em; }
@@ -232,6 +239,22 @@ function 生成登录注册界面(类型, 额外参数 = {}) {
         console.log('阻止非用户触发的表单提交');
       }
     });
+
+    // 动态倒计时逻辑
+    const countdownElement = document.getElementById('countdown');
+    if (countdownElement) {
+      let remainingSeconds = ${额外参数.剩余时间 || 0};
+      function updateCountdown() {
+        countdownElement.textContent = remainingSeconds;
+        if (remainingSeconds <= 0) {
+          window.location.reload(); // 倒计时结束时刷新页面
+        } else {
+          remainingSeconds--;
+          setTimeout(updateCountdown, 1000);
+        }
+      }
+      updateCountdown();
+    }
 
     let lastUA = navigator.userAgent;
     function checkUAChange() {
