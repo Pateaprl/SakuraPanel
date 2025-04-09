@@ -65,7 +65,7 @@ async function 加密密码(密码) {
 }
 
 async function 检查锁定(env, 设备标识) {
-  const 锁定时间戳 = await env.LOGIN_STATE.get(`lock_${设备标识}`);
+  const 锁定时间戳 = await env.LOCAL_STATE.get(`lock_${设备标识}`);
   const 当前时间 = Date.now();
   const 被锁定 = 锁定时间戳 && 当前时间 < Number(锁定时间戳);
   return {
@@ -242,12 +242,14 @@ function 生成登录注册界面(类型, 额外参数 = {}) {
     updateBackground();
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
 
+    // 倒计时逻辑
     let remainingTime = ${额外参数.锁定状态 ? 额外参数.剩余时间 : 0};
     const countdownElement = document.getElementById('countdown');
     const loginButton = document.getElementById('loginButton');
 
     function startCountdown() {
       if (!countdownElement) return;
+
       const interval = setInterval(() => {
         if (remainingTime <= 0) {
           clearInterval(interval);
@@ -277,17 +279,22 @@ function 生成登录注册界面(类型, 额外参数 = {}) {
             document.querySelector('.lock-message').textContent = '锁定已解除，请重新尝试登录';
           }
         })
-        .catch(error => console.error('同步锁定状态失败:', error));
+        .catch(error => {
+          console.error('同步锁定状态失败:', error);
+        });
     }
 
     if (${额外参数.锁定状态}) {
       startCountdown();
       setInterval(syncWithServer, 10000);
       document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') syncWithServer();
+        if (document.visibilityState === 'visible') {
+          syncWithServer();
+        }
       });
     }
 
+    // 防止 UA 切换触发表单提交
     document.querySelector('.auth-form')?.addEventListener('submit', function(event) {
       if (!event.isTrusted) {
         event.preventDefault();
@@ -295,6 +302,7 @@ function 生成登录注册界面(类型, 额外参数 = {}) {
       }
     });
 
+    // 监听 UA 变化并平滑处理
     let lastUA = navigator.userAgent;
     function checkUAChange() {
       const currentUA = navigator.userAgent;
@@ -619,24 +627,24 @@ export default {
           formData = await 请求.formData();
           const proxyEnabled = formData.get('proxyEnabled');
           const proxyType = formData.get('proxyType');
-          const forceReverse = formData.get('forceReverse');
+          const forceReverse = formData.get('forceReverse'); // 新增强制反代参数
           await env.LOGIN_STATE.put('proxyEnabled', proxyEnabled);
           await env.LOGIN_STATE.put('proxyType', proxyType);
-          await env.LOGIN_STATE.put('forceReverse', forceReverse);
+          await env.LOGIN_STATE.put('forceReverse', forceReverse); // 保存强制反代状态
           return new Response(null, { status: 200 });
 
         case '/get-proxy-status':
           const 代理启用 = await env.LOGIN_STATE.get('proxyEnabled') === 'true';
           const 代理类型 = await env.LOGIN_STATE.get('proxyType') || 'reverse';
-          const 强制反代 = await env.LOGIN_STATE.get('forceReverse') === 'true';
+          const 强制反代 = await env.LOGIN_STATE.get('forceReverse') === 'true'; // 获取强制反代状态
           const 反代地址 = env.PROXYIP || 'ts.hpc.tw';
           const SOCKS5账号 = env.SOCKS5 || '';
           let status = '直连';
           if (代理启用) {
-            if (强制反代 && 代理类型 === 'reverse' && 反代地址) {
+            if (强制反代 && 反代地址) {
               status = '强制反代';
             } else if (代理类型 === 'reverse' && 反代地址) {
-              status = '动态反代';
+              status = '反代';
             } else if (代理类型 === 'socks5' && SOCKS5账号) {
               status = 'SOCKS5';
             }
@@ -704,9 +712,6 @@ async function 解析头(数据, env, uuid) {
 async function 智能连接(地址, 端口, 地址类型, env) {
   const 反代地址 = env.PROXYIP || 'ts.hpc.tw';
   const SOCKS5账号 = env.SOCKS5 || '';
-  const 代理启用 = await env.LOGIN_STATE.get('proxyEnabled') === 'true';
-  const 代理类型 = await env.LOGIN_STATE.get('proxyType') || 'reverse';
-  const 强制反代 = await env.LOGIN_STATE.get('forceReverse') === 'true';
 
   if (!地址 || 地址.trim() === '') {
     return await 尝试直连(地址, 端口);
@@ -716,56 +721,54 @@ async function 智能连接(地址, 端口, 地址类型, env) {
   const 是IP = 地址类型 === 1 || (地址类型 === 2 && 地址.match(/^\d+\.\d+\.\d+\.\d+$/)) || 地址类型 === 3;
 
   if (是域名 || 是IP) {
+    const 代理启用 = await env.LOGIN_STATE.get('proxyEnabled') === 'true';
+    const 代理类型 = await env.LOGIN_STATE.get('proxyType') || 'reverse';
+    const 强制反代 = await env.LOGIN_STATE.get('forceReverse') === 'true';
+
     if (!代理启用) {
       return await 尝试直连(地址, 端口);
     }
 
-    if (强制反代 && 代理类型 === 'reverse' && 反代地址) {
-      const [反代主机, 反代端口] = 反代地址.split(':');
-      const 连接 = connect({ hostname: 反代主机, port: 反代端口 || 端口 });
-      await 连接.opened;
-      console.log(`强制反代连接: ${反代地址}`);
-      return 连接;
-    }
-
-    try {
-      const 直连 = await 尝试直连(地址, 端口);
-      const 需要反代 = await 需要使用反代(地址);
-      if (!需要反代) {
-        return 直连;
-      }
-      直连.close();
-    } catch (错误) {
-      console.log(`直连失败，切换到代理: ${错误.message}`);
-    }
-
-    if (代理类型 === 'reverse' && 反代地址) {
+    if (强制反代 && 反代地址) {
       try {
         const [反代主机, 反代端口] = 反代地址.split(':');
         const 连接 = connect({ hostname: 反代主机, port: 反代端口 || 端口 });
         await 连接.opened;
-        console.log(`动态反代连接: ${反代地址}`);
+        console.log(`强制通过反代连接: ${反代地址}`);
         return 连接;
       } catch (错误) {
-        console.error(`反代连接失败: ${错误.message}`);
-      }
-    } else if (代理类型 === 'socks5' && SOCKS5账号) {
-      try {
-        const SOCKS5连接 = await 创建SOCKS5(地址类型, 地址, 端口);
-        console.log(`通过 SOCKS5 连接: ${地址}:${端口}`);
-        return SOCKS5连接;
-      } catch (错误) {
-        console.error(`SOCKS5 连接失败: ${错误.message}`);
+        console.error(`强制反代连接失败: ${错误.message}`);
       }
     }
+
+    if (代理类型 === 'reverse') {
+      if (反代地址) {
+        try {
+          const [反代主机, 反代端口] = 反代地址.split(':');
+          const 连接 = connect({ hostname: 反代主机, port: 反代端口 || 端口 });
+          await 连接.opened;
+          console.log(`通过反代连接: ${反代地址}`);
+          return 连接;
+        } catch (错误) {
+          console.error(`反代连接失败: ${错误.message}`);
+        }
+      }
+    } else if (代理类型 === 'socks5') {
+      if (SOCKS5账号) {
+        try {
+          const SOCKS5连接 = await 创建SOCKS5(地址类型, 地址, 端口);
+          console.log(`通过 SOCKS5 连接: ${地址}:${端口}`);
+          return SOCKS5连接;
+        } catch (错误) {
+          console.error(`SOCKS5 连接失败: ${错误.message}`);
+        }
+      }
+    }
+
+    return await 尝试直连(地址, 端口);
   }
 
   return await 尝试直连(地址, 端口);
-}
-
-async function 需要使用反代(地址) {
-  const cf相关域名 = ['cloudflare.com', 'example.com']; // 可扩展列表
-  return cf相关域名.some(domain => 地址.includes(domain));
 }
 
 async function 尝试直连(地址, 端口) {
@@ -958,147 +961,48 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       margin-bottom: 15px;
       text-shadow: 1px 1px 3px rgba(255, 105, 180, 0.2);
     }
-    .switch-container { 
-      display: flex; 
-      flex-direction: column; 
-      align-items: center; 
-      gap: 20px; 
-      padding: 15px 0; 
-    }
-    .toggle-row { 
-      display: flex; 
-      align-items: center; 
-      justify-content: space-between; 
-      width: 100%; 
-      max-width: 320px; 
-      padding: 10px 15px; 
-      background: rgba(255, 245, 247, 0.5); 
-      border-radius: 12px; 
-      box-shadow: 0 2px 8px rgba(255, 182, 193, 0.1); 
-      transition: all 0.3s ease; 
-    }
-    .toggle-row:hover { 
-      box-shadow: 0 4px 12px rgba(255, 182, 193, 0.2); 
-    }
-    .toggle-label {
-      font-size: 1em;
-      color: #ff6f91;
-      font-weight: 500;
-    }
-    .modern-toggle {
-      position: relative;
-      width: 60px;
-      height: 30px;
-    }
-    .modern-toggle input { 
-      opacity: 0; 
-      width: 0; 
-      height: 0; 
-    }
-    .modern-slider {
+    .switch-container { display: flex; flex-direction: column; align-items: center; gap: 15px; }
+    .toggle-row { display: flex; align-items: center; gap: 15px; }
+    .toggle-switch { position: relative; display: inline-block; width: 60px; height: 34px; }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .slider {
       position: absolute;
+      cursor: pointer;
       top: 0;
       left: 0;
       right: 0;
       bottom: 0;
-      background: #e9ecef;
-      border-radius: 15px;
-      cursor: pointer;
-      transition: background 0.3s ease;
+      background-color: #ccc;
+      transition: .4s;
+      border-radius: 34px;
     }
-    .modern-slider:before {
-      content: '';
+    .slider:before {
       position: absolute;
-      width: 24px;
-      height: 24px;
-      left: 3px;
-      top: 3px;
-      background: #fff;
+      content: "";
+      height: 26px;
+      width: 26px;
+      left: 4px;
+      bottom: 4px;
+      background-color: white;
+      transition: .4s;
       border-radius: 50%;
-      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
-      transition: transform 0.3s ease;
     }
-    .modern-toggle input:checked + .modern-slider {
-      background: linear-gradient(to right, #ff69b4, #ff85a2);
-    }
-    .modern-toggle input:checked + .modern-slider:before {
-      transform: translateX(30px);
-    }
-    .proxy-options-container {
-      display: none;
-      width: 100%;
-      max-width: 320px;
-      flex-direction: column;
-      gap: 15px;
-    }
-    .proxy-type-toggle {
-      display: flex;
-      justify-content: center;
-      gap: 10px;
-    }
-    .type-button {
-      flex: 1;
-      padding: 10px 0;
-      font-size: 0.95em;
-      color: #ff6f91;
-      background: rgba(255, 245, 247, 0.5);
-      border: none;
-      border-radius: 10px;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      box-shadow: 0 2px 6px rgba(255, 182, 193, 0.1);
-    }
-    .type-button.active {
-      background: linear-gradient(to right, #ffb6c1, #ff69b4);
-      color: white;
-      box-shadow: 0 4px 10px rgba(255, 105, 180, 0.3);
-    }
-    .type-button:hover:not(.active) {
-      background: rgba(255, 209, 220, 0.8);
-    }
-    .force-reverse-container {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      width: 100%;
-      max-width: 320px;
-      padding: 10px 15px;
-      background: rgba(255, 245, 247, 0.5);
-      border-radius: 12px;
-      box-shadow: 0 2px 8px rgba(255, 182, 193, 0.1);
-      transition: all 0.3s ease;
-    }
-    .force-reverse-container:hover {
-      box-shadow: 0 4px 12px rgba(255, 182, 193, 0.2);
-    }
-    .info-icon {
-      cursor: pointer;
-      color: #ff69b4;
-      font-size: 1.2em;
-      transition: transform 0.2s ease, color 0.2s ease;
-    }
-    .info-icon:hover {
-      transform: scale(1.15);
-      color: #ff1493;
-    }
-    .proxy-status { 
-      margin-top: 20px; 
-      padding: 12px 20px; 
-      border-radius: 12px; 
-      font-size: 0.95em; 
-      word-break: break-all; 
-      transition: all 0.3s ease; 
-      width: 100%; 
-      max-width: 320px; 
-      text-align: center; 
-      background: rgba(233, 236, 239, 0.9); 
-      color: #495057; 
-    }
-    .proxy-status.success { 
-      background: rgba(212, 237, 218, 0.9); 
-      color: #155724; 
-    }
-    .link-box, .uuid-box { border-radius: 15px; padding: 15px; margin: 10px 0; font-size: 0.95em; word-break: break-all; }
+    input:checked + .slider { background-color: #ff69b4; }
+    input:checked + .slider:before { transform: translateX(26px); }
+    .proxy-capsule { display: flex; border-radius: 20px; overflow: hidden; background: #ffe6f0; box-shadow: 0 4px 10px rgba(255, 182, 193, 0.2); }
+    .proxy-option { width: 80px; padding: 10px 0; text-align: center; cursor: pointer; color: #ff6f91; transition: all 0.3s ease; position: relative; font-size: 1em; }
+    .proxy-option.active { background: linear-gradient(to right, #ffb6c1, #ff69b4); color: white; box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.1); }
+    .proxy-option:not(.active):hover { background: #ffd1dc; }
+    .proxy-option[data-type="socks5"].active { background: linear-gradient(to right, #ffd1dc, #ff85a2); }
+    .proxy-option::before { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: rgba(255, 255, 255, 0.2); transform: rotate(30deg); transition: all 0.5s ease; pointer-events: none; }
+    .proxy-option:hover::before { top: 100%; left: 100%; }
+    .force-reverse-row { display: flex; align-items: center; gap: 10px; }
+    .info-icon { font-size: 1.2em; color: #ff85a2; cursor: pointer; transition: color 0.3s ease; }
+    .info-icon:hover { color: #ff1493; }
+    .proxy-status, .uuid-box { margin-top: 20px; padding: 15px; border-radius: 15px; font-size: 0.95em; word-break: break-all; transition: background 0.3s ease, color 0.3s ease; width: 100%; box-sizing: border-box; }
+    .proxy-status.success { background: rgba(212, 237, 218, 0.9); color: #155724; }
+    .proxy-status.direct { background: rgba(233, 236, 239, 0.9); color: #495057; }
+    .link-box { border-radius: 15px; padding: 15px; margin: 10px 0; font-size: 0.95em; word-break: break-all; }
     .link-box a { color: #ff69b4; text-decoration: none; transition: color 0.3s ease; }
     .link-box a:hover { color: #ff1493; }
     .button-group { display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; margin-top: 15px; }
@@ -1130,23 +1034,12 @@ function 生成订阅页面(配置路径, hostName, uuid) {
     .progress-bar { width: 100%; height: 15px; background: #ffe6f0; border-radius: 10px; overflow: hidden; border: 1px solid #ffb6c1; }
     .progress-fill { height: 100%; background: linear-gradient(to right, #ff69b4, #ff1493); width: 0; transition: width 0.3s ease; }
     .progress-text { text-align: center; font-size: 0.85em; color: #ff6f91; margin-top: 5px; }
-    @media (prefers-color-scheme: dark) {
-      .toggle-row, .force-reverse-container { background: rgba(40, 40, 40, 0.5); }
-      .modern-slider { background: #495057; }
-      .modern-toggle input:checked + .modern-slider { background: linear-gradient(to right, #ff85a2, #ff1493); }
-      .type-button { background: rgba(50, 50, 50, 0.5); color: #ffd1dc; }
-      .type-button.active { background: linear-gradient(to right, #ff85a2, #ff1493); }
-      .type-button:hover:not(.active) { background: rgba(80, 80, 80, 0.8); }
-      .proxy-status { background: rgba(50, 50, 50, 0.9); color: #e9ecef; }
-      .proxy-status.success { background: rgba(40, 80, 60, 0.9); color: #d4edda; }
-    }
     @media (max-width: 600px) {
       .card { padding: 15px; max-width: 90%; }
       .card-title { font-size: 1.3em; }
       .switch-container { gap: 10px; }
       .toggle-row { gap: 10px; }
-      .proxy-type-toggle { gap: 8px; }
-      .type-button { padding: 8px 0; font-size: 0.9em; }
+      .proxy-option { width: 70px; padding: 8px 0; font-size: 0.9em; }
       .proxy-status, .uuid-box { font-size: 0.9em; padding: 12px; }
       .link-box { font-size: 0.9em; padding: 12px; }
       .cute-button, .upload-label, .upload-submit { padding: 10px 20px; font-size: 0.9em; }
@@ -1174,28 +1067,26 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       <h2 class="card-title">🌟 代理设置</h2>
       <div class="switch-container">
         <div class="toggle-row">
-          <span class="toggle-label">代理开关</span>
-          <label class="modern-toggle">
+          <label>代理开关</label>
+          <label class="toggle-switch">
             <input type="checkbox" id="proxyToggle" onchange="toggleProxy()">
-            <span class="modern-slider"></span>
+            <span class="slider"></span>
           </label>
         </div>
-        <div class="proxy-options-container" id="proxyOptions">
-          <div class="proxy-type-toggle">
-            <button class="type-button active" data-type="reverse" onclick="switchProxyType('reverse')">反代</button>
-            <button class="type-button" data-type="socks5" onclick="switchProxyType('socks5')">SOCKS5</button>
-          </div>
-          <div class="force-reverse-container">
-            <span class="toggle-label">模式切换</span>
-            <label class="modern-toggle">
-              <input type="checkbox" id="forceReverseToggle" onchange="toggleForceReverse()">
-              <span class="modern-slider"></span>
-            </label>
-            <span class="info-icon" onclick="showForceReverseInfo()">❓</span>
-          </div>
+        <div class="proxy-capsule" id="proxyCapsule">
+          <div class="proxy-option active" data-type="reverse" onclick="switchProxyType('reverse')">反代</div>
+          <div class="proxy-option" data-type="socks5" onclick="switchProxyType('socks5')">SOCKS5</div>
         </div>
-        <div class="proxy-status" id="proxyStatus">直连</div>
+        <div class="force-reverse-row" id="forceReverseRow">
+          <label>强制反代</label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="forceReverseToggle" onchange="toggleForceReverse()">
+            <span class="slider"></span>
+          </label>
+          <span class="info-icon" onclick="showForceReverseInfo()">ℹ️</span>
+        </div>
       </div>
+      <div class="proxy-status" id="proxyStatus">直连</div>
     </div>
     <div class="card">
       <h2 class="card-title">🐾 配置1订阅</h2>
@@ -1251,17 +1142,18 @@ function 生成订阅页面(配置路径, hostName, uuid) {
 
     let proxyEnabled = localStorage.getItem('proxyEnabled') === 'true';
     let proxyType = localStorage.getItem('proxyType') || 'reverse';
-    let forceReverse = localStorage.getItem('forceReverse') === 'true';
-
+    let forceReverse = localStorage.getItem('forceReverse') === 'true'; // 新增强制反代状态
     document.getElementById('proxyToggle').checked = proxyEnabled;
     document.getElementById('forceReverseToggle').checked = forceReverse;
-    updateProxyOptionsUI();
+    updateProxyCapsuleUI();
+    updateForceReverseUI();
     updateProxyStatus();
 
     function toggleProxy() {
       proxyEnabled = document.getElementById('proxyToggle').checked;
       localStorage.setItem('proxyEnabled', proxyEnabled);
-      updateProxyOptionsUI();
+      updateProxyCapsuleUI();
+      updateForceReverseUI();
       saveProxyState();
       updateProxyStatus();
     }
@@ -1269,7 +1161,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
     function switchProxyType(type) {
       proxyType = type;
       localStorage.setItem('proxyType', proxyType);
-      updateProxyOptionsUI();
+      updateProxyCapsuleUI();
       saveProxyState();
       updateProxyStatus();
     }
@@ -1281,17 +1173,20 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       updateProxyStatus();
     }
 
-    function updateProxyOptionsUI() {
-      const proxyOptions = document.getElementById('proxyOptions');
-      proxyOptions.style.display = proxyEnabled ? 'flex' : 'none';
-      const typeButtons = document.querySelectorAll('.type-button');
-      typeButtons.forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.type === proxyType);
+    function updateProxyCapsuleUI() {
+      const options = document.querySelectorAll('.proxy-option');
+      options.forEach(opt => {
+        opt.classList.toggle('active', opt.dataset.type === proxyType);
       });
+      document.getElementById('proxyCapsule').style.display = proxyEnabled ? 'flex' : 'none';
+    }
+
+    function updateForceReverseUI() {
+      document.getElementById('forceReverseRow').style.display = proxyEnabled ? 'flex' : 'none';
     }
 
     function showForceReverseInfo() {
-      alert('🌸 模式说明 🌸\\n\\n动态模式：优先使用Clash选择的优选IP，访问受限时切换代理\\n强制模式：始终使用代理服务器IP，无论选择何种节点');
+      alert('🌸 强制走反代提示 🌸\n\n强制走反代后，无论你在 ${atob('Y2xhc2g=')} 选择哪个国家的节点IP，外部出口的归属地始终会显示代理服务器的归属地。\n\n关闭强制反代后，会优先使用 ${atob('Y2xhc2g=')} 选择的优选IP作为外部出口IP。如果无法访问被CF代理的网站或部分屏蔽了CF CDN的网站，则会动态使用代理IP访问哦~');
     }
 
     function updateProxyStatus() {
@@ -1317,7 +1212,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       const formData = new FormData();
       formData.append('proxyEnabled', proxyEnabled);
       formData.append('proxyType', proxyType);
-      formData.append('forceReverse', forceReverse);
+      formData.append('forceReverse', forceReverse); // 保存强制反代状态
       fetch('/set-proxy-state', { method: 'POST', body: formData })
         .then(() => updateProxyStatus());
     }
@@ -1419,6 +1314,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       xhr.send(formData);
     }
 
+    // 平滑处理 UA 切换
     let lastUA = navigator.userAgent;
     function checkUAChange() {
       const currentUA = navigator.userAgent;
