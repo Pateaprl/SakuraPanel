@@ -1484,15 +1484,15 @@ function 生成KV未绑定提示页面() {
 }
 
 let 外部规则URLs = [
-  'https://raw.githubusercontent.com/Loyalsoldier/clash-rules/master/lan.txt',
-  'https://raw.githubusercontent.com/Loyalsoldier/clash-rules/master/reject.txt',
-  'https://raw.githubusercontent.com/Loyalsoldier/clash-rules/master/direct.txt',
-  'https://raw.githubusercontent.com/Loyalsoldier/clash-rules/master/cncidr.txt',
-  'https://raw.githubusercontent.com/Loyalsoldier/clash-rules/master/proxy.txt',
-  'https://raw.githubusercontent.com/Loyalsoldier/clash-rules/master/gfw.txt',
-  'https://raw.githubusercontent.com/Loyalsoldier/clash-rules/master/apple.txt',
-  'https://raw.githubusercontent.com/Loyalsoldier/clash-rules/master/google.txt',
-  'https://raw.githubusercontent.com/Loyalsoldier/clash-rules/master/telegramcidr.txt'
+  'https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@master/lan.txt',
+  'https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@master/reject.txt',
+  'https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@master/direct.txt',
+  'https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@master/cncidr.txt',
+  'https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@master/proxy.txt',
+  'https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@master/gfw.txt',
+  'https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@master/apple.txt',
+  'https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@master/google.txt',
+  'https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@master/telegramcidr.txt'
 ];
 
 async function fetchWithRetry(url, retries = 3, timeout = 5000) {
