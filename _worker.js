@@ -74,7 +74,7 @@ async function 检查锁定(env, 设备标识) {
   };
 }
 
-function 生成登录注册界面(类型, 额外参数 = {}) {
+function 生成登录注册界面(类型 Miracles类型, 额外参数 = {}) {
   const 界面数据 = {
     注册: {
       title: '🌸首次使用注册🌸',
@@ -242,7 +242,6 @@ function 生成登录注册界面(类型, 额外参数 = {}) {
     updateBackground();
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
 
-    // 倒计时逻辑
     let remainingTime = ${额外参数.锁定状态 ? 额外参数.剩余时间 : 0};
     const countdownElement = document.getElementById('countdown');
     const loginButton = document.getElementById('loginButton');
@@ -294,7 +293,6 @@ function 生成登录注册界面(类型, 额外参数 = {}) {
       });
     }
 
-    // 防止 UA 切换触发表单提交
     document.querySelector('.auth-form')?.addEventListener('submit', function(event) {
       if (!event.isTrusted) {
         event.preventDefault();
@@ -302,7 +300,6 @@ function 生成登录注册界面(类型, 额外参数 = {}) {
       }
     });
 
-    // 监听 UA 变化并平滑处理
     let lastUA = navigator.userAgent;
     function checkUAChange() {
       const currentUA = navigator.userAgent;
@@ -627,19 +624,25 @@ export default {
           formData = await 请求.formData();
           const proxyEnabled = formData.get('proxyEnabled');
           const proxyType = formData.get('proxyType');
+          const forceProxy = formData.get('forceProxy');
           await env.LOGIN_STATE.put('proxyEnabled', proxyEnabled);
           await env.LOGIN_STATE.put('proxyType', proxyType);
+          await env.LOGIN_STATE.put('forceProxy', forceProxy);
           return new Response(null, { status: 200 });
 
         case '/get-proxy-status':
           const 代理启用 = await env.LOGIN_STATE.get('proxyEnabled') === 'true';
           const 代理类型 = await env.LOGIN_STATE.get('proxyType') || 'reverse';
+          const 强制代理 = await env.LOGIN_STATE.get('forceProxy') === 'true';
           const 反代地址 = env.PROXYIP || 'ts.hpc.tw';
           const SOCKS5账号 = env.SOCKS5 || '';
           let status = '直连';
           if (代理启用) {
-            if (代理类型 === 'reverse' && 反代地址) status = '反代';
-            else if (代理类型 === 'socks5' && SOCKS5账号) status = 'SOCKS5';
+            if (强制代理) {
+              status = 代理类型 === 'reverse' && 反代地址 ? '强制代理 (反代)' : 代理类型 === 'socks5' && SOCKS5账号 ? '强制代理 (SOCKS5)' : '强制代理 (未配置)';
+            } else {
+              status = 代理类型 === 'reverse' && 反代地址 ? '动态代理 (反代)' : 代理类型 === 'socks5' && SOCKS5账号 ? '动态代理 (SOCKS5)' : '动态代理 (未配置)';
+            }
           }
           return 创建JSON响应({ status });
 
@@ -704,50 +707,58 @@ async function 解析头(数据, env, uuid) {
 async function 智能连接(地址, 端口, 地址类型, env) {
   const 反代地址 = env.PROXYIP || 'ts.hpc.tw';
   const SOCKS5账号 = env.SOCKS5 || '';
+  const 代理启用 = await env.LOGIN_STATE.get('proxyEnabled') === 'true';
+  const 代理类型 = await env.LOGIN_STATE.get('proxyType') || 'reverse';
+  const 强制代理 = await env.LOGIN_STATE.get('forceProxy') === 'true';
 
-  if (!地址 || 地址.trim() === '') {
+  if (!代理启用) {
     return await 尝试直连(地址, 端口);
   }
 
-  const 是域名 = 地址类型 === 2 && !地址.match(/^\d+\.\d+\.\d+\.\d+$/);
-  const 是IP = 地址类型 === 1 || (地址类型 === 2 && 地址.match(/^\d+\.\d+\.\d+\.\d+$/)) || 地址类型 === 3;
-
-  if (是域名 || 是IP) {
-    const 代理启用 = await env.LOGIN_STATE.get('proxyEnabled') === 'true';
-    const 代理类型 = await env.LOGIN_STATE.get('proxyType') || 'reverse';
-
-    if (!代理启用) {
-      return await 尝试直连(地址, 端口);
+  if (强制代理) {
+    if (代理类型 === 'reverse' && 反代地址) {
+      const [反代主机, 反代端口] = 反代地址.split(':');
+      const 连接 = connect({ hostname: 反代主机, port: 反代端口 || 端口 });
+      await 连接.opened;
+      console.log(`强制代理 (反代) 连接: ${反代地址}`);
+      return 连接;
+    } else if (代理类型 === 'socks5' && SOCKS5账号) {
+      const SOCKS5连接 = await 创建SOCKS5(地址类型, 地址, 端口);
+      console.log(`强制代理 (SOCKS5) 连接: ${地址}:${端口}`);
+      return SOCKS5连接;
     }
-
-    if (代理类型 === 'reverse') {
-      if (反代地址) {
-        try {
-          const [反代主机, 反代端口] = 反代地址.split(':');
-          const 连接 = connect({ hostname: 反代主机, port: 反代端口 || 端口 });
-          await 连接.opened;
-          console.log(`通过反代连接: ${反代地址}`);
-          return 连接;
-        } catch (错误) {
-          console.error(`反代连接失败: ${错误.message}`);
-        }
-      }
-    } else if (代理类型 === 'socks5') {
-      if (SOCKS5账号) {
-        try {
-          const SOCKS5连接 = await 创建SOCKS5(地址类型, 地址, 端口);
-          console.log(`通过 SOCKS5 连接: ${地址}:${端口}`);
-          return SOCKS5连接;
-        } catch (错误) {
-          console.error(`SOCKS5 连接失败: ${错误.message}`);
-        }
-      }
-    }
-
-    return await 尝试直连(地址, 端口);
+    throw new Error('强制代理模式下未配置有效代理');
   }
 
-  return await 尝试直连(地址, 端口);
+  try {
+    const 直连 = await 尝试直连(地址, 端口);
+    console.log(`直连成功: ${地址}:${端口}`);
+    return 直连;
+  } catch (直连错误) {
+    console.error(`直连失败: ${地址}:${端口}, 错误: ${直连错误.message}`);
+    if (代理类型 === 'reverse' && 反代地址) {
+      try {
+        const [反代主机, 反代端口] = 反代地址.split(':');
+        const 连接 = connect({ hostname: 反代主机, port: 反代端口 || 端口 });
+        await 连接.opened;
+        console.log(`动态代理 (反代) 连接: ${反代地址}`);
+        return 连接;
+      } catch (反代错误) {
+        console.error(`反代失败: ${反代错误.message}`);
+        throw new Error('所有连接尝试失败');
+      }
+    } else if (代理类型 === 'socks5' && SOCKS5账号) {
+      try {
+        const SOCKS5连接 = await 创建SOCKS5(地址类型, 地址, 端口);
+        console.log(`动态代理 (SOCKS5) 连接: ${地址}:${端口}`);
+        return SOCKS5连接;
+      } catch (socks5错误) {
+        console.error(`SOCKS5 失败: ${socks5错误.message}`);
+        throw new Error('所有连接尝试失败');
+      }
+    }
+    throw 直连错误;
+  }
 }
 
 async function 尝试直连(地址, 端口) {
@@ -1010,6 +1021,19 @@ function 生成订阅页面(配置路径, hostName, uuid) {
     .progress-bar { width: 100%; height: 15px; background: #ffe6f0; border-radius: 10px; overflow: hidden; border: 1px solid #ffb6c1; }
     .progress-fill { height: 100%; background: linear-gradient(to right, #ff69b4, #ff1493); width: 0; transition: width 0.3s ease; }
     .progress-text { text-align: center; font-size: 0.85em; color: #ff6f91; margin-top: 5px; }
+    .info-icon {
+      cursor: pointer;
+      width: 20px;
+      height: 20px;
+      line-height: 20px;
+      text-align: center;
+      border-radius: 50%;
+      background: #ff69b4;
+      color: white;
+      font-weight: bold;
+      transition: background 0.3s ease;
+    }
+    .info-icon:hover { background: #ff1493; }
     @media (max-width: 600px) {
       .card { padding: 15px; max-width: 90%; }
       .card-title { font-size: 1.3em; }
@@ -1048,6 +1072,14 @@ function 生成订阅页面(配置路径, hostName, uuid) {
             <input type="checkbox" id="proxyToggle" onchange="toggleProxy()">
             <span class="slider"></span>
           </label>
+        </div>
+        <div class="toggle-row" id="forceProxyContainer" style="display: none;">
+          <label>强制代理</label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="forceProxyToggle" onchange="toggleForceProxy()">
+            <span class="slider"></span>
+          </label>
+          <span class="info-icon" onclick="showForceProxyInfo()">!</span>
         </div>
         <div class="proxy-capsule" id="proxyCapsule">
           <div class="proxy-option active" data-type="reverse" onclick="switchProxyType('reverse')">反代</div>
@@ -1109,15 +1141,24 @@ function 生成订阅页面(配置路径, hostName, uuid) {
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateBackground);
 
     let proxyEnabled = localStorage.getItem('proxyEnabled') === 'true';
+    let forceProxy = localStorage.getItem('forceProxy') === 'true';
     let proxyType = localStorage.getItem('proxyType') || 'reverse';
+
     document.getElementById('proxyToggle').checked = proxyEnabled;
-    updateProxyCapsuleUI();
-    updateProxyStatus();
+    document.getElementById('forceProxyToggle').checked = forceProxy;
+    updateProxyUI();
 
     function toggleProxy() {
       proxyEnabled = document.getElementById('proxyToggle').checked;
       localStorage.setItem('proxyEnabled', proxyEnabled);
-      updateProxyCapsuleUI();
+      updateProxyUI();
+      saveProxyState();
+      updateProxyStatus();
+    }
+
+    function toggleForceProxy() {
+      forceProxy = document.getElementById('forceProxyToggle').checked;
+      localStorage.setItem('forceProxy', forceProxy);
       saveProxyState();
       updateProxyStatus();
     }
@@ -1125,44 +1166,44 @@ function 生成订阅页面(配置路径, hostName, uuid) {
     function switchProxyType(type) {
       proxyType = type;
       localStorage.setItem('proxyType', proxyType);
-      updateProxyCapsuleUI();
+      updateProxyUI();
       saveProxyState();
       updateProxyStatus();
     }
 
-    function updateProxyCapsuleUI() {
+    function updateProxyUI() {
+      document.getElementById('forceProxyContainer').style.display = proxyEnabled ? 'flex' : 'none';
+      document.getElementById('proxyCapsule').style.display = proxyEnabled ? 'flex' : 'none';
       const options = document.querySelectorAll('.proxy-option');
       options.forEach(opt => {
         opt.classList.toggle('active', opt.dataset.type === proxyType);
       });
-      document.getElementById('proxyCapsule').style.display = proxyEnabled ? 'flex' : 'none';
     }
 
-    function updateProxyStatus() {
-      const statusElement = document.getElementById('proxyStatus');
-      if (!proxyEnabled) {
-        statusElement.textContent = '直连';
-        statusElement.className = 'proxy-status direct';
-      } else {
-        fetch('/get-proxy-status')
-          .then(response => response.json())
-          .then(data => {
-            statusElement.textContent = data.status;
-            statusElement.className = 'proxy-status ' + (data.status === '直连' ? 'direct' : 'success');
-          })
-          .catch(() => {
-            statusElement.textContent = '直连';
-            statusElement.className = 'proxy-status direct';
-          });
-      }
+    function showForceProxyInfo() {
+      alert('强制代理提示：\\n强制开启后，无论你在 Clash 选择哪个国家的节点 IP，外部出口的归属地始终会显示代理服务器的归属地（如反代 ts.hpc.tw 或 SOCKS5 配置的服务器）。\\n关闭后，将优先使用 Clash 选择的优选 IP 作为出口 IP。');
     }
 
     function saveProxyState() {
       const formData = new FormData();
       formData.append('proxyEnabled', proxyEnabled);
       formData.append('proxyType', proxyType);
+      formData.append('forceProxy', forceProxy);
       fetch('/set-proxy-state', { method: 'POST', body: formData })
         .then(() => updateProxyStatus());
+    }
+
+    function updateProxyStatus() {
+      fetch('/get-proxy-status')
+        .then(response => response.json())
+        .then(data => {
+          document.getElementById('proxyStatus').textContent = data.status;
+          document.getElementById('proxyStatus').className = 'proxy-status ' + (data.status === '直连' ? 'direct' : 'success');
+        })
+        .catch(() => {
+          document.getElementById('proxyStatus').textContent = '直连';
+          document.getElementById('proxyStatus').className = 'proxy-status direct';
+        });
     }
 
     function 导入Config(配置路径, hostName, type) {
@@ -1262,7 +1303,6 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       xhr.send(formData);
     }
 
-    // 平滑处理 UA 切换
     let lastUA = navigator.userAgent;
     function checkUAChange() {
       const currentUA = navigator.userAgent;
