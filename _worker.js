@@ -1517,5 +1517,52 @@ async function 生成配置2(env, hostName) {
   }).filter(Boolean);
 
   return `# Generated at: ${new Date().toISOString()}
-${配置列表.length ? 配置列表.join("\n") : `${atob('dmxlc3M=')}://${uuid}@${hostName}:443?encryption=none&security=tls&type=ws&host=${hostName}&path=${encodeURIComponent('/?ed=2560')}&sni=${hostName}#默认节点`}`;
+${配置列表.length ? 配置列表.join("\n") : `${atob('dmxlc3M=')}://${uuid}@${hostName}:443?encryption=none&security=tls&type=ws&host=${hostName}&path=/?ed=2560&sni=${hostName}#${节点名称}`}
+`;
+}
+
+async function 加载节点和配置(env, hostName) {
+  try {
+    const 手动节点缓存 = await env.LOGIN_STATE.get('manual_preferred_ips');
+    let 手动节点列表 = [];
+    if (手动节点缓存) {
+      手动节点列表 = JSON.parse(手动节点缓存).map(line => line.trim()).filter(Boolean);
+    }
+    优选节点 = 手动节点列表.length > 0 ? 手动节点列表 : [];
+
+    if (优选节点.length === 0) {
+      const 响应 = await Promise.all(节点文件路径.map(url => fetch(url).then(res => res.text()).catch(() => '')));
+      const 节点文本 = 响应.join('\n');
+      const 节点数组 = 节点文本.split('\n').map(line => line.trim()).filter(Boolean);
+      优选节点 = 节点数组.length > 0 ? 节点数组 : [`${hostName}:443`];
+    }
+
+    const clash版本 = await env.LOGIN_STATE.get('config_' + atob('Y2xhc2g=') + '_version') || '0';
+    const v2ray版本 = await env.LOGIN_STATE.get('config_' + atob('djJyYXk=') + '_version') || '0';
+    const 当前版本 = await env.LOGIN_STATE.get('ip_preferred_ips_version') || '0';
+
+    if (当前版本 > clash版本) {
+      await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g='), await 生成配置1(env, hostName));
+      await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g=') + '_version', 当前版本);
+    }
+
+    if (当前版本 > v2ray版本) {
+      await env.LOGIN_STATE.put('config_' + atob('djJyYXk='), await 生成配置2(env, hostName));
+      await env.LOGIN_STATE.put('config_' + atob('djJyYXk=') + '_version', 当前版本);
+    }
+  } catch (错误) {
+    console.error(`加载节点和配置失败: ${错误.message}`);
+    优选节点 = [`${hostName}:443`];
+  }
+}
+
+async function 获取配置(env, 类型, hostName) {
+  const 配置键 = 'config_' + 类型;
+  let 配置 = await env.LOGIN_STATE.get(配置键);
+  if (!配置) {
+    配置 = 类型 === atob('Y2xhc2g=') ? await 生成配置1(env, hostName) : await 生成配置2(env, hostName);
+    await env.LOGIN_STATE.put(配置键, 配置);
+    await env.LOGIN_STATE.put(配置键 + '_version', String(Date.now()));
+  }
+  return 配置;
 }
