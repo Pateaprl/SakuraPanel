@@ -1483,6 +1483,53 @@ function 生成KV未绑定提示页面() {
   `;
 }
 
+let 外部规则URLs = [
+  'https://raw.githubusercontent.com/Loyalsoldier/clash-rules/master/lan.txt',
+  'https://raw.githubusercontent.com/Loyalsoldier/clash-rules/master/reject.txt',
+  'https://raw.githubusercontent.com/Loyalsoldier/clash-rules/master/direct.txt',
+  'https://raw.githubusercontent.com/Loyalsoldier/clash-rules/master/cncidr.txt',
+  'https://raw.githubusercontent.com/Loyalsoldier/clash-rules/master/proxy.txt',
+  'https://raw.githubusercontent.com/Loyalsoldier/clash-rules/master/gfw.txt',
+  'https://raw.githubusercontent.com/Loyalsoldier/clash-rules/master/apple.txt',
+  'https://raw.githubusercontent.com/Loyalsoldier/clash-rules/master/google.txt',
+  'https://raw.githubusercontent.com/Loyalsoldier/clash-rules/master/telegramcidr.txt'
+];
+
+async function fetchWithRetry(url, retries = 3, timeout = 5000) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+      const 响应 = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (响应.ok) return await 响应.text();
+      throw new Error(`状态码: ${响应.status}`);
+    } catch (错误) {
+      if (i === retries - 1) console.error(`拉取 ${url} 失败: ${错误.message}`);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+  }
+  return null;
+}
+
+async function 获取外部规则() {
+  let rulesContent = [];
+  for (const url of 外部规则URLs) {
+    const content = await fetchWithRetry(url);
+    if (content) {
+      rulesContent.push(
+        content
+          .split('\n')
+          .map(line => line.trim())
+          .filter(line => line && !line.startsWith('#'))
+          .map(line => line.replace(',PROXY', ',🚀节点选择'))
+          .join('\n')
+      );
+    }
+  }
+  return rulesContent.length ? rulesContent.join('\n') + '\n- MATCH,🚀节点选择' : 默认Rules();
+}
+
 async function 生成配置1(env, hostName) {
   const uuid = await 获取或初始化UUID(env);
   const 节点列表 = 优选节点.length ? 优选节点 : [`${hostName}:443`];
@@ -1527,6 +1574,8 @@ async function 生成配置1(env, hostName) {
     proxies:
 ${[...国家分组[国家].IPv4, ...国家分组[国家].IPv6].map(n => `      - "${n.name}"`).join("\n")}
 `).join("");
+
+  const rulesContent = await 获取外部规则();
 
   return `# Generated at: ${new Date().toISOString()}
 mixed-port: 7890
@@ -1580,11 +1629,15 @@ ${国家列表.map(国家 => `      - "${国家}"`).join("\n")}
 ${国家分组配置}
 
 rules:
-  - GEOIP,LAN,DIRECT
-  - DOMAIN-SUFFIX,cn,DIRECT
-  - GEOIP,CN,DIRECT
-  - MATCH,🚀节点选择
+${rulesContent}
 `;
+}
+
+function 默认Rules() {
+  return `- GEOIP,LAN,DIRECT
+- DOMAIN-SUFFIX,cn,DIRECT
+- GEOIP,CN,DIRECT
+- MATCH,🚀节点选择`;
 }
 
 async function 生成配置2(env, hostName) {
