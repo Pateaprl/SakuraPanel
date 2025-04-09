@@ -958,59 +958,143 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       margin-bottom: 15px;
       text-shadow: 1px 1px 3px rgba(255, 105, 180, 0.2);
     }
-    .switch-container { display: flex; flex-direction: column; align-items: center; gap: 15px; }
-    .toggle-row { display: flex; align-items: center; gap: 15px; }
-    .toggle-switch { position: relative; display: inline-block; width: 60px; height: 34px; }
-    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .switch-container { 
+      display: flex; 
+      flex-direction: column; 
+      align-items: center; 
+      gap: 20px; 
+    }
+    .toggle-row { 
+      display: flex; 
+      align-items: center; 
+      justify-content: space-between; 
+      width: 100%; 
+      max-width: 300px; 
+      gap: 15px; 
+    }
+    .toggle-button {
+      position: relative;
+      display: inline-block;
+      width: 80px;
+      height: 34px;
+    }
+    .toggle-button input { 
+      opacity: 0; 
+      width: 0; 
+      height: 0; 
+    }
     .slider {
       position: absolute;
-      cursor: pointer;
       top: 0;
       left: 0;
       right: 0;
       bottom: 0;
-      background-color: #ccc;
-      transition: .4s;
-      border-radius: 34px;
+      background: linear-gradient(to right, #ccc, #ddd);
+      border-radius: 17px;
+      cursor: pointer;
+      transition: background 0.4s ease;
+      overflow: hidden;
     }
     .slider:before {
+      content: '';
       position: absolute;
-      content: "";
-      height: 26px;
-      width: 26px;
-      left: 4px;
-      bottom: 4px;
-      background-color: white;
-      transition: .4s;
-      border-radius: 50%;
+      width: 50%;
+      height: 100%;
+      background: linear-gradient(to right, #ffb6c1, #ff69b4);
+      border-radius: 17px;
+      transition: transform 0.4s ease;
+      transform: translateX(0);
     }
-    input:checked + .slider { background-color: #ff69b4; }
-    input:checked + .slider:before { transform: translateX(26px); }
+    .toggle-button input:checked + .slider:before {
+      transform: translateX(100%);
+    }
+    .slider span {
+      position: absolute;
+      width: 50%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.9em;
+      color: #fff;
+      text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
+      transition: color 0.4s ease;
+    }
+    .slider .off {
+      left: 0;
+      color: #666;
+    }
+    .slider .on {
+      right: 0;
+      color: #fff;
+    }
+    .toggle-button input:checked + .slider .off {
+      color: #fff;
+    }
+    .toggle-button input:checked + .slider .on {
+      color: #666;
+    }
     .proxy-options-container {
       display: none;
+      width: 100%;
+      max-width: 300px;
     }
-    .proxy-capsule { display: flex; border-radius: 20px; overflow: hidden; background: #ffe6f0; box-shadow: 0 4px 10px rgba(255, 182, 193, 0.2); }
-    .proxy-option { width: 80px; padding: 10px 0; text-align: center; cursor: pointer; color: #ff6f91; transition: all 0.3s ease; position: relative; font-size: 1em; }
-    .proxy-option.active { background: linear-gradient(to right, #ffb6c1, #ff69b4); color: white; box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.1); }
-    .proxy-option:not(.active):hover { background: #ffd1dc; }
-    .proxy-option[data-type="socks5"].active { background: linear-gradient(to right, #ffd1dc, #ff85a2); }
+    .proxy-capsule { 
+      display: flex; 
+      border-radius: 20px; 
+      overflow: hidden; 
+      background: #ffe6f0; 
+      box-shadow: 0 4px 10px rgba(255, 182, 193, 0.2); 
+    }
+    .proxy-option { 
+      width: 50%; 
+      padding: 10px 0; 
+      text-align: center; 
+      cursor: pointer; 
+      color: #ff6f91; 
+      transition: all 0.3s ease; 
+      position: relative; 
+      font-size: 1em; 
+    }
+    .proxy-option.active { 
+      background: linear-gradient(to right, #ffb6c1, #ff69b4); 
+      color: white; 
+      box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.1); 
+    }
+    .proxy-option:not(.active):hover { 
+      background: #ffd1dc; 
+    }
+    .proxy-option[data-type="socks5"].active { 
+      background: linear-gradient(to right, #ffd1dc, #ff85a2); 
+    }
     .force-reverse-container {
       display: flex;
       align-items: center;
-      gap: 10px;
-      margin-top: 15px;
-      justify-content: center;
+      justify-content: space-between;
+      width: 100%;
+      max-width: 300px;
+      gap: 15px;
     }
     .info-icon {
       cursor: pointer;
-      color: #ff1493;
-      font-size: 1.2em;
-      transition: transform 0.2s ease;
+      color: #ff69b4;
+      font-size: 1.3em;
+physics: transform 0.2s ease, color 0.2s ease;
     }
     .info-icon:hover {
       transform: scale(1.2);
+      color: #ff1493;
     }
-    .proxy-status { margin-top: 20px; padding: 15px; border-radius: 15px; font-size: 0.95em; word-break: break-all; transition: background 0.3s ease, color 0.3s ease; width: 100%; box-sizing: border-box; }
+    .proxy-status { 
+      margin-top: 20px; 
+      padding: 15px; 
+      border-radius: 15px; 
+      font-size: 0.95em; 
+      word-break: break-all; 
+      transition: background 0.3s ease, color 0.3s ease; 
+      width: 100%; 
+      box-sizing: border-box; 
+    }
     .proxy-status.success { background: rgba(212, 237, 218, 0.9); color: #155724; }
     .proxy-status.direct { background: rgba(233, 236, 239, 0.9); color: #495057; }
     .link-box, .uuid-box { border-radius: 15px; padding: 15px; margin: 10px 0; font-size: 0.95em; word-break: break-all; }
@@ -1079,9 +1163,12 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       <div class="switch-container">
         <div class="toggle-row">
           <label>代理开关</label>
-          <label class="toggle-switch">
+          <label class="toggle-button">
             <input type="checkbox" id="proxyToggle" onchange="toggleProxy()">
-            <span class="slider"></span>
+            <span class="slider">
+              <span class="off">关</span>
+              <span class="on">开</span>
+            </span>
           </label>
         </div>
         <div class="proxy-options-container" id="proxyOptions">
@@ -1090,12 +1177,15 @@ function 生成订阅页面(配置路径, hostName, uuid) {
             <div class="proxy-option" data-type="socks5" onclick="switchProxyType('socks5')">SOCKS5</div>
           </div>
           <div class="force-reverse-container" id="forceReverseContainer">
-            <label>强制反代</label>
-            <label class="toggle-switch">
+            <label>模式切换</label>
+            <label class="toggle-button">
               <input type="checkbox" id="forceReverseToggle" onchange="toggleForceReverse()">
-              <span class="slider"></span>
+              <span class="slider">
+                <span class="off">动态</span>
+                <span class="on">强制</span>
+              </span>
             </label>
-            <span class="info-icon" onclick="showForceReverseInfo()">❗</span>
+            <span class="info-icon" onclick="showForceReverseInfo()">❓</span>
           </div>
         </div>
       </div>
@@ -1197,7 +1287,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
     }
 
     function showForceReverseInfo() {
-      alert('🌸 强制反代说明 🌸\\n\\n强制走代理后，无论你在Clash选择哪个国家的节点IP，外部出口的归属地始终会显示代理服务器的归属地。\\n\\n关闭强制反代后：\\n1. 优先使用Clash选择的优选IP作为外部出口IP\\n2. 如果无法访问被CF代理的网站或部分屏蔽了CF CDN的网站，则动态使用代理IP访问');
+      alert('🌸 模式说明 🌸\\n\\n动态模式：优先使用Clash选择的优选IP，访问受限时切换代理\\n强制模式：始终使用代理服务器IP，无论选择何种节点');
     }
 
     function updateProxyStatus() {
