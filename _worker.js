@@ -16,7 +16,7 @@ let 锁定时间 = 5 * 60 * 1000;
 let 白天背景图 = 'https://i.meee.com.tw/el91luR.png';
 let 暗黑背景图 = 'https://i.meee.com.tw/QPWx8nX.png';
 
-// 辅助函数
+// ====================== 辅助函数 ======================
 function 创建HTML响应(内容, 状态码 = 200) {
   return new Response(内容, {
     status: 状态码,
@@ -248,7 +248,6 @@ function 生成登录注册界面(类型, 额外参数 = {}) {
 
     function startCountdown() {
       if (!countdownElement) return;
-
       const interval = setInterval(() => {
         if (remainingTime <= 0) {
           clearInterval(interval);
@@ -278,18 +277,14 @@ function 生成登录注册界面(类型, 额外参数 = {}) {
             document.querySelector('.lock-message').textContent = '锁定已解除，请重新尝试登录';
           }
         })
-        .catch(error => {
-          console.error('同步锁定状态失败:', error);
-        });
+        .catch(error => console.error('同步锁定状态失败:', error));
     }
 
     if (${额外参数.锁定状态}) {
       startCountdown();
       setInterval(syncWithServer, 10000);
       document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') {
-          syncWithServer();
-        }
+        if (document.visibilityState === 'visible') syncWithServer();
       });
     }
 
@@ -315,7 +310,7 @@ function 生成登录注册界面(类型, 额外参数 = {}) {
   `;
 }
 
-// 节点配置相关
+// ====================== 节点配置相关 ======================
 async function 获取或初始化UUID(env) {
   let uuid = await env.LOGIN_STATE.get('current_uuid');
   if (!uuid) {
@@ -325,338 +320,342 @@ async function 获取或初始化UUID(env) {
   return uuid;
 }
 
-// 主逻辑改为 Service Worker 格式
-addEventListener('fetch', event => {
-  event.respondWith(handleRequest(event.request, event.env));
-});
-
-async function handleRequest(请求, env) {
+async function 加载节点和配置(env, hostName) {
   try {
-    if (!env.LOGIN_STATE) {
-      return 创建HTML响应(生成KV未绑定提示页面());
+    const 手动节点缓存 = await env.LOGIN_STATE.get('manual_preferred_ips');
+    let 手动节点列表 = [];
+    if (手动节点缓存) {
+      手动节点列表 = JSON.parse(手动节点缓存).map(line => line.trim()).filter(Boolean);
     }
 
-    const 请求头 = 请求.headers.get('Upgrade');
-    const url = new URL(请求.url);
-    const hostName = 请求.headers.get('Host');
-    const UA = 请求.headers.get('User-Agent') || 'unknown';
-    const IP = 请求.headers.get('CF-Connecting-IP') || 'unknown';
-    const 设备标识 = `${UA}_${IP}`;
-    let formData;
+    const 响应列表 = await Promise.all(
+      节点文件路径.map(async (路径) => {
+        try {
+          const 响应 = await fetch(路径);
+          if (!响应.ok) throw new Error(`请求 ${路径} 失败，状态码: ${响应.status}`);
+          const 文本 = await 响应.text();
+          return 文本.split('\n').map(line => line.trim()).filter(Boolean);
+        } catch (错误) {
+          console.error(`拉取 ${路径} 失败: ${错误.message}`);
+          return [];
+        }
+      })
+    );
 
-    if (请求头 && 请求头 === 'websocket') {
-      反代地址 = env.PROXYIP || 反代地址;
-      SOCKS5账号 = env.SOCKS5 || SOCKS5账号;
-      return await 升级请求(请求, env);
+    const 域名节点列表 = [...new Set(响应列表.flat())];
+    const 合并节点列表 = [...new Set([...手动节点列表, ...域名节点列表])];
+    const 缓存节点 = await env.LOGIN_STATE.get('ip_preferred_ips');
+    const 当前节点列表 = 缓存节点 ? JSON.parse(缓存节点) : [];
+    const 列表相同 = JSON.stringify(合并节点列表) === JSON.stringify(当前节点列表);
+
+    if (合并节点列表.length > 0) {
+      优选节点 = 合并节点列表;
+      if (!列表相同) {
+        const 新版本 = String(Date.now());
+        await env.LOGIN_STATE.put('ip_preferred_ips', JSON.stringify(合并节点列表));
+        await env.LOGIN_STATE.put('ip_preferred_ips_version', 新版本);
+        await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g='), await 生成配置1(env, hostName));
+        await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g=') + '_version', 新版本);
+        await env.LOGIN_STATE.put('config_' + atob('djJyYXk='), await 生成配置2(env, hostName));
+        await env.LOGIN_STATE.put('config_' + atob('djJyYXk=') + '_version', 新版本);
+      }
+    } else {
+      优选节点 = 当前节点列表.length > 0 ? 当前节点列表 : [`${hostName}:443`];
     }
+  } catch (错误) {
+    const 缓存节点 = await env.LOGIN_STATE.get('ip_preferred_ips');
+    优选节点 = 缓存节点 ? JSON.parse(缓存节点) : [`${hostName}:443`];
+    await env.LOGIN_STATE.put('ip_error_log', JSON.stringify({ time: Date.now(), error: '所有路径拉取失败或手动上传为空' }), { expirationTtl: 86400 });
+  }
+}
 
-    if (url.pathname === '/login/submit' || url.pathname === '/register/submit') {
-      const contentType = 请求.headers.get('Content-Type') || '';
-      if (!contentType.includes('application/x-www-form-urlencoded') && !contentType.includes('multipart/form-data')) {
-        console.log(`无效请求: UA=${UA}, IP=${IP}, Path=${url.pathname}, Headers=${JSON.stringify([...请求.headers])}`);
-        return 创建HTML响应(生成登录注册界面(url.pathname === '/login/submit' ? '登录' : '注册', {
-          错误信息: '请通过正常表单提交'
-        }), 400);
+async function 获取配置(env, 类型, hostName) {
+  const 缓存键 = 类型 === atob('Y2xhc2g=') ? 'config_' + atob('Y2xhc2g=') : 'config_' + atob('djJyYXk=');
+  const 版本键 = `${缓存键}_version`;
+  const 缓存配置 = await env.LOGIN_STATE.get(缓存键);
+  const 配置版本 = await env.LOGIN_STATE.get(版本键) || '0';
+  const 节点版本 = await env.LOGIN_STATE.get('ip_preferred_ips_version') || '0';
+
+  if (缓存配置 && 配置版本 === 节点版本) {
+    return 缓存配置;
+  }
+
+  const 新配置 = 类型 === atob('Y2xhc2g=') ? await 生成配置1(env, hostName) : await 生成配置2(env, hostName);
+  await env.LOGIN_STATE.put(缓存键, 新配置);
+  await env.LOGIN_STATE.put(版本键, 节点版本);
+  return 新配置;
+}
+
+// ====================== 主逻辑 ======================
+export default {
+  async fetch(请求, env) {
+    try {
+      if (!env.LOGIN_STATE) {
+        return 创建HTML响应(生成KV未绑定提示页面());
       }
 
-      try {
-        formData = await 请求.formData();
-      } catch (错误) {
-        return 创建HTML响应(生成登录注册界面(url.pathname === '/login/submit' ? '登录' : '注册', {
-          错误信息: '提交数据格式错误，请重试'
-        }), 400);
-      }
-    }
+      const 请求头 = 请求.headers.get('Upgrade');
+      const url = new URL(请求.url);
+      const hostName = 请求.headers.get('Host');
+      const UA = 请求.headers.get('User-Agent') || 'unknown';
+      const IP = 请求.headers.get('CF-Connecting-IP') || 'unknown';
+      const 设备标识 = `${UA}_${IP}`;
+      let formData;
 
-    if (url.pathname === '/register/submit') {
-      const 用户名 = formData.get('username');
-      const 密码 = formData.get('password');
-      const 确认密码 = formData.get('confirm');
-
-      if (!用户名 || !密码 || 密码 !== 确认密码) {
-        return 创建HTML响应(生成登录注册界面('注册', { 
-          错误信息: 密码 !== 确认密码 ? '两次密码不一致' : '请填写完整信息'
-        }), 400);
+      if (请求头 && 请求头 === 'websocket') {
+        反代地址 = env.PROXYIP || 反代地址;
+        SOCKS5账号 = env.SOCKS5 || SOCKS5账号;
+        return await 升级请求(请求, env);
       }
 
-      const 已有用户 = await env.LOGIN_STATE.get('stored_credentials');
-      if (已有用户) {
-        return 创建重定向响应('/login');
+      if (url.pathname === '/login/submit' || url.pathname === '/register/submit') {
+        const contentType = 请求.headers.get('Content-Type') || '';
+        if (!contentType.includes('application/x-www-form-urlencoded') && !contentType.includes('multipart/form-data')) {
+          console.log(`无效请求: UA=${UA}, IP=${IP}, Path=${url.pathname}, Headers=${JSON.stringify([...请求.headers])}`);
+          return 创建HTML响应(生成登录注册界面(url.pathname === '/login/submit' ? '登录' : '注册', {
+            错误信息: '请通过正常表单提交'
+          }), 400);
+        }
+
+        try {
+          formData = await 请求.formData();
+        } catch (错误) {
+          return 创建HTML响应(生成登录注册界面(url.pathname === '/login/submit' ? '登录' : '注册', {
+            错误信息: '提交数据格式错误，请重试'
+          }), 400);
+        }
       }
 
-      const 加密密码值 = await 加密密码(密码);
-      await env.LOGIN_STATE.put('stored_credentials', JSON.stringify({
-        用户名, 密码: 加密密码值
-      }));
+      if (url.pathname === '/register/submit') {
+        const 用户名 = formData.get('username');
+        const 密码 = formData.get('password');
+        const 确认密码 = formData.get('confirm');
 
-      const 新Token = Math.random().toString(36).substring(2);
-      await env.LOGIN_STATE.put('current_token', 新Token, { expirationTtl: 300 });
-      return 创建重定向响应(`/${配置路径}`, { 
-        'Set-Cookie': `token=${新Token}; Path=/; HttpOnly; SameSite=Strict` 
-      });
-    }
+        if (!用户名 || !密码 || 密码 !== 确认密码) {
+          return 创建HTML响应(生成登录注册界面('注册', { 
+            错误信息: 密码 !== 确认密码 ? '两次密码不一致' : '请填写完整信息'
+          }), 400);
+        }
 
-    if (url.pathname === '/login/submit') {
-      const 锁定状态 = await 检查锁定(env, 设备标识);
-      if (锁定状态.被锁定) {
-        return 创建HTML响应(生成登录注册界面('登录', {
-          锁定状态: true,
-          剩余时间: 锁定状态.剩余时间
-        }), 403);
-      }
+        const 已有用户 = await env.LOGIN_STATE.get('stored_credentials');
+        if (已有用户) {
+          return 创建重定向响应('/login');
+        }
 
-      const 存储凭据 = await env.LOGIN_STATE.get('stored_credentials');
-      if (!存储凭据) {
-        return 创建重定向响应('/register');
-      }
+        const 加密密码值 = await 加密密码(密码);
+        await env.LOGIN_STATE.put('stored_credentials', JSON.stringify({
+          用户名, 密码: 加密密码值
+        }));
 
-      const 输入用户名 = formData.get('username');
-      const 输入密码 = formData.get('password');
-
-      const 凭据对象 = JSON.parse(存储凭据 || '{}');
-      const 密码匹配 = (await 加密密码(输入密码)) === 凭据对象.密码;
-      if (输入用户名 === 凭据对象.用户名 && 密码匹配) {
         const 新Token = Math.random().toString(36).substring(2);
         await env.LOGIN_STATE.put('current_token', 新Token, { expirationTtl: 300 });
-        await env.LOGIN_STATE.put(`fail_${设备标识}`, '0');
         return 创建重定向响应(`/${配置路径}`, { 
           'Set-Cookie': `token=${新Token}; Path=/; HttpOnly; SameSite=Strict` 
         });
       }
 
-      let 失败次数 = Number(await env.LOGIN_STATE.get(`fail_${设备标识}`) || 0) + 1;
-      await env.LOGIN_STATE.put(`fail_${设备标识}`, String(失败次数));
+      if (url.pathname === '/login/submit') {
+        const 锁定状态 = await 检查锁定(env, 设备标识);
+        if (锁定状态.被锁定) {
+          return 创建HTML响应(生成登录注册界面('登录', {
+            锁定状态: true,
+            剩余时间: 锁定状态.剩余时间
+          }), 403);
+        }
 
-      if (失败次数 >= 最大失败次数) {
-        await env.LOGIN_STATE.put(`lock_${设备标识}`, String(Date.now() + 锁定时间), { expirationTtl: 300 });
-        const 新锁定状态 = await 检查锁定(env, 设备标识);
-        return 创建HTML响应(生成登录注册界面('登录', {
-          锁定状态: true,
-          剩余时间: 新锁定状态.剩余时间
-        }), 403);
-      }
-
-      return 创建HTML响应(生成登录注册界面('登录', {
-        输错密码: true,
-        剩余次数: 最大失败次数 - 失败次数
-      }), 401);
-    }
-
-    const 是否已注册 = await env.LOGIN_STATE.get('stored_credentials');
-    if (!是否已注册 && url.pathname !== '/register') {
-      return 创建HTML响应(生成登录注册界面('注册'));
-    }
-
-    switch (url.pathname) {
-      case '/login':
         const 存储凭据 = await env.LOGIN_STATE.get('stored_credentials');
         if (!存储凭据) {
           return 创建重定向响应('/register');
         }
 
-        const 锁定状态 = await 检查锁定(env, 设备标识);
-        if (锁定状态.被锁定) {
-          return 创建HTML响应(生成登录注册界面('登录', { 锁定状态: true, 剩余时间: 锁定状态.剩余时间 }));
+        const 输入用户名 = formData.get('username');
+        const 输入密码 = formData.get('password');
+
+        const 凭据对象 = JSON.parse(存储凭据 || '{}');
+        const 密码匹配 = (await 加密密码(输入密码)) === 凭据对象.密码;
+        if (输入用户名 === 凭据对象.用户名 && 密码匹配) {
+          const 新Token = Math.random().toString(36).substring(2);
+          await env.LOGIN_STATE.put('current_token', 新Token, { expirationTtl: 300 });
+          await env.LOGIN_STATE.put(`fail_${设备标识}`, '0');
+          return 创建重定向响应(`/${配置路径}`, { 
+            'Set-Cookie': `token=${新Token}; Path=/; HttpOnly; SameSite=Strict` 
+          });
         }
-        if (请求.headers.get('Cookie')?.split('=')[1] === await env.LOGIN_STATE.get('current_token')) {
-          return 创建重定向响应(`/${配置路径}`);
+
+        let 失败次数 = Number(await env.LOGIN_STATE.get(`fail_${设备标识}`) || 0) + 1;
+        await env.LOGIN_STATE.put(`fail_${设备标识}`, String(失败次数));
+
+        if (失败次数 >= 最大失败次数) {
+          await env.LOGIN_STATE.put(`lock_${设备标识}`, String(Date.now() + 锁定时间), { expirationTtl: 300 });
+          const 新锁定状态 = await 检查锁定(env, 设备标识);
+          return 创建HTML响应(生成登录注册界面('登录', {
+            锁定状态: true,
+            剩余时间: 新锁定状态.剩余时间
+          }), 403);
         }
-        const 失败次数 = Number(await env.LOGIN_STATE.get(`fail_${设备标识}`) || 0);
-        return 创建HTML响应(生成登录注册界面('登录', { 输错密码: 失败次数 > 0, 剩余次数: 最大失败次数 - 失败次数 }));
 
-      case '/reset-login-failures':
-        await env.LOGIN_STATE.put(`fail_${设备标识}`, '0');
-        await env.LOGIN_STATE.delete(`lock_${设备标识}`);
-        return new Response(null, { status: 200 });
+        return 创建HTML响应(生成登录注册界面('登录', {
+          输错密码: true,
+          剩余次数: 最大失败次数 - 失败次数
+        }), 401);
+      }
 
-      case '/check-lock':
-        const 锁定检查 = await 检查锁定(env, 设备标识);
-        return 创建JSON响应({
-          locked: 锁定检查.被锁定,
-          remainingTime: 锁定检查.剩余时间
-        });
+      const 是否已注册 = await env.LOGIN_STATE.get('stored_credentials');
+      if (!是否已注册 && url.pathname !== '/register') {
+        return 创建HTML响应(生成登录注册界面('注册'));
+      }
 
-      case `/${配置路径}`:
-        const Token = 请求.headers.get('Cookie')?.split('=')[1];
-        const 有效Token = await env.LOGIN_STATE.get('current_token');
-        if (!Token || Token !== 有效Token) return 创建重定向响应('/login');
-        const uuid = await 获取或初始化UUID(env);
-        return 创建HTML响应(生成订阅页面(配置路径, hostName, uuid));
-
-      case `/${配置路径}/logout`:
-        await env.LOGIN_STATE.delete('current_token');
-        return 创建重定向响应('/login', { 'Set-Cookie': 'token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Strict' });
-
-      case `/${配置路径}/` + atob('Y2xhc2g='):
-        await 加载节点和配置(env, hostName);
-        const config = await 获取配置(env, atob('Y2xhc2g='), hostName);
-        return new Response(config, { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8" } });
-
-      case `/${配置路径}/` + atob('djJyYXluZw=='):
-        await 加载节点和配置(env, hostName);
-        const vConfig = await 获取配置(env, atob('djJyYXk='), hostName);
-        return new Response(vConfig, { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8" } });
-
-      case `/${配置路径}/upload`:
-        const uploadToken = 请求.headers.get('Cookie')?.split('=')[1];
-        const 有效UploadToken = await env.LOGIN_STATE.get('current_token');
-        if (!uploadToken || uploadToken !== 有效UploadToken) {
-          return 创建JSON响应({ error: '未登录或Token无效，请重新登录' }, 401);
-        }
-        formData = await 请求.formData();
-        const ipFiles = formData.getAll('ipFiles');
-        if (!ipFiles || ipFiles.length === 0) {
-          return 创建JSON响应({ error: '未选择任何文件' }, 400);
-        }
-        let allIpList = [];
-        try {
-          for (const ipFile of ipFiles) {
-            if (!ipFile || !ipFile.text) throw new Error(`文件 ${ipFile.name} 无效`);
-            const ipText = await ipFile.text();
-            const ipList = ipText.split('\n').map(line => line.trim()).filter(Boolean);
-            if (ipList.length === 0) console.warn(`文件 ${ipFile.name} 内容为空`);
-            allIpList = allIpList.concat(ipList);
-          }
-          if (allIpList.length === 0) {
-            return 创建JSON响应({ error: '所有上传文件内容为空' }, 400);
-          }
-          const uniqueIpList = [...new Set(allIpList)];
-
-          const 当前手动节点 = await env.LOGIN_STATE.get('manual_preferred_ips');
-          const 当前节点列表 = 当前手动节点 ? JSON.parse(当前手动节点) : [];
-          const 是重复上传 = JSON.stringify(当前节点列表.sort()) === JSON.stringify(uniqueIpList.sort());
-          if (是重复上传) {
-            return 创建JSON响应({ message: '上传内容与现有节点相同，无需更新' }, 200);
+      switch (url.pathname) {
+        case '/login':
+          const 存储凭据 = await env.LOGIN_STATE.get('stored_credentials');
+          if (!存储凭据) {
+            return 创建重定向响应('/register');
           }
 
-          await env.LOGIN_STATE.put('manual_preferred_ips', JSON.stringify(uniqueIpList));
-          const 新版本 = String(Date.now());
-          await env.LOGIN_STATE.put('ip_preferred_ips_version', 新版本);
+          const 锁定状态 = await 检查锁定(env, 设备标识);
+          if (锁定状态.被锁定) {
+            return 创建HTML响应(生成登录注册界面('登录', { 锁定状态: true, 剩余时间: 锁定状态.剩余时间 }));
+          }
+          if (请求.headers.get('Cookie')?.split('=')[1] === await env.LOGIN_STATE.get('current_token')) {
+            return 创建重定向响应(`/${配置路径}`);
+          }
+          const 失败次数 = Number(await env.LOGIN_STATE.get(`fail_${设备标识}`) || 0);
+          return 创建HTML响应(生成登录注册界面('登录', { 输错密码: 失败次数 > 0, 剩余次数: 最大失败次数 - 失败次数 }));
+
+        case '/reset-login-failures':
+          await env.LOGIN_STATE.put(`fail_${设备标识}`, '0');
+          await env.LOGIN_STATE.delete(`lock_${设备标识}`);
+          return new Response(null, { status: 200 });
+
+        case '/check-lock':
+          const 锁定检查 = await 检查锁定(env, 设备标识);
+          return 创建JSON响应({
+            locked: 锁定检查.被锁定,
+            remainingTime: 锁定检查.剩余时间
+          });
+
+        case `/${配置路径}`:
+          const Token = 请求.headers.get('Cookie')?.split('=')[1];
+          const 有效Token = await env.LOGIN_STATE.get('current_token');
+          if (!Token || Token !== 有效Token) return 创建重定向响应('/login');
+          const uuid = await 获取或初始化UUID(env);
+          return 创建HTML响应(生成订阅页面(配置路径, hostName, uuid));
+
+        case `/${配置路径}/logout`:
+          await env.LOGIN_STATE.delete('current_token');
+          return 创建重定向响应('/login', { 'Set-Cookie': 'token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Strict' });
+
+        case `/${配置路径}/` + atob('Y2xhc2g='):
+          await 加载节点和配置(env, hostName);
+          const config = await 获取配置(env, atob('Y2xhc2g='), hostName);
+          return new Response(config, { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8" } });
+
+        case `/${配置路径}/` + atob('djJyYXluZw=='):
+          await 加载节点和配置(env, hostName);
+          const vConfig = await 获取配置(env, atob('djJyYXk='), hostName);
+          return new Response(vConfig, { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8" } });
+
+        case `/${配置路径}/upload`:
+          const uploadToken = 请求.headers.get('Cookie')?.split('=')[1];
+          const 有效UploadToken = await env.LOGIN_STATE.get('current_token');
+          if (!uploadToken || uploadToken !== 有效UploadToken) {
+            return 创建JSON响应({ error: '未登录或Token无效，请重新登录' }, 401);
+          }
+          formData = await 请求.formData();
+          const ipFiles = formData.getAll('ipFiles');
+          if (!ipFiles || ipFiles.length === 0) {
+            return 创建JSON响应({ error: '未选择任何文件' }, 400);
+          }
+          let allIpList = [];
+          try {
+            for (const ipFile of ipFiles) {
+              if (!ipFile || !ipFile.text) throw new Error(`文件 ${ipFile.name} 无效`);
+              const ipText = await ipFile.text();
+              const ipList = ipText.split('\n').map(line => line.trim()).filter(Boolean);
+              if (ipList.length === 0) console.warn(`文件 ${ipFile.name} 内容为空`);
+              allIpList = allIpList.concat(ipList);
+            }
+            if (allIpList.length === 0) {
+              return 创建JSON响应({ error: '所有上传文件内容为空' }, 400);
+            }
+            const uniqueIpList = [...new Set(allIpList)];
+
+            const 当前手动节点 = await env.LOGIN_STATE.get('manual_preferred_ips');
+            const 当前节点列表 = 当前手动节点 ? JSON.parse(当前手动节点) : [];
+            const 是重复上传 = JSON.stringify(当前节点列表.sort()) === JSON.stringify(uniqueIpList.sort());
+            if (是重复上传) {
+              return 创建JSON响应({ message: '上传内容与现有节点相同，无需更新' }, 200);
+            }
+
+            await env.LOGIN_STATE.put('manual_preferred_ips', JSON.stringify(uniqueIpList));
+            const 新版本 = String(Date.now());
+            await env.LOGIN_STATE.put('ip_preferred_ips_version', 新版本);
+            await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g='), await 生成配置1(env, hostName));
+            await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g=') + '_version', 新版本);
+            await env.LOGIN_STATE.put('config_' + atob('djJyYXk='), await 生成配置2(env, hostName));
+            await env.LOGIN_STATE.put('config_' + atob('djJyYXk=') + '_version', 新版本);
+            return 创建JSON响应({ message: '上传成功，即将跳转' }, 200, { 'Location': `/${配置路径}` });
+          } catch (错误) {
+            console.error(`上传处理失败: ${错误.message}`);
+            return 创建JSON响应({ error: `上传处理失败: ${错误.message}` }, 500);
+          }
+
+        case `/${配置路径}/change-uuid`:
+          const changeToken = 请求.headers.get('Cookie')?.split('=')[1];
+          const 有效ChangeToken = await env.LOGIN_STATE.get('current_token');
+          if (!changeToken || changeToken !== 有效ChangeToken) {
+            return 创建JSON响应({ error: '未登录或Token无效' }, 401);
+          }
+          const 新UUID = 生成UUID();
+          await env.LOGIN_STATE.put('current_uuid', 新UUID);
           await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g='), await 生成配置1(env, hostName));
-          await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g=') + '_version', 新版本);
           await env.LOGIN_STATE.put('config_' + atob('djJyYXk='), await 生成配置2(env, hostName));
+          const 新版本 = String(Date.now());
+          await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g=') + '_version', 新版本);
           await env.LOGIN_STATE.put('config_' + atob('djJyYXk=') + '_version', 新版本);
-          return 创建JSON响应({ message: '上传成功，即将跳转' }, 200, { 'Location': `/${配置路径}` });
-        } catch (错误) {
-          console.error(`上传处理失败: ${错误.message}`);
-          return 创建JSON响应({ error: `上传处理失败: ${错误.message}` }, 500);
-        }
+          return 创建JSON响应({ uuid: 新UUID }, 200);
 
-      case `/${配置路径}/change-uuid`:
-        const changeToken = 请求.headers.get('Cookie')?.split('=')[1];
-        const 有效ChangeToken = await env.LOGIN_STATE.get('current_token');
-        if (!changeToken || changeToken !== 有效ChangeToken) {
-          return 创建JSON响应({ error: '未登录或Token无效' }, 401);
-        }
-        const 新UUID = 生成UUID();
-        await env.LOGIN_STATE.put('current_uuid', 新UUID);
-        await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g='), await 生成配置1(env, hostName));
-        await env.LOGIN_STATE.put('config_' + atob('djJyYXk='), await 生成配置2(env, hostName));
-        const 新版本 = String(Date.now());
-        await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g=') + '_version', 新版本);
-        await env.LOGIN_STATE.put('config_' + atob('djJyYXk=') + '_version', 新版本);
-        return 创建JSON响应({ uuid: 新UUID }, 200);
+        case '/set-proxy-state':
+          formData = await 请求.formData();
+          const proxyEnabled = formData.get('proxyEnabled');
+          const proxyType = formData.get('proxyType');
+          const forceReverse = formData.get('forceReverse');
+          await env.LOGIN_STATE.put('proxyEnabled', proxyEnabled);
+          await env.LOGIN_STATE.put('proxyType', proxyType);
+          await env.LOGIN_STATE.put('forceReverse', forceReverse);
+          return new Response(null, { status: 200 });
 
-      case '/set-proxy-state':
-        formData = await 请求.formData();
-        const proxyEnabled = formData.get('proxyEnabled');
-        const proxyType = formData.get('proxyType');
-        const forceReverse = formData.get('forceReverse');
-        await env.LOGIN_STATE.put('proxyEnabled', proxyEnabled);
-        await env.LOGIN_STATE.put('proxyType', proxyType);
-        await env.LOGIN_STATE.put('forceReverse', forceReverse);
-        return new Response(null, { status: 200 });
-
-      case '/get-proxy-status':
-        const 代理启用 = await env.LOGIN_STATE.get('proxyEnabled') === 'true';
-        const 代理类型 = await env.LOGIN_STATE.get('proxyType') || 'reverse';
-        const 强制反代 = await env.LOGIN_STATE.get('forceReverse') === 'true';
-        const 反代地址 = env.PROXYIP || 'ts.hpc.tw';
-        const SOCKS5账号 = env.SOCKS5 || '';
-        let status = '直连';
-        if (代理启用) {
-          if (强制反代 && 反代地址) {
-            status = '强制反代';
-          } else if (代理类型 === 'reverse' && 反代地址) {
-            status = '反代';
-          } else if (代理类型 === 'socks5' && SOCKS5账号) {
-            status = 'SOCKS5';
+        case '/get-proxy-status':
+          const 代理启用 = await env.LOGIN_STATE.get('proxyEnabled') === 'true';
+          const 代理类型 = await env.LOGIN_STATE.get('proxyType') || 'reverse';
+          const 强制反代 = await env.LOGIN_STATE.get('forceReverse') === 'true';
+          const 反代地址 = env.PROXYIP || 'ts.hpc.tw';
+          const SOCKS5账号 = env.SOCKS5 || '';
+          let status = '直连';
+          if (代理启用) {
+            if (强制反代 && 代理类型 === 'reverse' && 反代地址) {
+              status = '强制反代';
+            } else if (代理类型 === 'reverse' && 反代地址) {
+              status = '动态反代';
+            } else if (代理类型 === 'socks5' && SOCKS5账号) {
+              status = 'SOCKS5';
+            }
           }
-        }
-        return 创建JSON响应({ status });
+          return 创建JSON响应({ status });
 
-      default:
-        url.hostname = 伪装域名;
-        url.protocol = 'https:';
-        return fetch(new Request(url, 请求));
-    }
-  } catch (error) {
-    console.error(`全局错误: ${error.message}`);
-    return 创建JSON响应({ error: `服务器内部错误: ${error.message}` }, 500);
-  }
-}
-
-// WebSocket处理
-async function 智能连接(地址, 端口, 地址类型, env) {
-  const 反代地址 = env.PROXYIP || 'ts.hpc.tw';
-  const SOCKS5账号 = env.SOCKS5 || '';
-
-  if (!地址 || 地址.trim() === '') {
-    return await 尝试直连(地址, 端口);
-  }
-
-  const 是域名 = 地址类型 === 2 && !地址.match(/^\d+\.\d+\.\d+\.\d+$/);
-  const 是IP = 地址类型 === 1 || (地址类型 === 2 && 地址.match(/^\d+\.\d+\.\d+\.\d+$/)) || 地址类型 === 3;
-
-  if (是域名 || 是IP) {
-    const 代理启用 = await env.LOGIN_STATE.get('proxyEnabled') === 'true';
-    const 代理类型 = await env.LOGIN_STATE.get('proxyType') || 'reverse';
-    const 强制反代 = await env.LOGIN_STATE.get('forceReverse') === 'true';
-
-    if (!代理启用) {
-      return await 尝试直连(地址, 端口);
-    }
-
-    if (强制反代 && 反代地址) {
-      try {
-        const [反代主机, 反代端口] = 反代地址.split(':');
-        const 连接 = connect({ hostname: 反代主机, port: 反代端口 || 端口 });
-        await 连接.opened;
-        console.log(`强制通过反代连接: ${反代地址}`);
-        return 连接;
-      } catch (错误) {
-        console.error(`强制反代连接失败: ${错误.message}`);
+        default:
+          url.hostname = 伪装域名;
+          url.protocol = 'https:';
+          return fetch(new Request(url, 请求));
       }
+    } catch (error) {
+      console.error(`全局错误: ${error.message}`);
+      return 创建JSON响应({ error: `服务器内部错误: ${error.message}` }, 500);
     }
-
-    if (代理类型 === 'reverse' && 反代地址) {
-      try {
-        const [反代主机, 反代端口] = 反代地址.split(':');
-        const 连接 = connect({ hostname: 反代主机, port: 反代端口 || 端口 });
-        await 连接.opened;
-        console.log(`通过反代连接: ${反代地址}`);
-        return 连接;
-      } catch (错误) {
-        console.error(`反代连接失败: ${错误.message}`);
-        return await 尝试直连(地址, 端口);
-      }
-    } else if (代理类型 === 'socks5' && SOCKS5账号) {
-      try {
-        const SOCKS5连接 = await 创建SOCKS5(地址类型, 地址, 端口);
-        console.log(`通过 SOCKS5 连接: ${地址}:${端口}`);
-        return SOCKS5连接;
-      } catch (错误) {
-        console.error(`SOCKS5 连接失败: ${错误.message}`);
-        return await 尝试直连(地址, 端口);
-      }
-    }
-
-    return await 尝试直连(地址, 端口);
   }
+};
 
-  return await 尝试直连(地址, 端口);
-}
-
+// ====================== WebSocket处理 ======================
 async function 升级请求(请求, env) {
   const 创建接口 = new WebSocketPair();
   const [客户端, 服务端] = Object.values(创建接口);
@@ -700,6 +699,73 @@ async function 解析头(数据, env, uuid) {
   const 初始数据 = 数据.slice(地址信息索引 + (地址类型 === 2 ? 数据数组[地址信息索引] + 1 : 地址类型 === 1 ? 4 : 16));
   const TCP接口 = await 智能连接(地址, 端口, 地址类型, env);
   return { TCP接口, 初始数据 };
+}
+
+async function 智能连接(地址, 端口, 地址类型, env) {
+  const 反代地址 = env.PROXYIP || 'ts.hpc.tw';
+  const SOCKS5账号 = env.SOCKS5 || '';
+  const 代理启用 = await env.LOGIN_STATE.get('proxyEnabled') === 'true';
+  const 代理类型 = await env.LOGIN_STATE.get('proxyType') || 'reverse';
+  const 强制反代 = await env.LOGIN_STATE.get('forceReverse') === 'true';
+
+  if (!地址 || 地址.trim() === '') {
+    return await 尝试直连(地址, 端口);
+  }
+
+  const 是域名 = 地址类型 === 2 && !地址.match(/^\d+\.\d+\.\d+\.\d+$/);
+  const 是IP = 地址类型 === 1 || (地址类型 === 2 && 地址.match(/^\d+\.\d+\.\d+\.\d+$/)) || 地址类型 === 3;
+
+  if (是域名 || 是IP) {
+    if (!代理启用) {
+      return await 尝试直连(地址, 端口);
+    }
+
+    if (强制反代 && 代理类型 === 'reverse' && 反代地址) {
+      const [反代主机, 反代端口] = 反代地址.split(':');
+      const 连接 = connect({ hostname: 反代主机, port: 反代端口 || 端口 });
+      await 连接.opened;
+      console.log(`强制反代连接: ${反代地址}`);
+      return 连接;
+    }
+
+    try {
+      const 直连 = await 尝试直连(地址, 端口);
+      const 需要反代 = await 需要使用反代(地址);
+      if (!需要反代) {
+        return 直连;
+      }
+      直连.close();
+    } catch (错误) {
+      console.log(`直连失败，切换到代理: ${错误.message}`);
+    }
+
+    if (代理类型 === 'reverse' && 反代地址) {
+      try {
+        const [反代主机, 反代端口] = 反代地址.split(':');
+        const 连接 = connect({ hostname: 反代主机, port: 反代端口 || 端口 });
+        await 连接.opened;
+        console.log(`动态反代连接: ${反代地址}`);
+        return 连接;
+      } catch (错误) {
+        console.error(`反代连接失败: ${错误.message}`);
+      }
+    } else if (代理类型 === 'socks5' && SOCKS5账号) {
+      try {
+        const SOCKS5连接 = await 创建SOCKS5(地址类型, 地址, 端口);
+        console.log(`通过 SOCKS5 连接: ${地址}:${端口}`);
+        return SOCKS5连接;
+      } catch (错误) {
+        console.error(`SOCKS5 连接失败: ${错误.message}`);
+      }
+    }
+  }
+
+  return await 尝试直连(地址, 端口);
+}
+
+async function 需要使用反代(地址) {
+  const cf相关域名 = ['cloudflare.com', 'example.com']; // 可扩展列表
+  return cf相关域名.some(domain => 地址.includes(domain));
 }
 
 async function 尝试直连(地址, 端口) {
@@ -920,17 +986,34 @@ function 生成订阅页面(配置路径, hostName, uuid) {
     }
     input:checked + .slider { background-color: #ff69b4; }
     input:checked + .slider:before { transform: translateX(26px); }
+    .proxy-options-container {
+      display: none;
+    }
     .proxy-capsule { display: flex; border-radius: 20px; overflow: hidden; background: #ffe6f0; box-shadow: 0 4px 10px rgba(255, 182, 193, 0.2); }
     .proxy-option { width: 80px; padding: 10px 0; text-align: center; cursor: pointer; color: #ff6f91; transition: all 0.3s ease; position: relative; font-size: 1em; }
     .proxy-option.active { background: linear-gradient(to right, #ffb6c1, #ff69b4); color: white; box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.1); }
     .proxy-option:not(.active):hover { background: #ffd1dc; }
     .proxy-option[data-type="socks5"].active { background: linear-gradient(to right, #ffd1dc, #ff85a2); }
-    .proxy-option::before { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: rgba(255, 255, 255, 0.2); transform: rotate(30deg); transition: all 0.5s ease; pointer-events: none; }
-    .proxy-option:hover::before { top: 100%; left: 100%; }
-    .proxy-status, .uuid-box { margin-top: 20px; padding: 15px; border-radius: 15px; font-size: 0.95em; word-break: break-all; transition: background 0.3s ease, color 0.3s ease; width: 100%; box-sizing: border-box; }
+    .force-reverse-container {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 15px;
+      justify-content: center;
+    }
+    .info-icon {
+      cursor: pointer;
+      color: #ff1493;
+      font-size: 1.2em;
+      transition: transform 0.2s ease;
+    }
+    .info-icon:hover {
+      transform: scale(1.2);
+    }
+    .proxy-status { margin-top: 20px; padding: 15px; border-radius: 15px; font-size: 0.95em; word-break: break-all; transition: background 0.3s ease, color 0.3s ease; width: 100%; box-sizing: border-box; }
     .proxy-status.success { background: rgba(212, 237, 218, 0.9); color: #155724; }
     .proxy-status.direct { background: rgba(233, 236, 239, 0.9); color: #495057; }
-    .link-box { border-radius: 15px; padding: 15px; margin: 10px 0; font-size: 0.95em; word-break: break-all; }
+    .link-box, .uuid-box { border-radius: 15px; padding: 15px; margin: 10px 0; font-size: 0.95em; word-break: break-all; }
     .link-box a { color: #ff69b4; text-decoration: none; transition: color 0.3s ease; }
     .link-box a:hover { color: #ff1493; }
     .button-group { display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; margin-top: 15px; }
@@ -962,9 +1045,6 @@ function 生成订阅页面(配置路径, hostName, uuid) {
     .progress-bar { width: 100%; height: 15px; background: #ffe6f0; border-radius: 10px; overflow: hidden; border: 1px solid #ffb6c1; }
     .progress-fill { height: 100%; background: linear-gradient(to right, #ff69b4, #ff1493); width: 0; transition: width 0.3s ease; }
     .progress-text { text-align: center; font-size: 0.85em; color: #ff6f91; margin-top: 5px; }
-    .force-reverse-container { display: none; align-items: center; gap: 10px; margin-top: 15px; }
-    .info-icon { cursor: pointer; font-size: 1.2em; color: #ff69b4; transition: color 0.3s ease; }
-    .info-icon:hover { color: #ff1493; }
     @media (max-width: 600px) {
       .card { padding: 15px; max-width: 90%; }
       .card-title { font-size: 1.3em; }
@@ -1004,17 +1084,19 @@ function 生成订阅页面(配置路径, hostName, uuid) {
             <span class="slider"></span>
           </label>
         </div>
-        <div class="proxy-capsule" id="proxyCapsule">
-          <div class="proxy-option active" data-type="reverse" onclick="switchProxyType('reverse')">反代</div>
-          <div class="proxy-option" data-type="socks5" onclick="switchProxyType('socks5')">SOCKS5</div>
-        </div>
-        <div class="force-reverse-container" id="forceReverseContainer">
-          <label>强制反代</label>
-          <label class="toggle-switch">
-            <input type="checkbox" id="forceReverseToggle" onchange="toggleForceReverse()">
-            <span class="slider"></span>
-          </label>
-          <span class="info-icon" onclick="showForceReverseInfo()">❗</span>
+        <div class="proxy-options-container" id="proxyOptions">
+          <div class="proxy-capsule" id="proxyCapsule">
+            <div class="proxy-option active" data-type="reverse" onclick="switchProxyType('reverse')">反代</div>
+            <div class="proxy-option" data-type="socks5" onclick="switchProxyType('socks5')">SOCKS5</div>
+          </div>
+          <div class="force-reverse-container" id="forceReverseContainer">
+            <label>强制反代</label>
+            <label class="toggle-switch">
+              <input type="checkbox" id="forceReverseToggle" onchange="toggleForceReverse()">
+              <span class="slider"></span>
+            </label>
+            <span class="info-icon" onclick="showForceReverseInfo()">❗</span>
+          </div>
         </div>
       </div>
       <div class="proxy-status" id="proxyStatus">直连</div>
@@ -1074,17 +1156,16 @@ function 生成订阅页面(配置路径, hostName, uuid) {
     let proxyEnabled = localStorage.getItem('proxyEnabled') === 'true';
     let proxyType = localStorage.getItem('proxyType') || 'reverse';
     let forceReverse = localStorage.getItem('forceReverse') === 'true';
+
     document.getElementById('proxyToggle').checked = proxyEnabled;
     document.getElementById('forceReverseToggle').checked = forceReverse;
-    updateProxyCapsuleUI();
-    updateForceReverseUI();
+    updateProxyOptionsUI();
     updateProxyStatus();
 
     function toggleProxy() {
       proxyEnabled = document.getElementById('proxyToggle').checked;
       localStorage.setItem('proxyEnabled', proxyEnabled);
-      updateProxyCapsuleUI();
-      updateForceReverseUI();
+      updateProxyOptionsUI();
       saveProxyState();
       updateProxyStatus();
     }
@@ -1092,7 +1173,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
     function switchProxyType(type) {
       proxyType = type;
       localStorage.setItem('proxyType', proxyType);
-      updateProxyCapsuleUI();
+      updateProxyOptionsUI();
       saveProxyState();
       updateProxyStatus();
     }
@@ -1104,16 +1185,19 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       updateProxyStatus();
     }
 
-    function updateProxyCapsuleUI() {
+    function updateProxyOptionsUI() {
+      const proxyOptions = document.getElementById('proxyOptions');
+      const forceReverseContainer = document.getElementById('forceReverseContainer');
+      proxyOptions.style.display = proxyEnabled ? 'block' : 'none';
+      forceReverseContainer.style.display = proxyEnabled ? 'flex' : 'none';
       const options = document.querySelectorAll('.proxy-option');
       options.forEach(opt => {
         opt.classList.toggle('active', opt.dataset.type === proxyType);
       });
-      document.getElementById('proxyCapsule').style.display = proxyEnabled ? 'flex' : 'none';
     }
 
-    function updateForceReverseUI() {
-      document.getElementById('forceReverseContainer').style.display = proxyEnabled ? 'flex' : 'none';
+    function showForceReverseInfo() {
+      alert('🌸 强制反代说明 🌸\\n\\n强制走代理后，无论你在Clash选择哪个国家的节点IP，外部出口的归属地始终会显示代理服务器的归属地。\\n\\n关闭强制反代后：\\n1. 优先使用Clash选择的优选IP作为外部出口IP\\n2. 如果无法访问被CF代理的网站或部分屏蔽了CF CDN的网站，则动态使用代理IP访问');
     }
 
     function updateProxyStatus() {
@@ -1142,10 +1226,6 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       formData.append('forceReverse', forceReverse);
       fetch('/set-proxy-state', { method: 'POST', body: formData })
         .then(() => updateProxyStatus());
-    }
-
-    function showForceReverseInfo() {
-      alert('强制走代理后，无论你在Clash选择哪个国家的节点IP，外部出口的归属地始终会显示代理服务器的归属地。\n\n关闭强制走代理后，则优先使用Clash选择的优选IP作为外部出口IP。如果无法访问被CF代理的网站和部分屏蔽了CF CDN的网站，则动态使用代理IP访问。');
     }
 
     function 导入Config(配置路径, hostName, type) {
@@ -1517,52 +1597,5 @@ async function 生成配置2(env, hostName) {
   }).filter(Boolean);
 
   return `# Generated at: ${new Date().toISOString()}
-${配置列表.length ? 配置列表.join("\n") : `${atob('dmxlc3M=')}://${uuid}@${hostName}:443?encryption=none&security=tls&type=ws&host=${hostName}&path=/?ed=2560&sni=${hostName}#${节点名称}`}
-`;
-}
-
-async function 加载节点和配置(env, hostName) {
-  try {
-    const 手动节点缓存 = await env.LOGIN_STATE.get('manual_preferred_ips');
-    let 手动节点列表 = [];
-    if (手动节点缓存) {
-      手动节点列表 = JSON.parse(手动节点缓存).map(line => line.trim()).filter(Boolean);
-    }
-    优选节点 = 手动节点列表.length > 0 ? 手动节点列表 : [];
-
-    if (优选节点.length === 0) {
-      const 响应 = await Promise.all(节点文件路径.map(url => fetch(url).then(res => res.text()).catch(() => '')));
-      const 节点文本 = 响应.join('\n');
-      const 节点数组 = 节点文本.split('\n').map(line => line.trim()).filter(Boolean);
-      优选节点 = 节点数组.length > 0 ? 节点数组 : [`${hostName}:443`];
-    }
-
-    const clash版本 = await env.LOGIN_STATE.get('config_' + atob('Y2xhc2g=') + '_version') || '0';
-    const v2ray版本 = await env.LOGIN_STATE.get('config_' + atob('djJyYXk=') + '_version') || '0';
-    const 当前版本 = await env.LOGIN_STATE.get('ip_preferred_ips_version') || '0';
-
-    if (当前版本 > clash版本) {
-      await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g='), await 生成配置1(env, hostName));
-      await env.LOGIN_STATE.put('config_' + atob('Y2xhc2g=') + '_version', 当前版本);
-    }
-
-    if (当前版本 > v2ray版本) {
-      await env.LOGIN_STATE.put('config_' + atob('djJyYXk='), await 生成配置2(env, hostName));
-      await env.LOGIN_STATE.put('config_' + atob('djJyYXk=') + '_version', 当前版本);
-    }
-  } catch (错误) {
-    console.error(`加载节点和配置失败: ${错误.message}`);
-    优选节点 = [`${hostName}:443`];
-  }
-}
-
-async function 获取配置(env, 类型, hostName) {
-  const 配置键 = 'config_' + 类型;
-  let 配置 = await env.LOGIN_STATE.get(配置键);
-  if (!配置) {
-    配置 = 类型 === atob('Y2xhc2g=') ? await 生成配置1(env, hostName) : await 生成配置2(env, hostName);
-    await env.LOGIN_STATE.put(配置键, 配置);
-    await env.LOGIN_STATE.put(配置键 + '_version', String(Date.now()));
-  }
-  return 配置;
+${配置列表.length ? 配置列表.join("\n") : `${atob('dmxlc3M=')}://${uuid}@${hostName}:443?encryption=none&security=tls&type=ws&host=${hostName}&path=${encodeURIComponent('/?ed=2560')}&sni=${hostName}#默认节点`}`;
 }
