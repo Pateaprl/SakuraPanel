@@ -963,140 +963,141 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       flex-direction: column; 
       align-items: center; 
       gap: 20px; 
+      padding: 15px 0; 
     }
     .toggle-row { 
       display: flex; 
       align-items: center; 
       justify-content: space-between; 
       width: 100%; 
-      max-width: 300px; 
-      gap: 15px; 
+      max-width: 320px; 
+      padding: 10px 15px; 
+      background: rgba(255, 245, 247, 0.5); 
+      border-radius: 12px; 
+      box-shadow: 0 2px 8px rgba(255, 182, 193, 0.1); 
+      transition: all 0.3s ease; 
     }
-    .toggle-button {
+    .toggle-row:hover { 
+      box-shadow: 0 4px 12px rgba(255, 182, 193, 0.2); 
+    }
+    .toggle-label {
+      font-size: 1em;
+      color: #ff6f91;
+      font-weight: 500;
+    }
+    .modern-toggle {
       position: relative;
-      display: inline-block;
-      width: 80px;
-      height: 34px;
+      width: 60px;
+      height: 30px;
     }
-    .toggle-button input { 
+    .modern-toggle input { 
       opacity: 0; 
       width: 0; 
       height: 0; 
     }
-    .slider {
+    .modern-slider {
       position: absolute;
       top: 0;
       left: 0;
       right: 0;
       bottom: 0;
-      background: linear-gradient(to right, #ccc, #ddd);
-      border-radius: 17px;
+      background: #e9ecef;
+      border-radius: 15px;
       cursor: pointer;
-      transition: background 0.4s ease;
-      overflow: hidden;
+      transition: background 0.3s ease;
     }
-    .slider:before {
+    .modern-slider:before {
       content: '';
       position: absolute;
-      width: 50%;
-      height: 100%;
-      background: linear-gradient(to right, #ffb6c1, #ff69b4);
-      border-radius: 17px;
-      transition: transform 0.4s ease;
-      transform: translateX(0);
+      width: 24px;
+      height: 24px;
+      left: 3px;
+      top: 3px;
+      background: #fff;
+      border-radius: 50%;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+      transition: transform 0.3s ease;
     }
-    .toggle-button input:checked + .slider:before {
-      transform: translateX(100%);
+    .modern-toggle input:checked + .modern-slider {
+      background: linear-gradient(to right, #ff69b4, #ff85a2);
     }
-    .slider span {
-      position: absolute;
-      width: 50%;
-      height: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 0.9em;
-      color: #fff;
-      text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
-      transition: color 0.4s ease;
-    }
-    .slider .off {
-      left: 0;
-      color: #666;
-    }
-    .slider .on {
-      right: 0;
-      color: #fff;
-    }
-    .toggle-button input:checked + .slider .off {
-      color: #fff;
-    }
-    .toggle-button input:checked + .slider .on {
-      color: #666;
+    .modern-toggle input:checked + .modern-slider:before {
+      transform: translateX(30px);
     }
     .proxy-options-container {
       display: none;
       width: 100%;
-      max-width: 300px;
+      max-width: 320px;
+      flex-direction: column;
+      gap: 15px;
     }
-    .proxy-capsule { 
-      display: flex; 
-      border-radius: 20px; 
-      overflow: hidden; 
-      background: #ffe6f0; 
-      box-shadow: 0 4px 10px rgba(255, 182, 193, 0.2); 
+    .proxy-type-toggle {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
     }
-    .proxy-option { 
-      width: 50%; 
-      padding: 10px 0; 
-      text-align: center; 
-      cursor: pointer; 
-      color: #ff6f91; 
-      transition: all 0.3s ease; 
-      position: relative; 
-      font-size: 1em; 
+    .type-button {
+      flex: 1;
+      padding: 10px 0;
+      font-size: 0.95em;
+      color: #ff6f91;
+      background: rgba(255, 245, 247, 0.5);
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 2px 6px rgba(255, 182, 193, 0.1);
     }
-    .proxy-option.active { 
-      background: linear-gradient(to right, #ffb6c1, #ff69b4); 
-      color: white; 
-      box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.1); 
+    .type-button.active {
+      background: linear-gradient(to right, #ffb6c1, #ff69b4);
+      color: white;
+      box-shadow: 0 4px 10px rgba(255, 105, 180, 0.3);
     }
-    .proxy-option:not(.active):hover { 
-      background: #ffd1dc; 
-    }
-    .proxy-option[data-type="socks5"].active { 
-      background: linear-gradient(to right, #ffd1dc, #ff85a2); 
+    .type-button:hover:not(.active) {
+      background: rgba(255, 209, 220, 0.8);
     }
     .force-reverse-container {
       display: flex;
       align-items: center;
       justify-content: space-between;
       width: 100%;
-      max-width: 300px;
-      gap: 15px;
+      max-width: 320px;
+      padding: 10px 15px;
+      background: rgba(255, 245, 247, 0.5);
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(255, 182, 193, 0.1);
+      transition: all 0.3s ease;
+    }
+    .force-reverse-container:hover {
+      box-shadow: 0 4px 12px rgba(255, 182, 193, 0.2);
     }
     .info-icon {
       cursor: pointer;
       color: #ff69b4;
-      font-size: 1.3em;
-physics: transform 0.2s ease, color 0.2s ease;
+      font-size: 1.2em;
+      transition: transform 0.2s ease, color 0.2s ease;
     }
     .info-icon:hover {
-      transform: scale(1.2);
+      transform: scale(1.15);
       color: #ff1493;
     }
     .proxy-status { 
       margin-top: 20px; 
-      padding: 15px; 
-      border-radius: 15px; 
+      padding: 12px 20px; 
+      border-radius: 12px; 
       font-size: 0.95em; 
       word-break: break-all; 
-      transition: background 0.3s ease, color 0.3s ease; 
+      transition: all 0.3s ease; 
       width: 100%; 
-      box-sizing: border-box; 
+      max-width: 320px; 
+      text-align: center; 
+      background: rgba(233, 236, 239, 0.9); 
+      color: #495057; 
     }
-    .proxy-status.success { background: rgba(212, 237, 218, 0.9); color: #155724; }
-    .proxy-status.direct { background: rgba(233, 236, 239, 0.9); color: #495057; }
+    .proxy-status.success { 
+      background: rgba(212, 237, 218, 0.9); 
+      color: #155724; 
+    }
     .link-box, .uuid-box { border-radius: 15px; padding: 15px; margin: 10px 0; font-size: 0.95em; word-break: break-all; }
     .link-box a { color: #ff69b4; text-decoration: none; transition: color 0.3s ease; }
     .link-box a:hover { color: #ff1493; }
@@ -1129,12 +1130,23 @@ physics: transform 0.2s ease, color 0.2s ease;
     .progress-bar { width: 100%; height: 15px; background: #ffe6f0; border-radius: 10px; overflow: hidden; border: 1px solid #ffb6c1; }
     .progress-fill { height: 100%; background: linear-gradient(to right, #ff69b4, #ff1493); width: 0; transition: width 0.3s ease; }
     .progress-text { text-align: center; font-size: 0.85em; color: #ff6f91; margin-top: 5px; }
+    @media (prefers-color-scheme: dark) {
+      .toggle-row, .force-reverse-container { background: rgba(40, 40, 40, 0.5); }
+      .modern-slider { background: #495057; }
+      .modern-toggle input:checked + .modern-slider { background: linear-gradient(to right, #ff85a2, #ff1493); }
+      .type-button { background: rgba(50, 50, 50, 0.5); color: #ffd1dc; }
+      .type-button.active { background: linear-gradient(to right, #ff85a2, #ff1493); }
+      .type-button:hover:not(.active) { background: rgba(80, 80, 80, 0.8); }
+      .proxy-status { background: rgba(50, 50, 50, 0.9); color: #e9ecef; }
+      .proxy-status.success { background: rgba(40, 80, 60, 0.9); color: #d4edda; }
+    }
     @media (max-width: 600px) {
       .card { padding: 15px; max-width: 90%; }
       .card-title { font-size: 1.3em; }
       .switch-container { gap: 10px; }
       .toggle-row { gap: 10px; }
-      .proxy-option { width: 70px; padding: 8px 0; font-size: 0.9em; }
+      .proxy-type-toggle { gap: 8px; }
+      .type-button { padding: 8px 0; font-size: 0.9em; }
       .proxy-status, .uuid-box { font-size: 0.9em; padding: 12px; }
       .link-box { font-size: 0.9em; padding: 12px; }
       .cute-button, .upload-label, .upload-submit { padding: 10px 20px; font-size: 0.9em; }
@@ -1162,34 +1174,28 @@ physics: transform 0.2s ease, color 0.2s ease;
       <h2 class="card-title">🌟 代理设置</h2>
       <div class="switch-container">
         <div class="toggle-row">
-          <label>代理开关</label>
-          <label class="toggle-button">
+          <span class="toggle-label">代理开关</span>
+          <label class="modern-toggle">
             <input type="checkbox" id="proxyToggle" onchange="toggleProxy()">
-            <span class="slider">
-              <span class="off">关</span>
-              <span class="on">开</span>
-            </span>
+            <span class="modern-slider"></span>
           </label>
         </div>
         <div class="proxy-options-container" id="proxyOptions">
-          <div class="proxy-capsule" id="proxyCapsule">
-            <div class="proxy-option active" data-type="reverse" onclick="switchProxyType('reverse')">反代</div>
-            <div class="proxy-option" data-type="socks5" onclick="switchProxyType('socks5')">SOCKS5</div>
+          <div class="proxy-type-toggle">
+            <button class="type-button active" data-type="reverse" onclick="switchProxyType('reverse')">反代</button>
+            <button class="type-button" data-type="socks5" onclick="switchProxyType('socks5')">SOCKS5</button>
           </div>
-          <div class="force-reverse-container" id="forceReverseContainer">
-            <label>模式切换</label>
-            <label class="toggle-button">
+          <div class="force-reverse-container">
+            <span class="toggle-label">模式切换</span>
+            <label class="modern-toggle">
               <input type="checkbox" id="forceReverseToggle" onchange="toggleForceReverse()">
-              <span class="slider">
-                <span class="off">动态</span>
-                <span class="on">强制</span>
-              </span>
+              <span class="modern-slider"></span>
             </label>
             <span class="info-icon" onclick="showForceReverseInfo()">❓</span>
           </div>
         </div>
+        <div class="proxy-status" id="proxyStatus">直连</div>
       </div>
-      <div class="proxy-status" id="proxyStatus">直连</div>
     </div>
     <div class="card">
       <h2 class="card-title">🐾 配置1订阅</h2>
@@ -1277,12 +1283,10 @@ physics: transform 0.2s ease, color 0.2s ease;
 
     function updateProxyOptionsUI() {
       const proxyOptions = document.getElementById('proxyOptions');
-      const forceReverseContainer = document.getElementById('forceReverseContainer');
-      proxyOptions.style.display = proxyEnabled ? 'block' : 'none';
-      forceReverseContainer.style.display = proxyEnabled ? 'flex' : 'none';
-      const options = document.querySelectorAll('.proxy-option');
-      options.forEach(opt => {
-        opt.classList.toggle('active', opt.dataset.type === proxyType);
+      proxyOptions.style.display = proxyEnabled ? 'flex' : 'none';
+      const typeButtons = document.querySelectorAll('.type-button');
+      typeButtons.forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.type === proxyType);
       });
     }
 
