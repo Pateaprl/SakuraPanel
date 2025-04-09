@@ -627,16 +627,16 @@ export default {
           formData = await 请求.formData();
           const proxyEnabled = formData.get('proxyEnabled');
           const proxyType = formData.get('proxyType');
-          const forceProxy = formData.get('forceProxy');
+          const forceProxy = formData.get('forceProxy'); // 新增：强制代理状态
           await env.LOGIN_STATE.put('proxyEnabled', proxyEnabled);
           await env.LOGIN_STATE.put('proxyType', proxyType);
-          await env.LOGIN_STATE.put('forceProxy', forceProxy);
+          await env.LOGIN_STATE.put('forceProxy', forceProxy); // 保存强制代理状态
           return new Response(null, { status: 200 });
 
         case '/get-proxy-status':
           const 代理启用 = await env.LOGIN_STATE.get('proxyEnabled') === 'true';
           const 代理类型 = await env.LOGIN_STATE.get('proxyType') || 'reverse';
-          const 强制代理 = await env.LOGIN_STATE.get('forceProxy') === 'true';
+          const 强制代理 = await env.LOGIN_STATE.get('forceProxy') === 'true'; // 获取强制代理状态
           const 反代地址 = env.PROXYIP || 'ts.hpc.tw';
           const SOCKS5账号 = env.SOCKS5 || '';
           let status = '直连';
@@ -722,7 +722,7 @@ async function 智能连接(地址, 端口, 地址类型, env) {
 
   if (是域名 || 是IP) {
     const 代理启用 = await env.LOGIN_STATE.get('proxyEnabled') === 'true';
-    const 强制代理 = await env.LOGIN_STATE.get('forceProxy') === 'true';
+    const 强制代理 = await env.LOGIN_STATE.get('forceProxy') === 'true'; // 新增：检查强制代理状态
     const 代理类型 = await env.LOGIN_STATE.get('proxyType') || 'reverse';
 
     if (!代理启用) {
@@ -730,6 +730,7 @@ async function 智能连接(地址, 端口, 地址类型, env) {
     }
 
     if (强制代理) {
+      // 强制代理逻辑：直接使用代理，不尝试直连
       if (代理类型 === 'reverse' && 反代地址) {
         try {
           const [反代主机, 反代端口] = 反代地址.split(':');
@@ -752,6 +753,7 @@ async function 智能连接(地址, 端口, 地址类型, env) {
         }
       }
     } else {
+      // 动态代理逻辑：优先直连，失败时切换到代理
       try {
         const 连接 = await 尝试直连(地址, 端口);
         return 连接;
@@ -898,7 +900,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       .card { background: rgba(255, 245, 247, 0.9); box-shadow: 0 8px 20px rgba(255, 182, 193, 0.3); }
       .card::before { border: 2px dashed #ffb6c1; }
       .card:hover { box-shadow: 0 10px 25px rgba(255, 182, 193, 0.5); }
-      .link-box, .proxy-status, .uuid-box { background: rgba(255, 240, 245, 0.9); border: 2px dashed #ffb6c1; }
+      .link-box, .proxy-status, .uuid-box, .force-proxy-note { background: rgba(255, 240, 245, 0.9); border: 2px dashed #ffb6c1; }
       .file-item { background: rgba(255, 245, 247, 0.9); }
     }
     @media (prefers-color-scheme: dark) {
@@ -906,7 +908,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       .card { background: rgba(30, 30, 30, 0.9); color: #ffd1dc; box-shadow: 0 8px 20px rgba(255, 133, 162, 0.2); }
       .card::before { border: 2px dashed #ff85a2; }
       .card:hover { box-shadow: 0 10px 25px rgba(255, 133, 162, 0.4); }
-      .link-box, .proxy-status, .uuid-box { background: rgba(40, 40, 40, 0.9); border: 2px dashed #ff85a2; color: #ffd1dc; }
+      .link-box, .proxy-status, .uuid-box, .force-proxy-note { background: rgba(40, 40, 40, 0.9); border: 2px dashed #ff85a2; color: #ffd1dc; }
       .link-box a, .uuid-box span { color: #ff85a2; }
       .link-box a:hover { color: #ff1493; }
       .file-item { background: rgba(50, 50, 50, 0.9); color: #ffd1dc; }
@@ -1009,11 +1011,11 @@ function 生成订阅页面(配置路径, hostName, uuid) {
     .proxy-option[data-type="socks5"].active { background: linear-gradient(to right, #ffd1dc, #ff85a2); }
     .proxy-option::before { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: rgba(255, 255, 255, 0.2); transform: rotate(30deg); transition: all 0.5s ease; pointer-events: none; }
     .proxy-option:hover::before { top: 100%; left: 100%; }
-    .proxy-status { margin-top: 20px; padding: 15px; border-radius: 15px; font-size: 0.95em; word-break: break-all; transition: background 0.3s ease, color 0.3s ease; width: 100%; box-sizing: border-box; }
+    .proxy-status, .uuid-box, .force-proxy-note { margin-top: 20px; padding: 15px; border-radius: 15px; font-size: 0.95em; word-break: break-all; transition: background 0.3s ease, color 0.3s ease; width: 100%; box-sizing: border-box; }
     .proxy-status.success { background: rgba(212, 237, 218, 0.9); color: #155724; }
     .proxy-status.direct { background: rgba(233, 236, 239, 0.9); color: #495057; }
-    .proxy-note { font-size: 0.9em; color: #ff85a2; margin-top: 10px; }
-    .link-box, .uuid-box { border-radius: 15px; padding: 15px; margin: 10px 0; font-size: 0.95em; word-break: break-all; }
+    .force-proxy-note { font-size: 0.9em; color: #ff85a2; }
+    .link-box { border-radius: 15px; padding: 15px; margin: 10px 0; font-size: 0.95em; word-break: break-all; }
     .link-box a { color: #ff69b4; text-decoration: none; transition: color 0.3s ease; }
     .link-box a:hover { color: #ff1493; }
     .button-group { display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; margin-top: 15px; }
@@ -1051,7 +1053,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       .switch-container { gap: 10px; }
       .toggle-row { gap: 10px; }
       .proxy-option { width: 70px; padding: 8px 0; font-size: 0.9em; }
-      .proxy-status, .uuid-box { font-size: 0.9em; padding: 12px; }
+      .proxy-status, .uuid-box, .force-proxy-note { font-size: 0.9em; padding: 12px; }
       .link-box { font-size: 0.9em; padding: 12px; }
       .cute-button, .upload-label, .upload-submit { padding: 10px 20px; font-size: 0.9em; }
       .card::after { font-size: 50px; top: -15px; right: -15px; }
@@ -1097,8 +1099,8 @@ function 生成订阅页面(配置路径, hostName, uuid) {
         </div>
       </div>
       <div class="proxy-status" id="proxyStatus">直连</div>
-      <div class="proxy-note" id="proxyNote" style="display: none;">
-        开启代理后可选择动态切换或强制使用代理，强制代理开启后，您的出口将固定为代理服务器的归属地。
+      <div class="force-proxy-note" id="forceProxyNote" style="display: none;">
+        <span id="forceProxyText"></span>
       </div>
     </div>
     <div class="card">
@@ -1126,7 +1128,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
         <input type="file" id="ipFiles" name="ipFiles" accept=".txt" multiple required onchange="显示文件()" style="display: none;">
         <div class="file-list" id="fileList"></div>
         <button type="submit" class="upload-submit" onclick="开始上传(event)">上传</button>
-        <div class="progress-container" id="progressContainer">
+        barge <div class="progress-container" id="progressContainer">
           <div class="progress-bar">
             <div class="progress-fill" id="progressFill"></div>
           </div>
@@ -1174,6 +1176,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       localStorage.setItem('forceProxy', forceProxy);
       saveProxyState();
       updateProxyStatus();
+      updateProxyUI();
     }
 
     function switchProxyType(type) {
@@ -1186,16 +1189,23 @@ function 生成订阅页面(配置路径, hostName, uuid) {
 
     function updateProxyUI() {
       const forceProxyRow = document.getElementById('forceProxyRow');
-      const proxyNote = document.getElementById('proxyNote');
+      const forceProxyNote = document.getElementById('forceProxyNote');
+      const forceProxyText = document.getElementById('forceProxyText');
       const proxyCapsule = document.getElementById('proxyCapsule');
       const options = document.querySelectorAll('.proxy-option');
 
       forceProxyRow.style.display = proxyEnabled ? 'flex' : 'none';
-      proxyNote.style.display = proxyEnabled ? 'block' : 'none';
+      forceProxyNote.style.display = proxyEnabled ? 'block' : 'none';
       proxyCapsule.style.display = proxyEnabled ? 'flex' : 'none';
       options.forEach(opt => {
         opt.classList.toggle('active', opt.dataset.type === proxyType);
       });
+
+      if (proxyEnabled) {
+        forceProxyText.textContent = forceProxy 
+          ? '强制代理开启后，您的出口将固定为代理服务器的归属地。'
+          : '动态代理将优先尝试直连，失败时自动切换至代理。';
+      }
     }
 
     function updateProxyStatus() {
@@ -1355,6 +1365,10 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       }
     }
     adjustLayoutForUA();
+
+    document.addEventListener('DOMContentLoaded', () => {
+      updateProxyUI();
+    });
   </script>
 </body>
 </html>
@@ -1598,4 +1612,3 @@ async function 生成配置2(env, hostName) {
   return `# Generated at: ${new Date().toISOString()}
 ${配置列表.length ? 配置列表.join("\n") : `${atob('dmxlc3M=')}://${uuid}@${hostName}:443?encryption=none&security=tls&type=ws&host=${hostName}&path=${encodeURIComponent('/?ed=2560')}&sni=${hostName}#默认节点`}`;
 }
-   
