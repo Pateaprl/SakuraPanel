@@ -1128,7 +1128,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
         <input type="file" id="ipFiles" name="ipFiles" accept=".txt" multiple required onchange="显示文件()" style="display: none;">
         <div class="file-list" id="fileList"></div>
         <button type="submit" class="upload-submit" onclick="开始上传(event)">上传</button>
-        barge <div class="progress-container" id="progressContainer">
+         <div class="progress-container" id="progressContainer">
           <div class="progress-bar">
             <div class="progress-fill" id="progressFill"></div>
           </div>
