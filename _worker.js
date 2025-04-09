@@ -65,7 +65,7 @@ async function 加密密码(密码) {
 }
 
 async function 检查锁定(env, 设备标识) {
-  const 锁定时间戳 = await env.LOCAL_STATE.get(`lock_${设备标识}`);
+  const 锁定时间戳 = await env.LOGIN_STATE.get(`lock_${设备标识}`);
   const 当前时间 = Date.now();
   const 被锁定 = 锁定时间戳 && 当前时间 < Number(锁定时间戳);
   return {
@@ -627,27 +627,23 @@ export default {
           formData = await 请求.formData();
           const proxyEnabled = formData.get('proxyEnabled');
           const proxyType = formData.get('proxyType');
-          const forceReverse = formData.get('forceReverse'); // 新增强制反代参数
+          const forceReverse = formData.get('forceReverse');
           await env.LOGIN_STATE.put('proxyEnabled', proxyEnabled);
           await env.LOGIN_STATE.put('proxyType', proxyType);
-          await env.LOGIN_STATE.put('forceReverse', forceReverse); // 保存强制反代状态
+          await env.LOGIN_STATE.put('forceReverse', forceReverse);
           return new Response(null, { status: 200 });
 
         case '/get-proxy-status':
           const 代理启用 = await env.LOGIN_STATE.get('proxyEnabled') === 'true';
           const 代理类型 = await env.LOGIN_STATE.get('proxyType') || 'reverse';
-          const 强制反代 = await env.LOGIN_STATE.get('forceReverse') === 'true'; // 获取强制反代状态
+          const 强制反代 = await env.LOGIN_STATE.get('forceReverse') === 'true';
           const 反代地址 = env.PROXYIP || 'ts.hpc.tw';
           const SOCKS5账号 = env.SOCKS5 || '';
           let status = '直连';
           if (代理启用) {
-            if (强制反代 && 反代地址) {
-              status = '强制反代';
-            } else if (代理类型 === 'reverse' && 反代地址) {
-              status = '反代';
-            } else if (代理类型 === 'socks5' && SOCKS5账号) {
-              status = 'SOCKS5';
-            }
+            if (强制反代 && 代理类型 === 'reverse' && 反代地址) status = '强制反代';
+            else if (代理类型 === 'reverse' && 反代地址) status = '反代';
+            else if (代理类型 === 'socks5' && SOCKS5账号) status = 'SOCKS5';
           }
           return 创建JSON响应({ status });
 
@@ -729,7 +725,7 @@ async function 智能连接(地址, 端口, 地址类型, env) {
       return await 尝试直连(地址, 端口);
     }
 
-    if (强制反代 && 反代地址) {
+    if (强制反代 && 代理类型 === 'reverse' && 反代地址) {
       try {
         const [反代主机, 反代端口] = 反代地址.split(':');
         const 连接 = connect({ hostname: 反代主机, port: 反代端口 || 端口 });
@@ -738,34 +734,36 @@ async function 智能连接(地址, 端口, 地址类型, env) {
         return 连接;
       } catch (错误) {
         console.error(`强制反代连接失败: ${错误.message}`);
+        return await 尝试直连(地址, 端口);
       }
     }
 
-    if (代理类型 === 'reverse') {
-      if (反代地址) {
+    if (代理类型 === 'reverse' && 反代地址) {
+      try {
+        const 连接 = await 尝试直连(地址, 端口);
+        return 连接;
+      } catch (直连错误) {
         try {
           const [反代主机, 反代端口] = 反代地址.split(':');
           const 连接 = connect({ hostname: 反代主机, port: 反代端口 || 端口 });
           await 连接.opened;
-          console.log(`通过反代连接: ${反代地址}`);
+          console.log(`动态通过反代连接: ${反代地址}`);
           return 连接;
-        } catch (错误) {
-          console.error(`反代连接失败: ${错误.message}`);
+        } catch (反代错误) {
+          console.error(`反代连接失败: ${反代错误.message}`);
+          throw new Error(`无法连接: ${反代错误.message}`);
         }
       }
-    } else if (代理类型 === 'socks5') {
-      if (SOCKS5账号) {
-        try {
-          const SOCKS5连接 = await 创建SOCKS5(地址类型, 地址, 端口);
-          console.log(`通过 SOCKS5 连接: ${地址}:${端口}`);
-          return SOCKS5连接;
-        } catch (错误) {
-          console.error(`SOCKS5 连接失败: ${错误.message}`);
-        }
+    } else if (代理类型 === 'socks5' && SOCKS5账号) {
+      try {
+        const SOCKS5连接 = await 创建SOCKS5(地址类型, 地址, 端口);
+        console.log(`通过 SOCKS5 连接: ${地址}:${端口}`);
+        return SOCKS5连接;
+      } catch (错误) {
+        console.error(`SOCKS5 连接失败: ${错误.message}`);
+        return await 尝试直连(地址, 端口);
       }
     }
-
-    return await 尝试直连(地址, 端口);
   }
 
   return await 尝试直连(地址, 端口);
@@ -962,7 +960,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       text-shadow: 1px 1px 3px rgba(255, 105, 180, 0.2);
     }
     .switch-container { display: flex; flex-direction: column; align-items: center; gap: 15px; }
-    .toggle-row { display: flex; align-items: center; gap: 15px; }
+    .toggle-row { display: flex; align-items: center; gap: 15px; position: relative; }
     .toggle-switch { position: relative; display: inline-block; width: 60px; height: 34px; }
     .toggle-switch input { opacity: 0; width: 0; height: 0; }
     .slider {
@@ -996,9 +994,21 @@ function 生成订阅页面(配置路径, hostName, uuid) {
     .proxy-option[data-type="socks5"].active { background: linear-gradient(to right, #ffd1dc, #ff85a2); }
     .proxy-option::before { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: rgba(255, 255, 255, 0.2); transform: rotate(30deg); transition: all 0.5s ease; pointer-events: none; }
     .proxy-option:hover::before { top: 100%; left: 100%; }
-    .force-reverse-row { display: flex; align-items: center; gap: 10px; }
-    .info-icon { font-size: 1.2em; color: #ff85a2; cursor: pointer; transition: color 0.3s ease; }
-    .info-icon:hover { color: #ff1493; }
+    .info-icon {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      line-height: 20px;
+      border-radius: 50%;
+      background: #ff69b4;
+      color: white;
+      text-align: center;
+      cursor: pointer;
+      font-size: 0.9em;
+      margin-left: 10px;
+      transition: transform 0.3s ease;
+    }
+    .info-icon:hover { transform: scale(1.1); }
     .proxy-status, .uuid-box { margin-top: 20px; padding: 15px; border-radius: 15px; font-size: 0.95em; word-break: break-all; transition: background 0.3s ease, color 0.3s ease; width: 100%; box-sizing: border-box; }
     .proxy-status.success { background: rgba(212, 237, 218, 0.9); color: #155724; }
     .proxy-status.direct { background: rgba(233, 236, 239, 0.9); color: #495057; }
@@ -1077,13 +1087,13 @@ function 生成订阅页面(配置路径, hostName, uuid) {
           <div class="proxy-option active" data-type="reverse" onclick="switchProxyType('reverse')">反代</div>
           <div class="proxy-option" data-type="socks5" onclick="switchProxyType('socks5')">SOCKS5</div>
         </div>
-        <div class="force-reverse-row" id="forceReverseRow">
+        <div class="toggle-row" id="forceReverseRow" style="display: none;">
           <label>强制反代</label>
           <label class="toggle-switch">
             <input type="checkbox" id="forceReverseToggle" onchange="toggleForceReverse()">
             <span class="slider"></span>
           </label>
-          <span class="info-icon" onclick="showForceReverseInfo()">ℹ️</span>
+          <span class="info-icon" onclick="showForceReverseInfo()">?</span>
         </div>
       </div>
       <div class="proxy-status" id="proxyStatus">直连</div>
@@ -1142,18 +1152,16 @@ function 生成订阅页面(配置路径, hostName, uuid) {
 
     let proxyEnabled = localStorage.getItem('proxyEnabled') === 'true';
     let proxyType = localStorage.getItem('proxyType') || 'reverse';
-    let forceReverse = localStorage.getItem('forceReverse') === 'true'; // 新增强制反代状态
+    let forceReverse = localStorage.getItem('forceReverse') === 'true';
     document.getElementById('proxyToggle').checked = proxyEnabled;
     document.getElementById('forceReverseToggle').checked = forceReverse;
     updateProxyCapsuleUI();
-    updateForceReverseUI();
     updateProxyStatus();
 
     function toggleProxy() {
       proxyEnabled = document.getElementById('proxyToggle').checked;
       localStorage.setItem('proxyEnabled', proxyEnabled);
       updateProxyCapsuleUI();
-      updateForceReverseUI();
       saveProxyState();
       updateProxyStatus();
     }
@@ -1179,14 +1187,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
         opt.classList.toggle('active', opt.dataset.type === proxyType);
       });
       document.getElementById('proxyCapsule').style.display = proxyEnabled ? 'flex' : 'none';
-    }
-
-    function updateForceReverseUI() {
       document.getElementById('forceReverseRow').style.display = proxyEnabled ? 'flex' : 'none';
-    }
-
-    function showForceReverseInfo() {
-      alert('🌸 强制走反代提示 🌸\n\n强制走反代后，无论你在 ${atob('Y2xhc2g=')} 选择哪个国家的节点IP，外部出口的归属地始终会显示代理服务器的归属地。\n\n关闭强制反代后，会优先使用 ${atob('Y2xhc2g=')} 选择的优选IP作为外部出口IP。如果无法访问被CF代理的网站或部分屏蔽了CF CDN的网站，则会动态使用代理IP访问哦~');
     }
 
     function updateProxyStatus() {
@@ -1212,9 +1213,13 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       const formData = new FormData();
       formData.append('proxyEnabled', proxyEnabled);
       formData.append('proxyType', proxyType);
-      formData.append('forceReverse', forceReverse); // 保存强制反代状态
+      formData.append('forceReverse', forceReverse);
       fetch('/set-proxy-state', { method: 'POST', body: formData })
         .then(() => updateProxyStatus());
+    }
+
+    function showForceReverseInfo() {
+      alert('🌸 强制反代提示 🌸\n\n开启后，无论你在 ${atob('Y2xhc2g=')} 选择哪个国家的节点IP，外部出口的归属地始终会显示代理服务器的归属地哦~\n\n关闭后，会优先使用 ${atob('Y2xhc2g=')} 选择的优选IP作为外部出口IP。如果无法访问被CF代理的网站或部分屏蔽了CF CDN的网站，则会动态使用代理IP访问~');
     }
 
     function 导入Config(配置路径, hostName, type) {
