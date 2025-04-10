@@ -111,12 +111,11 @@ jobs:
           BUILD_PYTHON=$(which python3)
           echo "使用构建Python版本："
           $BUILD_PYTHON --version
-          # 设置NDK sysroot和完整路径
           export SYSROOT=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot
-          export CFLAGS="-I$SYSROOT/usr/include --sysroot=$SYSROOT"
-          export LDFLAGS="-L$SYSROOT/usr/lib/aarch64-linux-android/21 --sysroot=$SYSROOT -fuse-ld=lld"
+          # 添加主机lzma.h路径
+          export CFLAGS="-I$SYSROOT/usr/include -I/usr/include --sysroot=$SYSROOT"
+          export LDFLAGS="-L$SYSROOT/usr/lib/aarch64-linux-android/21 -L/usr/lib/x86_64-linux-gnu -llzma --sysroot=$SYSROOT -fuse-ld=lld"
           unset LD
-          # 清理可能干扰的环境变量
           unset LD_LIBRARY_PATH
           ./configure --host=aarch64-linux-android --build=x86_64-linux-gnu \
                       --disable-optimizations \
@@ -180,4 +179,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: config-log
-          path: $GITHUB_WORKSPACE/config.log
+          path: ${{ github.workspace }}/config.log  # 修正为正确路径
