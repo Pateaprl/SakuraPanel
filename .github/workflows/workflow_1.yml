@@ -1,5 +1,4 @@
- 
-name: Build Python and zlib for Android ARM64
+name: Build Python for Android (Latest Versions)
 
 on:
   push:
@@ -8,74 +7,51 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest  # 自动指向最新的 Ubuntu LTS 版本
 
     steps:
-      # 1. 使用系统默认Python 3.10作为host python
-      - name: Check Python Version
-        run: |
-          python3 --version  # 默认为3.10
-          echo "Using system Python: $(which python3)"
+      # 1. 检出代码
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      # 2. 安装基础依赖 (保持原样)
-      - name: Install Dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y build-essential zlib1g-dev libffi-dev libssl-dev \
-                             libbz2-dev libreadline-dev libsqlite3-dev wget curl \
-                             llvm libncurses5-dev libncursesw5-dev xz-utils tk-dev \
-                             libxml2-dev libxmlsec1-dev liblzma-dev git tar unzip binutils
-
-      # 3. NDK设置 (保持原样)
-      - name: Cache Android NDK
-        uses: actions/cache@v4
+      # 2. 设置最新 Android NDK（官方推荐方式）
+      - name: Setup latest Android NDK
+        uses: android-actions/setup-android-ndk@v1
         with:
-          path: ~/android-ndk
-          key: android-ndk-r21d
+          ndk-version: "latest"  # 自动获取最新稳定版 NDK
+          cache: true  # 启用缓存加速后续构建
 
-      - name: Download and Set Up Android NDK
+      # 3. 验证 NDK 安装
+      - name: Verify NDK
         run: |
-          if [ ! -d "$HOME/android-ndk/android-ndk-r21d" ]; then
-            mkdir -p ~/android-ndk
-            wget -q https://dl.google.com/android/repository/android-ndk-r21d-linux-x86_64.zip
-            unzip -q android-ndk-r21d-linux-x86_64.zip -d ~/android-ndk
-          fi
-          echo "ANDROID_NDK_HOME=$HOME/android-ndk/android-ndk-r21d" >> $GITHUB_ENV
+          echo "NDK 路径: $ANDROID_NDK_HOME"
+          $ANDROID_NDK_HOME/ndk-build --version
 
-      # 4. 下载源码 (保持原样)
-      - name: Download Python Source
+      # 4. 使用系统默认 Python（Ubuntu 预装的 Python 3.10）
+      - name: Check system Python
+        run: |
+          python3 --version  # 默认是 3.10.x
+          echo "Python 路径: $(which python3)"
+
+      # 5. 下载 Python 源码（指定版本，例如 3.11.0）
+      - name: Download Python source
         run: |
           wget -q https://www.python.org/ftp/python/3.11.0/Python-3.11.0.tgz
           tar -xzf Python-3.11.0.tgz
           mv Python-3.11.0 cpython
 
-      - name: Download zlib
-        run: |
-          wget -q https://github.com/madler/zlib/archive/refs/tags/v1.2.13.tar.gz
-          tar -xzf v1.2.13.tar.gz
-
-      # 5. 关键修复：使用源码自建host python
-      - name: Build Host Python
-        run: |
-          cd cpython
-          # 先编译host环境的python可执行文件
-          ./configure --enable-optimizations
-          make -j$(nproc) python
-          echo "BUILD_PYTHON=$(pwd)/python" >> $GITHUB_ENV
-
       # 6. 交叉编译配置
-      - name: Cross-Compile Python
+      - name: Configure and compile
         run: |
           cd cpython
           export TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64
           
-          # 使用自建的host python
-          $BUILD_PYTHON ./configure \
+          # 使用系统 Python 3.10 作为 host python
+          python3 ./configure \
             --host=aarch64-linux-android \
             --build=x86_64-linux-gnu \
             --enable-shared \
             --disable-ipv6 \
-            --with-build-python=$BUILD_PYTHON \
             CC=$TOOLCHAIN/bin/aarch64-linux-android21-clang \
             CXX=$TOOLCHAIN/bin/aarch64-linux-android21-clang++ \
             AR=$TOOLCHAIN/bin/aarch64-linux-android-ar \
@@ -85,23 +61,17 @@ jobs:
 
           make -j$(nproc)
 
-      # 7. 后续步骤 (保持原样)
-      - name: Install Artifacts
+      # 7. 打包产物
+      - name: Package artifacts
         run: |
-          mkdir -p android-rootfs/data
+          mkdir -p android-root
           cd cpython
-          make install prefix=$GITHUB_WORKSPACE/android-rootfs/data
+          make install prefix=$GITHUB_WORKSPACE/android-root
+          tar -czvf python-android.tar.gz -C android-root .
 
-      - name: Package Outputs
-        run: |
-          tar -czvf python-android.tar.gz -C android-rootfs/data .
-          tar -czvf build-workspace.tar.gz cpython/ zlib-1.2.13/
-
-      - name: Upload Artifacts
+      # 8. 上传结果
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: python-build
-          path: |
-            python-android.tar.gz
-            build-workspace.tar.gz
- 
+          name: python-android-build
+          path: python-android.tar.gz
