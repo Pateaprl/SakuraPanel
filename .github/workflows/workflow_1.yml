@@ -1,4 +1,4 @@
-name: Build Python for Android (Latest Versions)
+name: Build Python for Android (Latest NDK)
 
 on:
   push:
@@ -7,57 +7,55 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest  # 自动指向最新的 Ubuntu LTS 版本
+    runs-on: ubuntu-latest
 
     steps:
-      # 1. 检出代码
+      # 1. 检出代码（使用官方维护的 checkout）
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. 设置最新 Android NDK（官方推荐方式）
-      - name: Setup latest Android NDK
-        uses: android-actions/setup-android-ndk@v1
+      # 2. 设置 Python 环境（显式指定 3.10）
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v4
         with:
-          ndk-version: "latest"  # 自动获取最新稳定版 NDK
-          cache: true  # 启用缓存加速后续构建
+          python-version: "3.10"
 
-      # 3. 验证 NDK 安装
-      - name: Verify NDK
-        run: |
-          echo "NDK 路径: $ANDROID_NDK_HOME"
-          $ANDROID_NDK_HOME/ndk-build --version
+      # 3. 安装 NDK（改用官方推荐的安装方式）
+      - name: Set up Android NDK
+        uses: android-actions/setup-android-ndk@v2  # 注意改用 v2
+        with:
+          ndk-version: "25.2.9519653"  # 明确指定稳定版本
+          cache: true
 
-      # 4. 使用系统默认 Python（Ubuntu 预装的 Python 3.10）
-      - name: Check system Python
+      # 4. 安装编译依赖
+      - name: Install build dependencies
         run: |
-          python3 --version  # 默认是 3.10.x
-          echo "Python 路径: $(which python3)"
+          sudo apt update
+          sudo apt install -y build-essential zlib1g-dev libffi-dev libssl-dev \
+                             libbz2-dev libreadline-dev libsqlite3-dev wget curl
 
-      # 5. 下载 Python 源码（指定版本，例如 3.11.0）
-      - name: Download Python source
+      # 5. 下载 Python 3.12 源码
+      - name: Download Python 3.12
         run: |
-          wget -q https://www.python.org/ftp/python/3.11.0/Python-3.11.0.tgz
-          tar -xzf Python-3.11.0.tgz
-          mv Python-3.11.0 cpython
+          wget -q https://www.python.org/ftp/python/3.12.0/Python-3.12.0.tar.xz
+          tar -xf Python-3.12.0.tar.xz
+          mv Python-3.12.0 cpython
 
       # 6. 交叉编译配置
-      - name: Configure and compile
+      - name: Configure and build
         run: |
           cd cpython
           export TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64
           
-          # 使用系统 Python 3.10 作为 host python
-          python3 ./configure \
+          ./configure \
             --host=aarch64-linux-android \
             --build=x86_64-linux-gnu \
             --enable-shared \
-            --disable-ipv6 \
+            --with-build-python=$(which python3) \
             CC=$TOOLCHAIN/bin/aarch64-linux-android21-clang \
             CXX=$TOOLCHAIN/bin/aarch64-linux-android21-clang++ \
             AR=$TOOLCHAIN/bin/aarch64-linux-android-ar \
-            READELF=$(which readelf) \
-            ac_cv_file__dev_ptmx=yes \
-            ac_cv_file__dev_ptc=no
+            ac_cv_file__dev_ptmx=yes
 
           make -j$(nproc)
 
