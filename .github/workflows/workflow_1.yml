@@ -113,14 +113,14 @@ jobs:
           $BUILD_PYTHON --version
           # 设置NDK sysroot和完整路径
           export SYSROOT=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot
-          export CFLAGS="-I/usr/include -I$SYSROOT/usr/include --sysroot=$SYSROOT"
-          export LDFLAGS="-L/usr/lib/x86_64-linux-gnu -llzma -L$SYSROOT/usr/lib/aarch64-linux-android/21 --sysroot=$SYSROOT"
-          export LD=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-ld
+          export CFLAGS="-I$SYSROOT/usr/include -I/usr/include --sysroot=$SYSROOT"
+          export LDFLAGS="-L$SYSROOT/usr/lib/aarch64-linux-android/21 -L/usr/lib/x86_64-linux-gnu -llzma --sysroot=$SYSROOT"
+          # 移除LD，使用clang内置链接器
+          unset LD
           ./configure --host=aarch64-linux-android --build=x86_64-linux-gnu \
                       --disable-optimizations \
                       --disable-ipv6 \
                       --with-build-python=$BUILD_PYTHON \
-                      --with-sysroot=$SYSROOT \
                       CC=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang \
                       CXX=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang++ \
                       AR=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-ar \
@@ -129,7 +129,6 @@ jobs:
 
           echo "配置完成"
           make -j$(nproc) || { echo "编译失败，检查日志"; exit 1; }
-          # 上传config.log以供调试
           if [ -f config.log ]; then
             echo "上传 config.log..."
             cp config.log $GITHUB_WORKSPACE/config.log
