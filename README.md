@@ -1,4 +1,8 @@
 # 樱花面板增强版 - 详细使用说明
+![IMG_20250410_064307](https://github.com/user-attachments/assets/d1293b0d-0d84-4ff8-a7ab-0105d07afd97)
+![Screenshot_2025-04-10-03-28-54-46_df198e732186825c8df26e3c5a10d7cd](https://github.com/user-attachments/assets/88fd0997-7237-42d0-95c9-38592f1ce764)
+![IMG_20250410_064343](https://github.com/user-attachments/assets/27d8759e-db73-41f6-a2a6-7f0f631269e5)
+![Screenshot_2025-04-10-02-29-05-40_ed7cc6eecf382e65e95dbc137f8c2558](https://github.com/user-attachments/assets/cfb986e4-0813-46c4-b54a-1cda7f7522e5)
 
 “樱花面板增强版”是一个基于 Cloudflare Workers 和 Pages 的订阅管理工具，支持 Clash 和 v2rayN 配置生成，提供用户认证、节点管理、代理设置和文件上传功能。本文档详细介绍部署、使用、配置，尤其是 IP 格式的说明，适用于开源仓库分享。
 
