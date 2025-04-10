@@ -21,37 +21,32 @@ jobs:
                               libreadline-dev libsqlite3-dev wget curl llvm libncurses5-dev \
                               libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev \
                               liblzma-dev git tar python3 python3-pip unzip binutils
+          # 验证liblzma-dev安装
+          if [ -f /usr/include/lzma.h ]; then
+            echo "liblzma-dev 已安装，lzma.h 存在。"
+          else
+            echo "liblzma-dev 安装失败，lzma.h 未找到！"
+            exit 1
+          fi
           python3 --version
           pip3 --version
           echo "依赖项安装完成"
 
-      - name: 缓存Android NDK
-        uses: actions/cache@v4
-        with:
-          path: ~/android-ndk
-          key: android-ndk-r25b
-
+      # 以下步骤保持不变，直到“配置并编译Python”
       - name: 下载并设置Android NDK
         run: |
-          # 检查磁盘空间
           echo "检查可用磁盘空间："
           df -h
-
           if [ -d "$HOME/android-ndk/android-ndk-r25b" ]; then
             echo "NDK已存在，跳过下载。"
           else
             echo "正在下载NDK..."
             mkdir -p ~/android-ndk || { echo "创建目录失败"; exit 1; }
             wget -O ~/android-ndk/android-ndk-r25b-linux.zip https://dl.google.com/android/repository/android-ndk-r25b-linux.zip || { echo "下载失败"; exit 1; }
-            
-            # 验证文件完整性
             echo "检查下载文件大小："
             ls -lh ~/android-ndk/android-ndk-r25b-linux.zip
-            
             echo "解压NDK..."
             unzip -o -d ~/android-ndk ~/android-ndk/android-ndk-r25b-linux.zip || { echo "解压失败"; exit 1; }
-            
-            # 检查解压结果
             if [ -d "$HOME/android-ndk/android-ndk-r25b" ]; then
               echo "解压成功，NDK目录存在。"
             else
@@ -59,7 +54,6 @@ jobs:
               exit 1
             fi
           fi
-          
           export ANDROID_NDK_HOME=$HOME/android-ndk/android-ndk-r25b
           echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME" >> $GITHUB_ENV
           echo "$ANDROID_NDK_HOME" >> $GITHUB_PATH
@@ -131,13 +125,10 @@ jobs:
       - name: 将Python和zlib安装到模拟Android根目录（/data）
         run: |
           mkdir -p $GITHUB_WORKSPACE/android-rootfs/data
-          
           cd cpython
           make install prefix=$GITHUB_WORKSPACE/android-rootfs/data
-          
           cd ../zlib-1.3.1
           make install prefix=$GITHUB_WORKSPACE/android-rootfs/data
-
           echo "android-rootfs/data目录内容："
           ls -lh $GITHUB_WORKSPACE/android-rootfs/data
 
