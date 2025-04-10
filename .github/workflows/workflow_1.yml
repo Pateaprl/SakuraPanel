@@ -65,10 +65,9 @@ jobs:
 
       - name: 检查Python版本并下载匹配源码
         run: |
-          # 动态获取系统Python版本
           REQUIRED_PYTHON_VERSION=$(python3 --version | grep -oP '\d+\.\d+\.\d+')
           echo "检测到系统Python版本：$REQUIRED_PYTHON_VERSION"
-          if [ -d "cpython" ] && grep -q "$REQUIRED_PYTHON_VERSION" cpython/PC/pyconfig.h; then
+          if [ -d "cpython" ] && grep -q "$REQUIRED_PYTHON_VERSION" cpython/PC/pyconfig.h 2>/dev/null; then
             echo "Python $REQUIRED_PYTHON_VERSION 源码已存在。"
           else
             echo "下载并准备Python $REQUIRED_PYTHON_VERSION 源码..."
@@ -109,17 +108,19 @@ jobs:
           ac_cv_file__dev_ptc=no
           EOF
 
-          # 使用系统Python并验证版本
           BUILD_PYTHON=$(which python3)
           echo "使用构建Python版本："
           $BUILD_PYTHON --version
-          # 设置NDK库路径
-          export CFLAGS="-I/usr/include -I$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
-          export LDFLAGS="-L/usr/lib/x86_64-linux-gnu -llzma -L$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/21"
+          # 设置NDK sysroot和完整路径
+          export SYSROOT=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot
+          export CFLAGS="-I/usr/include -I$SYSROOT/usr/include --sysroot=$SYSROOT"
+          export LDFLAGS="-L/usr/lib/x86_64-linux-gnu -llzma -L$SYSROOT/usr/lib/aarch64-linux-android/21 --sysroot=$SYSROOT"
+          export LD=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-ld
           ./configure --host=aarch64-linux-android --build=x86_64-linux-gnu \
                       --disable-optimizations \
                       --disable-ipv6 \
                       --with-build-python=$BUILD_PYTHON \
+                      --with-sysroot=$SYSROOT \
                       CC=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang \
                       CXX=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang++ \
                       AR=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-ar \
@@ -128,6 +129,11 @@ jobs:
 
           echo "配置完成"
           make -j$(nproc) || { echo "编译失败，检查日志"; exit 1; }
+          # 上传config.log以供调试
+          if [ -f config.log ]; then
+            echo "上传 config.log..."
+            cp config.log $GITHUB_WORKSPACE/config.log
+          fi
           echo "Python编译完成"
 
       - name: 编译zlib
@@ -168,3 +174,10 @@ jobs:
         with:
           name: python-zlib-source
           path: python-zlib-source.tar.gz
+
+      - name: 上传config.log（调试用）
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: config-log
+          path: $GITHUB_WORKSPACE/config.log
