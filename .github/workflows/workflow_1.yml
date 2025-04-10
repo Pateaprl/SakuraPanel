@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04  # 恢复最新Ubuntu版本
+    runs-on: ubuntu-24.04
 
     steps:
       - name: 检出代码
@@ -35,7 +35,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/android-ndk
-          key: android-ndk-r25b  # 恢复最新NDK版本
+          key: android-ndk-r25b
 
       - name: 下载并设置Android NDK
         run: |
@@ -106,11 +106,16 @@ jobs:
           ac_cv_file__dev_ptc=no
           EOF
 
+          # 使用系统Python并验证版本
+          BUILD_PYTHON=$(which python3)
+          echo "使用构建Python版本："
+          $BUILD_PYTHON --version
           export CFLAGS="-I/usr/include"
           export LDFLAGS="-L/usr/lib/x86_64-linux-gnu -llzma"
           ./configure --host=aarch64-linux-android --build=x86_64-linux-gnu \
                       --disable-optimizations \
                       --disable-ipv6 \
+                      --with-build-python=$BUILD_PYTHON \
                       CC=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang \
                       CXX=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang++ \
                       AR=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-ar \
