@@ -32,7 +32,12 @@ jobs:
           pip3 --version
           echo "依赖项安装完成"
 
-      # 以下步骤保持不变，直到“配置并编译Python”
+      - name: 缓存Android NDK
+        uses: actions/cache@v4
+        with:
+          path: ~/android-ndk
+          key: android-ndk-r25b
+
       - name: 下载并设置Android NDK
         run: |
           echo "检查可用磁盘空间："
@@ -101,6 +106,9 @@ jobs:
           EOF
 
           BUILD_PYTHON=$(which python3)
+          # 指定liblzma的头文件和库路径
+          export CFLAGS="-I/usr/include"
+          export LDFLAGS="-L/usr/lib/x86_64-linux-gnu -llzma"
           ./configure --host=aarch64-linux-android --build=x86_64-linux-gnu \
                       --disable-optimizations \
                       --disable-ipv6 \
@@ -112,7 +120,7 @@ jobs:
                       READELF=$READELF
 
           echo "配置完成"
-          make -j$(nproc)
+          make -j$(nproc) || { echo "编译失败，检查日志"; exit 1; }
           echo "Python编译完成"
 
       - name: 编译zlib
