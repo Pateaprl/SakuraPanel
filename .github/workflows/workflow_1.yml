@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04  # 使用最新的Ubuntu 24.04
+    runs-on: ubuntu-24.04
 
     steps:
       - name: 检出代码
@@ -33,14 +33,33 @@ jobs:
 
       - name: 下载并设置Android NDK
         run: |
+          # 检查磁盘空间
+          echo "检查可用磁盘空间："
+          df -h
+
           if [ -d "$HOME/android-ndk/android-ndk-r25b" ]; then
             echo "NDK已存在，跳过下载。"
           else
             echo "正在下载NDK..."
-            mkdir -p ~/android-ndk
-            wget COMMUNITY -O ~/android-ndk/android-ndk-r25b-linux.zip https://dl.google.com/android/repository/android-ndk-r25b-linux.zip
-            unzip -o -d ~/android-ndk ~/android-ndk/android-ndk-r25b-linux.zip
+            mkdir -p ~/android-ndk || { echo "创建目录失败"; exit 1; }
+            wget -O ~/android-ndk/android-ndk-r25b-linux.zip https://dl.google.com/android/repository/android-ndk-r25b-linux.zip || { echo "下载失败"; exit 1; }
+            
+            # 验证文件完整性
+            echo "检查下载文件大小："
+            ls -lh ~/android-ndk/android-ndk-r25b-linux.zip
+            
+            echo "解压NDK..."
+            unzip -o -d ~/android-ndk ~/android-ndk/android-ndk-r25b-linux.zip || { echo "解压失败"; exit 1; }
+            
+            # 检查解压结果
+            if [ -d "$HOME/android-ndk/android-ndk-r25b" ]; then
+              echo "解压成功，NDK目录存在。"
+            else
+              echo "解压后NDK目录不存在！"
+              exit 1
+            fi
           fi
+          
           export ANDROID_NDK_HOME=$HOME/android-ndk/android-ndk-r25b
           echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME" >> $GITHUB_ENV
           echo "$ANDROID_NDK_HOME" >> $GITHUB_PATH
@@ -113,26 +132,22 @@ jobs:
         run: |
           mkdir -p $GITHUB_WORKSPACE/android-rootfs/data
           
-          # 安装Python和zlib到模拟的/data目录
           cd cpython
           make install prefix=$GITHUB_WORKSPACE/android-rootfs/data
           
           cd ../zlib-1.3.1
           make install prefix=$GITHUB_WORKSPACE/android-rootfs/data
 
-          # 检查安装是否成功
           echo "android-rootfs/data目录内容："
           ls -lh $GITHUB_WORKSPACE/android-rootfs/data
 
       - name: 打包已安装的Python和zlib
         run: |
-          # 打包安装的Python和zlib文件
           tar -czvf python-zlib-android-data.tar.gz -C android-rootfs/data .
           echo "二进制打包完成"
 
       - name: 打包构建二进制所用的源码
         run: |
-          # 打包Python和zlib的源码目录
           tar -czvf python-zlib-source.tar.gz cpython zlib-1.3.1
           echo "源码打包完成"
 
