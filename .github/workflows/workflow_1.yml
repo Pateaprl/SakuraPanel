@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04  # 回退到原始成功的Ubuntu版本
 
     steps:
       - name: 检出代码
@@ -36,37 +36,37 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/android-ndk
-          key: android-ndk-r25b
+          key: android-ndk-r21d  # 回退到r21d
 
       - name: 下载并设置Android NDK
         run: |
           echo "检查可用磁盘空间："
           df -h
-          if [ -d "$HOME/android-ndk/android-ndk-r25b" ]; then
+          if [ -d "$HOME/android-ndk/android-ndk-r21d" ]; then
             echo "NDK已存在，跳过下载。"
           else
             echo "正在下载NDK..."
             mkdir -p ~/android-ndk || { echo "创建目录失败"; exit 1; }
-            wget -O ~/android-ndk/android-ndk-r25b-linux.zip https://dl.google.com/android/repository/android-ndk-r25b-linux.zip || { echo "下载失败"; exit 1; }
+            wget -O ~/android-ndk/android-ndk-r21d-linux.zip https://dl.google.com/android/repository/android-ndk-r21d-linux-x86_64.zip || { echo "下载失败"; exit 1; }
             echo "检查下载文件大小："
-            ls -lh ~/android-ndk/android-ndk-r25b-linux.zip
+            ls -lh ~/android-ndk/android-ndk-r21d-linux.zip
             echo "解压NDK..."
-            unzip -o -d ~/android-ndk ~/android-ndk/android-ndk-r25b-linux.zip || { echo "解压失败"; exit 1; }
-            if [ -d "$HOME/android-ndk/android-ndk-r25b" ]; then
+            unzip -o -d ~/android-ndk ~/android-ndk/android-ndk-r21d-linux.zip || { echo "解压失败"; exit 1; }
+            if [ -d "$HOME/android-ndk/android-ndk-r21d" ]; then
               echo "解压成功，NDK目录存在。"
             else
               echo "解压后NDK目录不存在！"
               exit 1
             fi
           fi
-          export ANDROID_NDK_HOME=$HOME/android-ndk/android-ndk-r25b
+          export ANDROID_NDK_HOME=$HOME/android-ndk/android-ndk-r21d
           echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME" >> $GITHUB_ENV
           echo "$ANDROID_NDK_HOME" >> $GITHUB_PATH
           echo "NDK设置完成"
 
       - name: 检查Python版本并下载源码
         run: |
-          REQUIRED_PYTHON_VERSION="3.12.0"
+          REQUIRED_PYTHON_VERSION="3.12.0"  # 保持最新版本
           if python3 --version | grep -q "$REQUIRED_PYTHON_VERSION"; then
             echo "Python $REQUIRED_PYTHON_VERSION 已安装。"
           else
@@ -78,7 +78,7 @@ jobs:
 
       - name: 下载并解压zlib
         run: |
-          wget https://github.com/madler/zlib/archive/refs/tags/v1.3.1.tar.gz -O zlib-1.3.1.tar.gz
+          wget https://github.com/madler/zlib/archive/refs/tags/v1.3.1.tar.gz -O zlib-1.3.1.tar.gz  # 使用最新zlib
           tar -xvf zlib-1.3.1.tar.gz
           cd zlib-1.3.1
           echo "zlib源码解压完成"
@@ -87,7 +87,9 @@ jobs:
         run: |
           export CROSS_COMPILE=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-
           export READELF=$(which readelf)
-          if [ ! -f "$READELF" ]; then
+          if [ -f "$READELF" ]; then
+            echo "readelf已存在"
+          else
             sudo apt install -y binutils
             export READELF=$(which readelf)
           fi
@@ -106,7 +108,7 @@ jobs:
           EOF
 
           BUILD_PYTHON=$(which python3)
-          # 指定liblzma的头文件和库路径
+          # 指定liblzma路径（预防性措施）
           export CFLAGS="-I/usr/include"
           export LDFLAGS="-L/usr/lib/x86_64-linux-gnu -llzma"
           ./configure --host=aarch64-linux-android --build=x86_64-linux-gnu \
