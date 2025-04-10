@@ -63,15 +63,18 @@ jobs:
           echo "$ANDROID_NDK_HOME" >> $GITHUB_PATH
           echo "NDK设置完成"
 
-      - name: 检查Python版本并下载源码
+      - name: 检查Python版本并下载匹配源码
         run: |
-          REQUIRED_PYTHON_VERSION="3.12.0"
-          if python3 --version | grep -q "$REQUIRED_PYTHON_VERSION"; then
-            echo "Python $REQUIRED_PYTHON_VERSION 已安装。"
+          # 动态获取系统Python版本
+          REQUIRED_PYTHON_VERSION=$(python3 --version | grep -oP '\d+\.\d+\.\d+')
+          echo "检测到系统Python版本：$REQUIRED_PYTHON_VERSION"
+          if [ -d "cpython" ] && grep -q "$REQUIRED_PYTHON_VERSION" cpython/PC/pyconfig.h; then
+            echo "Python $REQUIRED_PYTHON_VERSION 源码已存在。"
           else
-            echo "下载并准备Python源码..."
-            wget https://www.python.org/ftp/python/$REQUIRED_PYTHON_VERSION/Python-$REQUIRED_PYTHON_VERSION.tgz
+            echo "下载并准备Python $REQUIRED_PYTHON_VERSION 源码..."
+            wget https://www.python.org/ftp/python/$REQUIRED_PYTHON_VERSION/Python-$REQUIRED_PYTHON_VERSION.tgz || { echo "源码下载失败"; exit 1; }
             tar -xf Python-$REQUIRED_PYTHON_VERSION.tgz
+            rm -rf cpython
             mv Python-$REQUIRED_PYTHON_VERSION cpython
           fi
 
@@ -110,8 +113,9 @@ jobs:
           BUILD_PYTHON=$(which python3)
           echo "使用构建Python版本："
           $BUILD_PYTHON --version
-          export CFLAGS="-I/usr/include"
-          export LDFLAGS="-L/usr/lib/x86_64-linux-gnu -llzma"
+          # 设置NDK库路径
+          export CFLAGS="-I/usr/include -I$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
+          export LDFLAGS="-L/usr/lib/x86_64-linux-gnu -llzma -L$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/21"
           ./configure --host=aarch64-linux-android --build=x86_64-linux-gnu \
                       --disable-optimizations \
                       --disable-ipv6 \
