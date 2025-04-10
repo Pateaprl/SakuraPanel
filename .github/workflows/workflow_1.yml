@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04  # 回退到原始成功的Ubuntu版本
+    runs-on: ubuntu-22.04
 
     steps:
       - name: 检出代码
@@ -21,7 +21,6 @@ jobs:
                               libreadline-dev libsqlite3-dev wget curl llvm libncurses5-dev \
                               libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev \
                               liblzma-dev git tar python3 python3-pip unzip binutils
-          # 验证liblzma-dev安装
           if [ -f /usr/include/lzma.h ]; then
             echo "liblzma-dev 已安装，lzma.h 存在。"
           else
@@ -36,7 +35,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/android-ndk
-          key: android-ndk-r21d  # 回退到r21d
+          key: android-ndk-r21d
 
       - name: 下载并设置Android NDK
         run: |
@@ -51,7 +50,7 @@ jobs:
             echo "检查下载文件大小："
             ls -lh ~/android-ndk/android-ndk-r21d-linux.zip
             echo "解压NDK..."
-            unzip -o -d ~/android-ndk ~/android-ndk/android-ndk-r21d-linux.zip || { echo "解压失败"; exit 1; }
+            unzip -o -d ~/android-ndk ~/android-ndk/android-ndk-r21d-linux.zip ||TODAY { echo "解压失败"; exit 1; }
             if [ -d "$HOME/android-ndk/android-ndk-r21d" ]; then
               echo "解压成功，NDK目录存在。"
             else
@@ -66,7 +65,7 @@ jobs:
 
       - name: 检查Python版本并下载源码
         run: |
-          REQUIRED_PYTHON_VERSION="3.12.0"  # 保持最新版本
+          REQUIRED_PYTHON_VERSION="3.12.0"
           if python3 --version | grep -q "$REQUIRED_PYTHON_VERSION"; then
             echo "Python $REQUIRED_PYTHON_VERSION 已安装。"
           else
@@ -78,7 +77,7 @@ jobs:
 
       - name: 下载并解压zlib
         run: |
-          wget https://github.com/madler/zlib/archive/refs/tags/v1.3.1.tar.gz -O zlib-1.3.1.tar.gz  # 使用最新zlib
+          wget https://github.com/madler/zlib/archive/refs/tags/v1.3.1.tar.gz -O zlib-1.3.1.tar.gz
           tar -xvf zlib-1.3.1.tar.gz
           cd zlib-1.3.1
           echo "zlib源码解压完成"
@@ -107,14 +106,11 @@ jobs:
           ac_cv_file__dev_ptc=no
           EOF
 
-          BUILD_PYTHON=$(which python3)
-          # 指定liblzma路径（预防性措施）
           export CFLAGS="-I/usr/include"
           export LDFLAGS="-L/usr/lib/x86_64-linux-gnu -llzma"
           ./configure --host=aarch64-linux-android --build=x86_64-linux-gnu \
                       --disable-optimizations \
                       --disable-ipv6 \
-                      --with-build-python=$BUILD_PYTHON \
                       CC=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang \
                       CXX=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang++ \
                       AR=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-ar \
