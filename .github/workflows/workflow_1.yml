@@ -35,33 +35,33 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/android-ndk
-          key: android-ndk-r25b
+          key: android-ndk-r27b
 
-      - name: 下载并设置Android NDK
+      - name: 下载并设置Android NDK r27b
         run: |
           echo "检查可用磁盘空间："
           df -h
-          if [ -d "$HOME/android-ndk/android-ndk-r25b" ]; then
-            echo "NDK已存在，跳过下载。"
+          if [ -d "$HOME/android-ndk/android-ndk-r27b" ]; then
+            echo "NDK r27b 已存在，跳过下载。"
           else
-            echo "正在下载NDK..."
+            echo "正在下载 NDK r27b..."
             mkdir -p ~/android-ndk || { echo "创建目录失败"; exit 1; }
-            wget -O ~/android-ndk/android-ndk-r25b-linux.zip https://dl.google.com/android/repository/android-ndk-r25b-linux.zip || { echo "下载失败"; exit 1; }
+            wget -O ~/android-ndk/android-ndk-r27b-linux.zip https://dl.google.com/android/repository/android-ndk-r27b-linux.zip || { echo "下载失败"; exit 1; }
             echo "检查下载文件大小："
-            ls -lh ~/android-ndk/android-ndk-r25b-linux.zip
-            echo "解压NDK..."
-            unzip -o -d ~/android-ndk ~/android-ndk/android-ndk-r25b-linux.zip || { echo "解压失败"; exit 1; }
-            if [ -d "$HOME/android-ndk/android-ndk-r25b" ]; then
-              echo "解压成功，NDK目录存在。"
+            ls -lh ~/android-ndk/android-ndk-r27b-linux.zip
+            echo "解压 NDK r27b..."
+            unzip -o -d ~/android-ndk ~/android-ndk/android-ndk-r27b-linux.zip || { echo "解压失败"; exit 1; }
+            if [ -d "$HOME/android-ndk/android-ndk-r27b" ]; then
+              echo "解压成功，NDK r27b 目录存在。"
             else
-              echo "解压后NDK目录不存在！"
+              echo "解压后 NDK r27b 目录不存在！"
               exit 1
             fi
           fi
-          export ANDROID_NDK_HOME=$HOME/android-ndk/android-ndk-r25b
+          export ANDROID_NDK_HOME=$HOME/android-ndk/android-ndk-r27b
           echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME" >> $GITHUB_ENV
           echo "$ANDROID_NDK_HOME" >> $GITHUB_PATH
-          echo "NDK设置完成"
+          echo "NDK r27b 设置完成"
 
       - name: 检查Python版本并下载匹配源码
         run: |
@@ -112,7 +112,7 @@ jobs:
           echo "使用构建Python版本："
           $BUILD_PYTHON --version
           export SYSROOT=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot
-          # 添加主机lzma.h路径
+          # 添加主机 /usr/include 以包含 lzma.h
           export CFLAGS="-I$SYSROOT/usr/include -I/usr/include --sysroot=$SYSROOT"
           export LDFLAGS="-L$SYSROOT/usr/lib/aarch64-linux-android/21 -L/usr/lib/x86_64-linux-gnu -llzma --sysroot=$SYSROOT -fuse-ld=lld"
           unset LD
@@ -179,4 +179,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: config-log
-          path: ${{ github.workspace }}/config.log  # 修正为正确路径
+          path: ${{ github.workspace }}/config.log
