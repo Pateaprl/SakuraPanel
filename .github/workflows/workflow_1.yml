@@ -102,22 +102,10 @@ jobs:
           ac_cv_file__dev_ptc=no
           EOF
 
-          # 强制禁用 _lzma 模块
-          if [ -f Modules/Setup.dist ]; then
-            sed -i 's/^_lzma/#_lzma/' Modules/Setup.dist
-            cp Modules/Setup.dist Modules/Setup
-          else
-            echo "Modules/Setup.dist 不存在，跳过禁用 _lzma"
-          fi
-
           BUILD_PYTHON=$(which python3)
           echo "使用构建Python版本："
           $BUILD_PYTHON --version
           export SYSROOT=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot
-          export CFLAGS="-I$SYSROOT/usr/include --sysroot=$SYSROOT"
-          export LDFLAGS="-L$SYSROOT/usr/lib/aarch64-linux-android/21 --sysroot=$SYSROOT -fuse-ld=lld"
-          unset LD
-          unset LD_LIBRARY_PATH
           ./configure --host=aarch64-linux-android --build=x86_64-linux-gnu \
                       --disable-optimizations \
                       --disable-ipv6 \
