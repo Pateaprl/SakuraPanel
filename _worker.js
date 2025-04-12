@@ -1588,89 +1588,25 @@ rules:
 async function 生成配置2(env, hostName) {
   const uuid = await 获取或初始化UUID(env);
   const 节点列表 = 优选节点.length ? 优选节点 : [`${hostName}:443`];
-  const 节点配置 = [];
-
-  节点列表.forEach((节点, 索引) => {
-    const [主内容, tls] = 节点.split("@");
-    const [地址端口, 节点名字 = 节点名称] = 主内容.split("#");
-    const [, 地址, 端口 = "443"] = 地址端口.match(/^\[(.*?)\](?::(\d+))?$/) || 地址端口.match(/^(.*?)(?::(\d+))?$/);
-    const 修正地址 = 地址.includes(":") ? 地址.replace(/^\[|\]$/g, '') : 地址;
-    const TLS开关 = tls === 'notls' ? false : true;
-
-    节点配置.push({
-      v: "2",
-      ps: `${节点名字}-${索引 + 1}`,
-      add: 修正地址,
-      port: parseInt(端口),
-      id: uuid,
-      aid: 0,
-      net: "ws",
-      type: "none",
-      host: hostName,
-      path: "/?ed=2560",
-      tls: TLS开关 ? "tls" : "",
-      sni: TLS开关 ? hostName : ""
-    });
-  });
-
-  const 配置模板 = {
-    log: {
-      loglevel: "warning"
-    },
-    inbound: {
-      port: 1080,
-      protocol: "socks",
-      settings: {
-        auth: "noauth",
-        udp: true
-      }
-    },
-    outbound: {
-      protocol: "vless",
-      settings: {
-        vnext: 节点配置.map(节点 => ({
-          address: 节点.add,
-          port: 节点.port,
-          users: [{
-            id: 节点.id,
-            alterId: 节点.aid,
-            encryption: "none"
-          }]
-        }))
-      },
-      streamSettings: {
-        network: "ws",
-        security: 节点配置[0].tls,
-        wsSettings: {
-          path: 节点配置[0].path,
-          headers: {
-            Host: 节点配置[0].host
-          }
-        },
-        tlsSettings: 节点配置[0].tls ? {
-          serverName: 节点配置[0].sni,
-          allowInsecure: false
-        } : null
-      }
-    },
-    outboundDetour: [{
-      protocol: "freedom",
-      settings: {},
-      tag: "direct"
-    }],
-    routing: {
-      domainStrategy: "IPIfNonMatch",
-      rules: [{
-        type: "field",
-        outboundTag: "direct",
-        domain: ["geosite:cn"]
-      }, {
-        type: "field",
-        outboundTag: "direct",
-        ip: ["geoip:cn"]
-      }]
+  const 配置列表 = 节点列表.map((节点, 索引) => {
+    try {
+      const [主内容, tls = 'tls'] = 节点.split("@");
+      const [地址端口, 节点名字 = 节点名称] = 主内容.split("#");
+      const match = 地址端口.match(/^(?:\[([0-9a-fA-F:]+)\]|([^:]+))(?:\:(\d+))?$/);
+      if (!match) return null;
+      const 地址 = match[1] || match[2];
+      const 端口 = match[3] || "443";
+      if (!地址) return null;
+      const 修正地址 = 地址.includes(":") ? `[${地址}]` : 地址;
+      const TLS开关 = tls === 'notls' ? 'none' : 'tls';
+      const encodedPath = encodeURIComponent('/?ed=2560');
+      return `${atob('dmxlc3M=')}://${uuid}@${修正地址}:${端口}?encryption=none&security=${TLS开关}&type=ws&host=${hostName}&path=${encodedPath}&sni=${hostName}#${节点名字}-${索引 + 1}`;
+    } catch (error) {
+      console.error(`生成配置2节点失败: ${节点}, 错误: ${error.message}`);
+      return null;
     }
-  };
+  }).filter(Boolean);
 
-  return JSON.stringify(配置模板, null, 2);
+  return `# Generated at: ${new Date().toISOString()}
+${配置列表.length ? 配置列表.join("\n") : `${atob('dmxlc3M=')}://${uuid}@${hostName}:443?encryption=none&security=tls&type=ws&host=${hostName}&path=${encodeURIComponent('/?ed=2560')}&sni=${hostName}#默认节点`}`;
 }
