@@ -362,9 +362,9 @@ async function 加载节点和配置(env, hostName) {
         const 新版本 = String(Date.now());
         await env.LOGIN_STATE.put('优选节点列表', JSON.stringify(合并节点列表));
         await env.LOGIN_STATE.put('节点列表版本', 新版本);
-        await env.LOGIN_STATE.put('配置_atob('Y2xhc2g=')', await 生成配置1(env, hostName));
+        await env.LOGIN_STATE.put('配置_atob('Y2xhc2g=')', await 生成🐱猫咪配置(env, hostName));
         await env.LOGIN_STATE.put('配置_atob('Y2xhc2g=')_版本', 新版本);
-        await env.LOGIN_STATE.put('配置_atob('djJyYXluZw==')', await 生成配置2(env, hostName));
+        await env.LOGIN_STATE.put('配置_atob('djJyYXluZw==')', await 生成🐶v2配置(env, hostName));
         await env.LOGIN_STATE.put('配置_atob('djJyYXluZw==')_版本', 新版本);
       }
     } else {
@@ -388,7 +388,7 @@ async function 获取配置(env, 类型, hostName) {
     return 缓存配置;
   }
 
-  const 新配置 = 类型 === atob('Y2xhc2g=') ? await 生成配置1(env, hostName) : await 生成配置2(env, hostName);
+  const 新配置 = 类型 === atob('Y2xhc2g=') ? await 生成🐱猫咪配置(env, hostName) : await 生成🐶v2配置(env, hostName);
   await env.LOGIN_STATE.put(缓存键, 新配置);
   await env.LOGIN_STATE.put(版本键, 节点版本);
   return 新配置;
@@ -598,9 +598,9 @@ export default {
             await env.LOGIN_STATE.put('手动优选节点', JSON.stringify(uniqueIpList));
             const 新版本 = String(Date.now());
             await env.LOGIN_STATE.put('节点列表版本', 新版本);
-            await env.LOGIN_STATE.put('配置_atob('Y2xhc2g=')', await 生成配置1(env, hostName));
+            await env.LOGIN_STATE.put('配置_atob('Y2xhc2g=')', await 生成🐱猫咪配置(env, hostName));
             await env.LOGIN_STATE.put('配置_atob('Y2xhc2g=')_版本', 新版本);
-            await env.LOGIN_STATE.put('配置_atob('djJyYXluZw==')', await 生成配置2(env, hostName));
+            await env.LOGIN_STATE.put('配置_atob('djJyYXluZw==')', await 生成🐶v2配置(env, hostName));
             await env.LOGIN_STATE.put('配置_atob('djJyYXluZw==')_版本', 新版本);
             return 创建JSON响应({ message: '上传成功，即将跳转' }, 200, { 'Location': `/${配置路径}` });
           } catch (错误) {
@@ -616,8 +616,8 @@ export default {
           }
           const 新UUID = 生成UUID();
           await env.LOGIN_STATE.put('当前UUID', 新UUID);
-          await env.LOGIN_STATE.put('配置_atob('Y2xhc2g=')', await 生成配置1(env, hostName));
-          await env.LOGIN_STATE.put('配置_atob('djJyYXluZw==')', await 生成配置2(env, hostName));
+          await env.LOGIN_STATE.put('配置_atob('Y2xhc2g=')', await 生成🐱猫咪配置(env, hostName));
+          await env.LOGIN_STATE.put('配置_atob('djJyYXluZw==')', await 生成🐶v2配置(env, hostName));
           const 新版本 = String(Date.now());
           await env.LOGIN_STATE.put('配置_atob('Y2xhc2g=')_版本', 新版本);
           await env.LOGIN_STATE.put('配置_atob('djJyYXluZw==')_版本', 新版本);
@@ -1102,7 +1102,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       </div>
     </div>
     <div class="card">
-      <h2 class="card-title">🐾 配置1订阅</h2>
+      <h2 class="card-title">🐾 🐱猫咪配置订阅</h2>
       <div class="link-box">
         <p>订阅链接：<br><a href="https://${hostName}/${配置路径}/${atob('Y2xhc2g=')}">https://${hostName}/${配置路径}/${atob('Y2xhc2g=')}</a></p>
       </div>
@@ -1111,7 +1111,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       </div>
     </div>
     <div class="card">
-      <h2 class="card-title">🐰 配置2订阅</h2>
+      <h2 class="card-title">🐰 🐶v2配置订阅</h2>
       <div class="link-box">
         <p>订阅链接：<br><a href="https://${hostName}/${配置路径}/${atob('djJyYXluZw==')}">https://${hostName}/${配置路径}/${atob('djJyYXluZw==')}</a></p>
       </div>
@@ -1481,7 +1481,7 @@ function 生成KV未绑定提示页面() {
   `;
 }
 
-async function 生成配置1(env, hostName) {
+async function 生成🐱猫咪配置(env, hostName) {
   const uuid = await 获取或初始化UUID(env);
   const 节点列表 = 优选节点.length ? 优选节点 : [`${hostName}:443`];
   const 国家分组 = {};
@@ -1585,7 +1585,7 @@ rules:
 `;
 }
 
-async function 生成配置2(env, hostName) {
+async function 生成🐶v2配置(env, hostName) {
   const uuid = await 获取或初始化UUID(env);
   const 节点列表 = 优选节点.length ? 优选节点 : [`${hostName}:443`];
   const 配置列表 = 节点列表.map(节点 => {
@@ -1602,7 +1602,7 @@ async function 生成配置2(env, hostName) {
       const encodedPath = encodeURIComponent('/?ed=2560');
       return `${atob('dmxlc3M=')}://${uuid}@${修正地址}:${端口}?encryption=none&security=${TLS开关}&type=ws&host=${hostName}&path=${encodedPath}&sni=${hostName}#${节点名字}`;
     } catch (error) {
-      console.error(`生成配置2节点失败: ${节点}, 错误: ${error.message}`);
+      console.error(`生成🐶v2配置节点失败: ${节点}, 错误: ${error.message}`);
       return null;
     }
   }).filter(Boolean);
