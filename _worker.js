@@ -1453,7 +1453,7 @@ function 生成KV未绑定提示页面() {
   <div class="content">
     <h1>💔 哎呀，KV没绑定哦</h1>
     <p>喂！大臭宝，你的 <span class="highlight">Cloudflare KV 存储空间</span> 还没绑定呢~<br>快去 <span class="highlight">Cloudflare Workers</span> 设置里绑一个 KV 命名空间（变量名：<span class="highlight">KV数据库</span>），然后重新部署一下吧！</p>
-    <div class="instruction">绑定好后，访问 <span class="highlight">/config</span> 就可以进入订阅啦~</div>
+    <div class="instruction">绑定好后，访问 <span class="highlight">你设置的路径</span> 就可以进入订阅啦~</div>
   </div>
   <script>
     const lightBg = '${白天背景图}';
