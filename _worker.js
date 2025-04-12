@@ -1712,6 +1712,9 @@ ${国家列表.map(国家 => `      - "${国家}"`).join("\n")}
 ${国家分组配置}
 
 rules:
+  - DOMAIN-SUFFIX,googleapis.com,🚀节点选择
+  - DOMAIN-SUFFIX,play.google.com,🚀节点选择
+  - DOMAIN-SUFFIX,bing.com,🚀节点选择
   - GEOIP,LAN,DIRECT
   - DOMAIN-SUFFIX,cn,DIRECT
   - GEOIP,CN,DIRECT
