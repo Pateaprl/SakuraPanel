@@ -2,10 +2,6 @@ import { connect } from 'cloudflare:sockets';
 
 // 基础配置
 let 配置路径 = "config";
-let 节点文件路径 = [
-  'https://v2.i-sweet.us.kg/ips.txt',
-  'https://v2.i-sweet.us.kg/url.txt'
-];
 let 优选节点 = [];
 let 反代地址 = 'ts.hpc.tw';
 let SOCKS5账号 = '';
@@ -330,6 +326,11 @@ async function 获取或初始化UUID(env) {
 
 async function 加载节点和配置(env, hostName) {
   try {
+    const 节点路径缓存 = await env.KV数据库.get('node_file_paths');
+    let 节点文件路径 = 节点路径缓存 
+      ? JSON.parse(节点路径缓存) 
+      : ['https://v2.i-sweet.us.kg/ips.txt', 'https://v2.i-sweet.us.kg/url.txt'];
+
     const 手动节点缓存 = await env.KV数据库.get('manual_preferred_ips');
     let 手动节点列表 = [];
     if (手动节点缓存) {
@@ -370,6 +371,8 @@ async function 加载节点和配置(env, hostName) {
     } else {
       优选节点 = 当前节点列表.length > 0 ? 当前节点列表 : [`${hostName}:443`];
     }
+
+    await env.KV数据库.put('node_file_paths', JSON.stringify(节点文件路径));
   } catch (错误) {
     const 缓存节点 = await env.KV数据库.get('ip_preferred_ips');
     优选节点 = 缓存节点 ? JSON.parse(缓存节点) : [`${hostName}:443`];
@@ -623,20 +626,69 @@ export default {
           await env.KV数据库.put('config_' + atob('djJyYXk=') + '_version', 新版本);
           return 创建JSON响应({ uuid: 新UUID }, 200);
 
+        case `/${配置路径}/add-node-path`:
+          const addToken = 请求.headers.get('Cookie')?.split('=')[1];
+          const 有效AddToken = await env.KV数据库.get('current_token');
+          if (!addToken || addToken !== 有效AddToken) {
+            return 创建JSON响应({ error: '未登录或Token无效' }, 401);
+          }
+          const addData = await 请求.json();
+          const newPath = addData.path;
+          if (!newPath || !newPath.match(/^https?:\/\//)) {
+            return 创建JSON响应({ error: '无效的URL格式' }, 400);
+          }
+          let currentPaths = await env.KV数据库.get('node_file_paths');
+          currentPaths = currentPaths ? JSON.parse(currentPaths) : [];
+          if (currentPaths.includes(newPath)) {
+            return 创建JSON响应({ error: '该路径已存在' }, 400);
+          }
+          currentPaths.push(newPath);
+          await env.KV数据库.put('node_file_paths', JSON.stringify(currentPaths));
+          await 加载节点和配置(env, hostName);
+          return 创建JSON响应({ success: true }, 200);
+
+        case `/${配置路径}/remove-node-path`:
+          const removeToken = 请求.headers.get('Cookie')?.split('=')[1];
+          const 有效RemoveToken = await env.KV数据库.get('current_token');
+          if (!removeToken || removeToken !== 有效RemoveToken) {
+            return 创建JSON响应({ error: '未登录或Token无效' }, 401);
+          }
+          const removeData = await 请求.json();
+          const index = removeData.index;
+          let paths = await env.KV数据库.get('node_file_paths');
+          paths = paths ? JSON.parse(paths) : [];
+          if (index < 0 || index >= paths.length) {
+            return 创建JSON响应({ error: '无效的索引' }, 400);
+          }
+          paths.splice(index, 1);
+          await env.KV数据库.put('node_file_paths', JSON.stringify(paths));
+          await 加载节点和配置(env, hostName);
+          return 创建JSON响应({ success: true }, 200);
+
+        case `/${配置路径}/get-node-paths`:
+          const getToken = 请求.headers.get('Cookie')?.split('=')[1];
+          const 有效GetToken = await env.KV数据库.get('current_token');
+          if (!getToken || getToken !== 有效GetToken) {
+            return 创建JSON响应({ error: '未登录或Token无效' }, 401);
+          }
+          let nodePaths = await env.KV数据库.get('node_file_paths');
+          nodePaths = nodePaths ? JSON.parse(nodePaths) : ['https://v2.i-sweet.us.kg/ips.txt', 'https://v2.i-sweet.us.kg/url.txt'];
+          return 创建JSON响应({ paths: nodePaths }, 200);
+
         case '/set-proxy-state':
           formData = await 请求.formData();
           const proxyEnabled = formData.get('proxyEnabled');
           const proxyType = formData.get('proxyType');
-          const forceProxy = formData.get('forceProxy'); // 新增：强制代理状态
+          const forceProxy = formData.get('forceProxy');
           await env.KV数据库.put('proxyEnabled', proxyEnabled);
           await env.KV数据库.put('proxyType', proxyType);
-          await env.KV数据库.put('forceProxy', forceProxy); // 保存强制代理状态
+          await env.KV数据库.put('forceProxy', forceProxy);
           return new Response(null, { status: 200 });
 
         case '/get-proxy-status':
           const 代理启用 = await env.KV数据库.get('proxyEnabled') === 'true';
           const 代理类型 = await env.KV数据库.get('proxyType') || 'reverse';
-          const 强制代理 = await env.KV数据库.get('forceProxy') === 'true'; // 获取强制代理状态
+          const 强制代理 = await env.KV数据库.get('forceProxy') === 'true';
           const 反代地址 = env.PROXYIP || 'ts.hpc.tw';
           const SOCKS5账号 = env.SOCKS5 || '';
           let status = '直连';
@@ -722,7 +774,7 @@ async function 智能连接(地址, 端口, 地址类型, env) {
 
   if (是域名 || 是IP) {
     const 代理启用 = await env.KV数据库.get('proxyEnabled') === 'true';
-    const 强制代理 = await env.KV数据库.get('forceProxy') === 'true'; // 新增：检查强制代理状态
+    const 强制代理 = await env.KV数据库.get('forceProxy') === 'true';
     const 代理类型 = await env.KV数据库.get('proxyType') || 'reverse';
 
     if (!代理启用) {
@@ -730,7 +782,6 @@ async function 智能连接(地址, 端口, 地址类型, env) {
     }
 
     if (强制代理) {
-      // 强制代理逻辑：直接使用代理，不尝试直连
       if (代理类型 === 'reverse' && 反代地址) {
         try {
           const [反代主机, 反代端口] = 反代地址.split(':');
@@ -753,7 +804,6 @@ async function 智能连接(地址, 端口, 地址类型, env) {
         }
       }
     } else {
-      // 动态代理逻辑：优先直连，失败时切换到代理
       try {
         const 连接 = await 尝试直连(地址, 端口);
         return 连接;
@@ -901,7 +951,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       .card::before { border: 2px dashed #ffb6c1; }
       .card:hover { box-shadow: 0 10px 25px rgba(255, 182, 193, 0.5); }
       .link-box, .proxy-status, .uuid-box, .force-proxy-note { background: rgba(255, 240, 245, 0.9); border: 2px dashed #ffb6c1; }
-      .file-item { background: rgba(255, 245, 247, 0.9); }
+      .file-item, .url-item { background: rgba(255, 245, 247, 0.9); }
     }
     @media (prefers-color-scheme: dark) {
       body { background: linear-gradient(135deg, #1e1e2f, #2a2a3b); }
@@ -911,7 +961,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       .link-box, .proxy-status, .uuid-box, .force-proxy-note { background: rgba(40, 40, 40, 0.9); border: 2px dashed #ff85a2; color: #ffd1dc; }
       .link-box a, .uuid-box span { color: #ff85a2; }
       .link-box a:hover { color: #ff1493; }
-      .file-item { background: rgba(50, 50, 50, 0.9); color: #ffd1dc; }
+      .file-item, .url-item { background: rgba(50, 50, 50, 0.9); color: #ffd1dc; }
     }
     .background-media {
       position: fixed;
@@ -1037,16 +1087,25 @@ function 生成订阅页面(配置路径, hostName, uuid) {
     .upload-title { font-size: 1.4em; color: #ff85a2; margin-bottom: 15px; }
     .upload-label { padding: 10px 20px; background: linear-gradient(to right, #ffb6c1, #ff69b4); color: white; border-radius: 20px; cursor: pointer; display: inline-block; transition: all 0.3s ease; }
     .upload-label:hover { transform: scale(1.05); box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4); }
-    .file-list { margin: 15px 0; max-height: 120px; overflow-y: auto; text-align: left; }
-    .file-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-radius: 10px; margin: 5px 0; font-size: 0.9em; }
-    .file-item button { background: #ff9999; border: none; border-radius: 15px; padding: 5px 10px; color: white; cursor: pointer; transition: background 0.3s ease; }
-    .file-item button:hover { background: #ff6666; }
-    .upload-submit { background: linear-gradient(to right, #ffdead, #ff85a2); padding: 12px 25px; border-radius: 20px; border: none; color: white; cursor: pointer; transition: all 0.3s ease; }
-    .upload-submit:hover { transform: scale(1.05); box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4); }
+    .file-list, .url-list { margin: 15px 0; max-height: 120px; overflow-y: auto; text-align: left; }
+    .file-item, .url-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-radius: 10px; margin: 5px 0; font-size: 0.9em; }
+    .file-item button, .url-item button { background: #ff9999; border: none; border-radius: 15px; padding: 5px 10px; color: white; cursor: pointer; transition: background 0.3s ease; }
+    .file-item button:hover, .url-item button:hover { background: #ff6666; }
+    .upload-submit, .add-url-btn { background: linear-gradient(to right, #ffdead, #ff85a2); padding: 12px 25px; border-radius: 20px; border: none; color: white; cursor: pointer; transition: all 0.3s ease; width: 100%; }
+    .upload-submit:hover, .add-url-btn:hover { transform: scale(1.05); box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4); }
     .progress-container { display: none; margin-top: 15px; }
     .progress-bar { width: 100%; height: 15px; background: #ffe6f0; border-radius: 10px; overflow: hidden; border: 1px solid #ffb6c1; }
     .progress-fill { height: 100%; background: linear-gradient(to right, #ff69b4, #ff1493); width: 0; transition: width 0.3s ease; }
     .progress-text { text-align: center; font-size: 0.85em; color: #ff6f91; margin-top: 5px; }
+    .url-input {
+      width: 100%;
+      padding: 10px;
+      border-radius: 15px;
+      border: 2px solid #ffb6c1;
+      font-size: 1em;
+      box-sizing: border-box;
+      margin-bottom: 10px;
+    }
     @media (max-width: 600px) {
       .card { padding: 15px; max-width: 90%; }
       .card-title { font-size: 1.3em; }
@@ -1055,8 +1114,9 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       .proxy-option { width: 70px; padding: 8px 0; font-size: 0.9em; }
       .proxy-status, .uuid-box, .force-proxy-note { font-size: 0.9em; padding: 12px; }
       .link-box { font-size: 0.9em; padding: 12px; }
-      .cute-button, .upload-label, .upload-submit { padding: 10px 20px; font-size: 0.9em; }
+      .cute-button, .upload-label, .upload-submit, .add-url-btn { padding: 10px 20px; font-size: 0.9em; }
       .card::after { font-size: 50px; top: -15px; right: -15px; }
+      .url-input { font-size: 0.9em; }
     }
   </style>
 </head>
@@ -1104,6 +1164,14 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       </div>
     </div>
     <div class="card">
+      <h2 class="upload-title">🌐 管理节点文件路径</h2>
+      <div>
+        <input type="text" id="nodeUrlInput" class="url-input" placeholder="输入节点文件 URL（如 https://example.com/ips.txt）">
+        <button class="add-url-btn" onclick="添加节点路径()">添加路径</button>
+        <div class="url-list" id="urlList"></div>
+      </div>
+    </div>
+    <div class="card">
       <h2 class="card-title">🐾 配置1订阅</h2>
       <div class="link-box">
         <p>订阅链接：<br><a href="https://${hostName}/${配置路径}/${atob('Y2xhc2g=')}">https://${hostName}/${配置路径}/${atob('Y2xhc2g=')}</a></p>
@@ -1128,7 +1196,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
         <input type="file" id="ipFiles" name="ipFiles" accept=".txt" multiple required onchange="显示文件()" style="display: none;">
         <div class="file-list" id="fileList"></div>
         <button type="submit" class="upload-submit" onclick="开始上传(event)">上传</button>
-         <div class="progress-container" id="progressContainer">
+        <div class="progress-container" id="progressContainer">
           <div class="progress-bar">
             <div class="progress-fill" id="progressFill"></div>
           </div>
@@ -1162,6 +1230,71 @@ function 生成订阅页面(配置路径, hostName, uuid) {
     document.getElementById('forceProxyToggle').checked = forceProxy;
     updateProxyUI();
     updateProxyStatus();
+
+    function 加载节点路径() {
+      fetch('/${配置路径}/get-node-paths')
+        .then(response => response.json())
+        .then(data => {
+          const urlList = document.getElementById('urlList');
+          urlList.innerHTML = '';
+          data.paths.forEach((path, index) => {
+            const div = document.createElement('div');
+            div.className = 'url-item';
+            div.innerHTML = \`<span>\${path}</span><button onclick="移除节点路径(\${index})">移除</button>\`;
+            urlList.appendChild(div);
+          });
+        })
+        .catch(() => alert('加载节点路径失败，请稍后再试~'));
+    }
+
+    function 添加节点路径() {
+      const urlInput = document.getElementById('nodeUrlInput');
+      const url = urlInput.value.trim();
+      if (!url) {
+        alert('喂！大臭宝，请输入有效的 URL 哦~');
+        return;
+      }
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        alert('URL 必须以 http:// 或 https:// 开头哦~');
+        return;
+      }
+      fetch('/${配置路径}/add-node-path', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: url })
+      })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            urlInput.value = '';
+            加载节点路径();
+            alert('路径添加成功！');
+          } else {
+            alert(data.error || '添加失败，请稍后再试~');
+          }
+        })
+        .catch(() => alert('添加失败，网络出错啦~'));
+    }
+
+    function 移除节点路径(index) {
+      fetch('/${配置路径}/remove-node-path', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ index })
+      })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            加载节点路径();
+            alert('路径移除成功！');
+          } else {
+            alert(data.error || '移除失败，请稍后再试~');
+          }
+        })
+        .catch(() => alert('移除失败，网络出错啦~'));
+    }
+
+    加载节点路径();
 
     function toggleProxy() {
       proxyEnabled = document.getElementById('proxyToggle').checked;
@@ -1333,7 +1466,6 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       xhr.send(formData);
     }
 
-    // 平滑处理 UA 切换
     let lastUA = navigator.userAgent;
     function checkUAChange() {
       const currentUA = navigator.userAgent;
