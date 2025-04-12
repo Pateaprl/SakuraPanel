@@ -1,6 +1,5 @@
 import { connect } from 'cloudflare:sockets';
 
-// 基础配置
 let 配置路径 = "config";
 let 节点文件路径 = [
   'https://v2.i-sweet.us.kg/ips.txt',
@@ -362,10 +361,10 @@ async function 加载节点和配置(env, hostName) {
         const 新版本 = String(Date.now());
         await env.LOGIN_STATE.put('优选节点列表', JSON.stringify(合并节点列表));
         await env.LOGIN_STATE.put('节点列表版本', 新版本);
-        await env.LOGIN_STATE.put('配置_atob('Y2xhc2g=')', await 生成🐱猫咪配置(env, hostName));
-        await env.LOGIN_STATE.put('配置_atob('Y2xhc2g=')_版本', 新版本);
-        await env.LOGIN_STATE.put('配置_atob('djJyYXluZw==')', await 生成🐶v2配置(env, hostName));
-        await env.LOGIN_STATE.put('配置_atob('djJyYXluZw==')_版本', 新版本);
+        await env.LOGIN_STATE.put('配置_Clash', await 生成配置1(env, hostName));
+        await env.LOGIN_STATE.put('配置_Clash_版本', 新版本);
+        await env.LOGIN_STATE.put('配置_V2Ray', await 生成配置2(env, hostName));
+        await env.LOGIN_STATE.put('配置_V2Ray_版本', 新版本);
       }
     } else {
       优选节点 = 当前节点列表.length > 0 ? 当前节点列表 : [`${hostName}:443`];
@@ -378,7 +377,7 @@ async function 加载节点和配置(env, hostName) {
 }
 
 async function 获取配置(env, 类型, hostName) {
-  const 缓存键 = 类型 === atob('Y2xhc2g=') ? '配置_atob('Y2xhc2g=')' : '配置_atob('djJyYXluZw==')';
+  const 缓存键 = 类型 === atob('Y2xhc2g=') ? '配置_Clash' : '配置_V2Ray';
   const 版本键 = `${缓存键}_版本`;
   const 缓存配置 = await env.LOGIN_STATE.get(缓存键);
   const 配置版本 = await env.LOGIN_STATE.get(版本键) || '0';
@@ -388,7 +387,7 @@ async function 获取配置(env, 类型, hostName) {
     return 缓存配置;
   }
 
-  const 新配置 = 类型 === atob('Y2xhc2g=') ? await 生成🐱猫咪配置(env, hostName) : await 生成🐶v2配置(env, hostName);
+  const 新配置 = 类型 === atob('Y2xhc2g=') ? await 生成配置1(env, hostName) : await 生成配置2(env, hostName);
   await env.LOGIN_STATE.put(缓存键, 新配置);
   await env.LOGIN_STATE.put(版本键, 节点版本);
   return 新配置;
@@ -553,14 +552,14 @@ export default {
           await env.LOGIN_STATE.delete('当前令牌');
           return 创建重定向响应('/login', { 'Set-Cookie': 'token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Strict' });
 
-        case `/${配置路径}/` + atob('Y2xhc2g='):
+        case `/${配置路径}/clash`:
           await 加载节点和配置(env, hostName);
-          const config = await 获取配置(env, atob('Y2xhc2g='), hostName);
+          const config = await 获取配置(env, 'clash', hostName);
           return new Response(config, { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8" } });
 
-        case `/${配置路径}/` + atob('djJyYXluZw=='):
+        case `/${配置路径}/v2ray`:
           await 加载节点和配置(env, hostName);
-          const vConfig = await 获取配置(env, atob('djJyYXk='), hostName);
+          const vConfig = await 获取配置(env, 'v2ray', hostName);
           return new Response(vConfig, { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8" } });
 
         case `/${配置路径}/upload`:
@@ -598,10 +597,10 @@ export default {
             await env.LOGIN_STATE.put('手动优选节点', JSON.stringify(uniqueIpList));
             const 新版本 = String(Date.now());
             await env.LOGIN_STATE.put('节点列表版本', 新版本);
-            await env.LOGIN_STATE.put('配置_atob('Y2xhc2g=')', await 生成🐱猫咪配置(env, hostName));
-            await env.LOGIN_STATE.put('配置_atob('Y2xhc2g=')_版本', 新版本);
-            await env.LOGIN_STATE.put('配置_atob('djJyYXluZw==')', await 生成🐶v2配置(env, hostName));
-            await env.LOGIN_STATE.put('配置_atob('djJyYXluZw==')_版本', 新版本);
+            await env.LOGIN_STATE.put('配置_Clash', await 生成配置1(env, hostName));
+            await env.LOGIN_STATE.put('配置_Clash_版本', 新版本);
+            await env.LOGIN_STATE.put('配置_V2Ray', await 生成配置2(env, hostName));
+            await env.LOGIN_STATE.put('配置_V2Ray_版本', 新版本);
             return 创建JSON响应({ message: '上传成功，即将跳转' }, 200, { 'Location': `/${配置路径}` });
           } catch (错误) {
             console.error(`上传处理失败: ${错误.message}`);
@@ -616,11 +615,11 @@ export default {
           }
           const 新UUID = 生成UUID();
           await env.LOGIN_STATE.put('当前UUID', 新UUID);
-          await env.LOGIN_STATE.put('配置_atob('Y2xhc2g=')', await 生成🐱猫咪配置(env, hostName));
-          await env.LOGIN_STATE.put('配置_atob('djJyYXluZw==')', await 生成🐶v2配置(env, hostName));
+          await env.LOGIN_STATE.put('配置_Clash', await 生成配置1(env, hostName));
+          await env.LOGIN_STATE.put('配置_V2Ray', await 生成配置2(env, hostName));
           const 新版本 = String(Date.now());
-          await env.LOGIN_STATE.put('配置_atob('Y2xhc2g=')_版本', 新版本);
-          await env.LOGIN_STATE.put('配置_atob('djJyYXluZw==')_版本', 新版本);
+          await env.LOGIN_STATE.put('配置_Clash_版本', 新版本);
+          await env.LOGIN_STATE.put('配置_V2Ray_版本', 新版本);
           return 创建JSON响应({ uuid: 新UUID }, 200);
 
         case '/set-proxy-state':
@@ -713,7 +712,7 @@ async function 智能连接(地址, 端口, 地址类型, env) {
   const 反代地址 = env.PROXYIP || 'ts.hpc.tw';
   const SOCKS5账号 = env.SOCKS5 || '';
 
-  if (!地址 || 地址.trim() === '') {
+  if (!地址||!地址.trim() === '') {
     return await 尝试直连(地址, 端口);
   }
 
@@ -1063,7 +1062,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
   <div class="container">
     <div class="card">
       <h1 class="card-title">🌸 欢迎来到樱花订阅站 🌸</h1>
-      <p style="font-size: 1em;">支持 <span style="color: #ff69b4;">${atob('Y2xhc2g=')}</span> 和 <span style="color: #ff85a2;">${atob('djJyYXluZw==')}</span> 哦~</p>
+      <p style="font-size: 1em;">支持 <span style="color: #ff69b4;">clash</span> 和 <span style="color: #ff85a2;">v2ray</span> 哦~</p>
     </div>
     <div class="card">
       <h2 class="card-title">🔑 当前 UUID</h2>
@@ -1102,21 +1101,21 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       </div>
     </div>
     <div class="card">
-      <h2 class="card-title">🐾 🐱猫咪配置订阅</h2>
+      <h2 class="card-title">🐾 配置1订阅</h2>
       <div class="link-box">
-        <p>订阅链接：<br><a href="https://${hostName}/${配置路径}/${atob('Y2xhc2g=')}">https://${hostName}/${配置路径}/${atob('Y2xhc2g=')}</a></p>
+        <p>订阅链接：<br><a href="https://${hostName}/${配置路径}/clash">https://${hostName}/${配置路径}/clash</a></p>
       </div>
       <div class="button-group">
-        <button class="cute-button config1-btn" onclick="导入Config('${配置路径}', '${hostName}', '${atob('Y2xhc2g=')}')">一键导入</button>
+        <button class="cute-button config1-btn" onclick="导入Config('${配置路径}', '${hostName}', 'clash')">一键导入</button>
       </div>
     </div>
     <div class="card">
-      <h2 class="card-title">🐰 🐶v2配置订阅</h2>
+      <h2 class="card-title">🐰 配置2订阅</h2>
       <div class="link-box">
-        <p>订阅链接：<br><a href="https://${hostName}/${配置路径}/${atob('djJyYXluZw==')}">https://${hostName}/${配置路径}/${atob('djJyYXluZw==')}</a></p>
+        <p>订阅链接：<br><a href="https://${hostName}/${配置路径}/v2ray">https://${hostName}/${配置路径}/v2ray</a></p>
       </div>
       <div class="button-group">
-        <button class="cute-button config2-btn" onclick="导入Config('${配置路径}', '${hostName}', '${atob('djJyYXluZw==')}')">一键导入</button>
+        <button class="cute-button config2-btn" onclick="导入Config('${配置路径}', '${hostName}', 'v2ray')">一键导入</button>
       </div>
     </div>
     <div class="card">
@@ -1481,7 +1480,7 @@ function 生成KV未绑定提示页面() {
   `;
 }
 
-async function 生成🐱猫咪配置(env, hostName) {
+async function 生成配置1(env, hostName) {
   const uuid = await 获取或初始化UUID(env);
   const 节点列表 = 优选节点.length ? 优选节点 : [`${hostName}:443`];
   const 国家分组 = {};
@@ -1499,7 +1498,7 @@ async function 生成🐱猫咪配置(env, hostName) {
     国家分组[国家][地址类型].push({
       name: `${节点名字}-${国家分组[国家][地址类型].length + 1}`,
       config: `- name: "${节点名字}-${国家分组[国家][地址类型].length + 1}"
-  type: ${atob('dmxlc3M=')}
+  type: vless
   server: ${修正地址}
   port: ${端口}
   uuid: ${uuid}
@@ -1515,98 +1514,163 @@ async function 生成🐱猫咪配置(env, hostName) {
   });
 
   const 国家列表 = Object.keys(国家分组).sort();
-  const 节点配置 = 国家列表.flatMap(国家 => [...国家分组[国家].IPv4, ...国家分组[国家].IPv6].map(n => n.config)).join("\n");
-  const 国家分组配置 = 国家列表.map(国家 => `
-  - name: "${国家}"
-    type: url-test
-    url: "http://www.gstatic.com/generate_204"
-    interval: 120
-    tolerance: 50
-    proxies:
-${[...国家分组[国家].IPv4, ...国家分组[国家].IPv6].map(n => `      - "${n.name}"`).join("\n")}
-`).join("");
+  const 节点配置 = 国家列表.flatMap(国家 => [
+    ...国家分组[国家].IPv4.map(item => item.config),
+    ...国家分组[国家].IPv6.map(item => item.config)
+  ]).join('\n');
 
-  return `# Generated at: ${new Date().toISOString()}
-mixed-port: 7890
+  const 代理组 = 国家列表.map(国家 => ({
+    name: 国家,
+    proxies: [
+      ...国家分组[国家].IPv4.map(item => item.name),
+      ...国家分组[国家].IPv6.map(item => item.name)
+    ]
+  }));
+
+  const 配置模板 = `
+port: 7890
 allow-lan: true
-mode: Rule
+mode: rule
 log-level: info
-external-controller: :9090
+unified-delay: true
+global-client-fingerprint: chrome
+external-controller: 127.0.0.1:9090
 dns:
   enable: true
-  listen: 0.0.0.0:53
-  default-nameserver:
-    - 8.8.8.8
-    - 1.1.1.1
+  listen: 0.0.0.0:1053
+  ipv6: true
   enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  default-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
   nameserver:
-    - tls://8.8.8.8
-    - tls://1.1.1.1
+    - https://dns.alidns.com/dns-query
+    - https://doh.pub/dns-query
   fallback:
-    - tls://9.9.9.9
-    - tls://1.0.0.1
+    - https://1.1.1.1/dns-query
+    - https://dns.google/dns-query
   fallback-filter:
     geoip: true
+    geoip-code: CN
     ipcidr:
       - 240.0.0.0/4
-
 proxies:
 ${节点配置}
-
 proxy-groups:
-  - name: "🚀节点选择"
+  - name: Proxy
     type: select
     proxies:
-      - "🤪自动选择"
-      - "🥰负载均衡"
-${国家列表.map(国家 => `      - "${国家}"`).join("\n")}
-
-  - name: "🤪自动选择"
+      - Auto
+      - DIRECT
+      ${国家列表.map(国家 => `- ${国家}`).join('\n      ')}
+  - name: Auto
     type: url-test
-    url: "http://www.gstatic.com/generate_204"
-    interval: 120
+    proxies:
+      ${国家列表.flatMap(国家 => 国家分组[国家].IPv4.concat(国家分组[国家].IPv6).map(item => item.name)).map(name => `- ${name}`).join('\n      ')}
+    url: http://www.gstatic.com/generate_204
+    interval: 300
     tolerance: 50
+${国家列表.map(国家 => `
+  - name: ${国家}
+    type: select
     proxies:
-${国家列表.map(国家 => `      - "${国家}"`).join("\n")}
-
-  - name: "🥰负载均衡"
-    type: load-balance
-    strategy: round-robin
-    proxies:
-${国家列表.map(国家 => `      - "${国家}"`).join("\n")}
-
-${国家分组配置}
-
+      ${国家分组[国家].IPv4.concat(国家分组[国家].IPv6).map(item => `- ${item.name}`).join('\n      ')}
+`).join('')}
 rules:
-  - GEOIP,LAN,DIRECT
-  - DOMAIN-SUFFIX,cn,DIRECT
   - GEOIP,CN,DIRECT
-  - MATCH,🚀节点选择
+  - MATCH,Proxy
 `;
+
+  return 配置模板.trim();
 }
 
-async function 生成🐶v2配置(env, hostName) {
+async function 生成配置2(env, hostName) {
   const uuid = await 获取或初始化UUID(env);
   const 节点列表 = 优选节点.length ? 优选节点 : [`${hostName}:443`];
-  const 配置列表 = 节点列表.map(节点 => {
-    try {
-      const [主内容, tls = 'tls'] = 节点.split("@");
-      const [地址端口, 节点名字 = 节点名称] = 主内容.split("#");
-      const match = 地址端口.match(/^(?:\[([0-9a-fA-F:]+)\]|([^:]+))(?:\:(\d+))?$/);
-      if (!match) return null;
-      const 地址 = match[1] || match[2];
-      const 端口 = match[3] || "443";
-      if (!地址) return null;
-      const 修正地址 = 地址.includes(":") ? `[${地址}]` : 地址;
-      const TLS开关 = tls === 'notls' ? 'none' : 'tls';
-      const encodedPath = encodeURIComponent('/?ed=2560');
-      return `${atob('dmxlc3M=')}://${uuid}@${修正地址}:${端口}?encryption=none&security=${TLS开关}&type=ws&host=${hostName}&path=${encodedPath}&sni=${hostName}#${节点名字}`;
-    } catch (error) {
-      console.error(`生成🐶v2配置节点失败: ${节点}, 错误: ${error.message}`);
-      return null;
-    }
-  }).filter(Boolean);
+  const 节点配置 = [];
 
-  return `# Generated at: ${new Date().toISOString()}
-${配置列表.length ? 配置列表.join("\n") : `${atob('dmxlc3M=')}://${uuid}@${hostName}:443?encryption=none&security=tls&type=ws&host=${hostName}&path=${encodeURIComponent('/?ed=2560')}&sni=${hostName}#默认节点`}`;
+  节点列表.forEach((节点, 索引) => {
+    const [主内容, tls] = 节点.split("@");
+    const [地址端口, 节点名字 = 节点名称] = 主内容.split("#");
+    const [, 地址, 端口 = "443"] = 地址端口.match(/^\[(.*?)\](?::(\d+))?$/) || 地址端口.match(/^(.*?)(?::(\d+))?$/);
+    const 修正地址 = 地址.includes(":") ? 地址.replace(/^\[|\]$/g, '') : 地址;
+    const TLS开关 = tls === 'notls' ? false : true;
+
+    节点配置.push({
+      v: "2",
+      ps: `${节点名字}-${索引 + 1}`,
+      add: 修正地址,
+      port: parseInt(端口),
+      id: uuid,
+      aid: 0,
+      net: "ws",
+      type: "none",
+      host: hostName,
+      path: "/?ed=2560",
+      tls: TLS开关 ? "tls" : "",
+      sni: TLS开关 ? hostName : ""
+    });
+  });
+
+  const 配置模板 = {
+    log: {
+      loglevel: "warning"
+    },
+    inbound: {
+      port: 1080,
+      protocol: "socks",
+      settings: {
+        auth: "noauth",
+        udp: true
+      }
+    },
+    outbound: {
+      protocol: "vless",
+      settings: {
+        vnext: 节点配置.map(节点 => ({
+          address: 节点.add,
+          port: 节点.port,
+          users: [{
+            id: 节点.id,
+            alterId: 节点.aid,
+            encryption: "none"
+          }]
+        }))
+      },
+      streamSettings: {
+        network: "ws",
+        security: 节点配置[0].tls,
+        wsSettings: {
+          path: 节点配置[0].path,
+          headers: {
+            Host: 节点配置[0].host
+          }
+        },
+        tlsSettings: 节点配置[0].tls ? {
+          serverName: 节点配置[0].sni,
+          allowInsecure: false
+        } : null
+      }
+    },
+    outboundDetour: [{
+      protocol: "freedom",
+      settings: {},
+      tag: "direct"
+    }],
+    routing: {
+      domainStrategy: "IPIfNonMatch",
+      rules: [{
+        type: "field",
+        outboundTag: "direct",
+        domain: ["geosite:cn"]
+      }, {
+        type: "field",
+        outboundTag: "direct",
+        ip: ["geoip:cn"]
+      }]
+    }
+  };
+
+  return JSON.stringify(配置模板, null, 2);
 }
