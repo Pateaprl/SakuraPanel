@@ -362,10 +362,10 @@ async function 加载节点和配置(env, hostName) {
         const 新版本 = String(Date.now());
         await env.LOGIN_STATE.put('优选节点列表', JSON.stringify(合并节点列表));
         await env.LOGIN_STATE.put('节点列表版本', 新版本);
-        await env.LOGIN_STATE.put('配置_Clash', await 生成配置1(env, hostName));
-        await env.LOGIN_STATE.put('配置_Clash_版本', 新版本);
-        await env.LOGIN_STATE.put('配置_V2Ray', await 生成配置2(env, hostName));
-        await env.LOGIN_STATE.put('配置_V2Ray_版本', 新版本);
+        await env.LOGIN_STATE.put('配置_atob('Y2xhc2g=')', await 生成配置1(env, hostName));
+        await env.LOGIN_STATE.put('配置_atob('Y2xhc2g=')_版本', 新版本);
+        await env.LOGIN_STATE.put('配置_atob('djJyYXluZw==')', await 生成配置2(env, hostName));
+        await env.LOGIN_STATE.put('配置_atob('djJyYXluZw==')_版本', 新版本);
       }
     } else {
       优选节点 = 当前节点列表.length > 0 ? 当前节点列表 : [`${hostName}:443`];
@@ -378,7 +378,7 @@ async function 加载节点和配置(env, hostName) {
 }
 
 async function 获取配置(env, 类型, hostName) {
-  const 缓存键 = 类型 === atob('Y2xhc2g=') ? '配置_Clash' : '配置_V2Ray';
+  const 缓存键 = 类型 === atob('Y2xhc2g=') ? '配置_atob('Y2xhc2g=')' : '配置_atob('djJyYXluZw==')';
   const 版本键 = `${缓存键}_版本`;
   const 缓存配置 = await env.LOGIN_STATE.get(缓存键);
   const 配置版本 = await env.LOGIN_STATE.get(版本键) || '0';
@@ -598,10 +598,10 @@ export default {
             await env.LOGIN_STATE.put('手动优选节点', JSON.stringify(uniqueIpList));
             const 新版本 = String(Date.now());
             await env.LOGIN_STATE.put('节点列表版本', 新版本);
-            await env.LOGIN_STATE.put('配置_Clash', await 生成配置1(env, hostName));
-            await env.LOGIN_STATE.put('配置_Clash_版本', 新版本);
-            await env.LOGIN_STATE.put('配置_V2Ray', await 生成配置2(env, hostName));
-            await env.LOGIN_STATE.put('配置_V2Ray_版本', 新版本);
+            await env.LOGIN_STATE.put('配置_atob('Y2xhc2g=')', await 生成配置1(env, hostName));
+            await env.LOGIN_STATE.put('配置_atob('Y2xhc2g=')_版本', 新版本);
+            await env.LOGIN_STATE.put('配置_atob('djJyYXluZw==')', await 生成配置2(env, hostName));
+            await env.LOGIN_STATE.put('配置_atob('djJyYXluZw==')_版本', 新版本);
             return 创建JSON响应({ message: '上传成功，即将跳转' }, 200, { 'Location': `/${配置路径}` });
           } catch (错误) {
             console.error(`上传处理失败: ${错误.message}`);
@@ -616,11 +616,11 @@ export default {
           }
           const 新UUID = 生成UUID();
           await env.LOGIN_STATE.put('当前UUID', 新UUID);
-          await env.LOGIN_STATE.put('配置_Clash', await 生成配置1(env, hostName));
-          await env.LOGIN_STATE.put('配置_V2Ray', await 生成配置2(env, hostName));
+          await env.LOGIN_STATE.put('配置_atob('Y2xhc2g=')', await 生成配置1(env, hostName));
+          await env.LOGIN_STATE.put('配置_atob('djJyYXluZw==')', await 生成配置2(env, hostName));
           const 新版本 = String(Date.now());
-          await env.LOGIN_STATE.put('配置_Clash_版本', 新版本);
-          await env.LOGIN_STATE.put('配置_V2Ray_版本', 新版本);
+          await env.LOGIN_STATE.put('配置_atob('Y2xhc2g=')_版本', 新版本);
+          await env.LOGIN_STATE.put('配置_atob('djJyYXluZw==')_版本', 新版本);
           return 创建JSON响应({ uuid: 新UUID }, 200);
 
         case '/set-proxy-state':
