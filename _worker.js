@@ -361,10 +361,10 @@ async function 加载节点和配置(env, hostName) {
         const 新版本 = String(Date.now());
         await env.LOGIN_STATE.put('优选节点列表', JSON.stringify(合并节点列表));
         await env.LOGIN_STATE.put('节点列表版本', 新版本);
-        await env.LOGIN_STATE.put('配置_Clash', await 生成配置1(env, hostName));
-        await env.LOGIN_STATE.put('配置_Clash_版本', 新版本);
-        await env.LOGIN_STATE.put('配置_V2Ray', await 生成配置2(env, hostName));
-        await env.LOGIN_STATE.put('配置_V2Ray_版本', 新版本);
+        await env.LOGIN_STATE.put('配置_Y2xhc2g=', await 生成配置1(env, hostName));
+        await env.LOGIN_STATE.put('配置_Y2xhc2g=_版本', 新版本);
+        await env.LOGIN_STATE.put('配置_djJyYXluZw==', await 生成配置2(env, hostName));
+        await env.LOGIN_STATE.put('配置_djJyYXluZw==_版本', 新版本);
       }
     } else {
       优选节点 = 当前节点列表.length > 0 ? 当前节点列表 : [`${hostName}:443`];
@@ -377,7 +377,7 @@ async function 加载节点和配置(env, hostName) {
 }
 
 async function 获取配置(env, 类型, hostName) {
-  const 缓存键 = 类型 === atob('Y2xhc2g=') ? '配置_Clash' : '配置_V2Ray';
+  const 缓存键 = 类型 === atob('Y2xhc2g=') ? '配置_Y2xhc2g=' : '配置_djJyYXluZw==';
   const 版本键 = `${缓存键}_版本`;
   const 缓存配置 = await env.LOGIN_STATE.get(缓存键);
   const 配置版本 = await env.LOGIN_STATE.get(版本键) || '0';
@@ -552,14 +552,14 @@ export default {
           await env.LOGIN_STATE.delete('当前令牌');
           return 创建重定向响应('/login', { 'Set-Cookie': 'token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Strict' });
 
-        case `/${配置路径}/clash`:
+        case `/${配置路径}/Y2xhc2g=`:
           await 加载节点和配置(env, hostName);
-          const config = await 获取配置(env, 'clash', hostName);
+          const config = await 获取配置(env, 'Y2xhc2g=', hostName);
           return new Response(config, { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8" } });
 
-        case `/${配置路径}/v2ray`:
+        case `/${配置路径}/djJyYXluZw==`:
           await 加载节点和配置(env, hostName);
-          const vConfig = await 获取配置(env, 'v2ray', hostName);
+          const vConfig = await 获取配置(env, 'djJyYXluZw==', hostName);
           return new Response(vConfig, { status: 200, headers: { "Content-Type": "text/plain;charset=utf-8" } });
 
         case `/${配置路径}/upload`:
@@ -597,10 +597,10 @@ export default {
             await env.LOGIN_STATE.put('手动优选节点', JSON.stringify(uniqueIpList));
             const 新版本 = String(Date.now());
             await env.LOGIN_STATE.put('节点列表版本', 新版本);
-            await env.LOGIN_STATE.put('配置_Clash', await 生成配置1(env, hostName));
-            await env.LOGIN_STATE.put('配置_Clash_版本', 新版本);
-            await env.LOGIN_STATE.put('配置_V2Ray', await 生成配置2(env, hostName));
-            await env.LOGIN_STATE.put('配置_V2Ray_版本', 新版本);
+            await env.LOGIN_STATE.put('配置_Y2xhc2g=', await 生成配置1(env, hostName));
+            await env.LOGIN_STATE.put('配置_Y2xhc2g=_版本', 新版本);
+            await env.LOGIN_STATE.put('配置_djJyYXluZw==', await 生成配置2(env, hostName));
+            await env.LOGIN_STATE.put('配置_djJyYXluZw==_版本', 新版本);
             return 创建JSON响应({ message: '上传成功，即将跳转' }, 200, { 'Location': `/${配置路径}` });
           } catch (错误) {
             console.error(`上传处理失败: ${错误.message}`);
@@ -615,11 +615,11 @@ export default {
           }
           const 新UUID = 生成UUID();
           await env.LOGIN_STATE.put('当前UUID', 新UUID);
-          await env.LOGIN_STATE.put('配置_Clash', await 生成配置1(env, hostName));
-          await env.LOGIN_STATE.put('配置_V2Ray', await 生成配置2(env, hostName));
+          await env.LOGIN_STATE.put('配置_Y2xhc2g=', await 生成配置1(env, hostName));
+          await env.LOGIN_STATE.put('配置_djJyYXluZw==', await 生成配置2(env, hostName));
           const 新版本 = String(Date.now());
-          await env.LOGIN_STATE.put('配置_Clash_版本', 新版本);
-          await env.LOGIN_STATE.put('配置_V2Ray_版本', 新版本);
+          await env.LOGIN_STATE.put('配置_Y2xhc2g=_版本', 新版本);
+          await env.LOGIN_STATE.put('配置_djJyYXluZw==_版本', 新版本);
           return 创建JSON响应({ uuid: 新UUID }, 200);
 
         case '/set-proxy-state':
@@ -675,7 +675,7 @@ async function 升级请求(请求, env) {
   return new Response(null, { status: 101, webSocket: 客户端 });
 }
 
-function 解密(混淆字符) {
+function 解加密(混淆字符) {
   混淆字符 = 混淆字符.replace(/-/g, '+').replace(/_/g, '/');
   return Uint8Array.from(atob(混淆字符), c => c.charCodeAt(0)).buffer;
 }
@@ -712,7 +712,7 @@ async function 智能连接(地址, 端口, 地址类型, env) {
   const 反代地址 = env.PROXYIP || 'ts.hpc.tw';
   const SOCKS5账号 = env.SOCKS5 || '';
 
-  if (!地址||!地址.trim() === '') {
+  if (!地址 || !地址.trim() === '') {
     return await 尝试直连(地址, 端口);
   }
 
@@ -1027,8 +1027,8 @@ function 生成订阅页面(配置路径, hostName, uuid) {
     }
     .cute-button:hover { transform: scale(1.05); box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4); }
     .cute-button:active { transform: scale(0.95); }
-    .config1-btn { background: linear-gradient(to right, #ffb6c1, #ff69b4); }
-    .config2-btn { background: linear-gradient(to right, #ffd1dc, #ff85a2); }
+    .Y2xhc2g=-btn { background: linear-gradient(to right, #ffb6c1, #ff69b4); }
+    .djJyYXluZw==-btn { background: linear-gradient(to right, #ffd1dc, #ff85a2); }
     .logout-btn { background: linear-gradient(to right, #ff9999, #ff6666); }
     .uuid-btn { background: linear-gradient(to right, #ffdead, #ff85a2); }
     .upload-title { font-size: 1.4em; color: #ff85a2; margin-bottom: 15px; }
@@ -1062,7 +1062,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
   <div class="container">
     <div class="card">
       <h1 class="card-title">🌸 欢迎来到樱花订阅站 🌸</h1>
-      <p style="font-size: 1em;">支持 <span style="color: #ff69b4;">clash</span> 和 <span style="color: #ff85a2;">v2ray</span> 哦~</p>
+      <p style="font-size: 1em;">支持 <span style="color: #ff69b4;">Y2xhc2g=</span> 和 <span style="color: #ff85a2;">djJyYXluZw==</span> 哦~</p>
     </div>
     <div class="card">
       <h2 class="card-title">🔑 当前 UUID</h2>
@@ -1103,19 +1103,19 @@ function 生成订阅页面(配置路径, hostName, uuid) {
     <div class="card">
       <h2 class="card-title">🐾 配置1订阅</h2>
       <div class="link-box">
-        <p>订阅链接：<br><a href="https://${hostName}/${配置路径}/clash">https://${hostName}/${配置路径}/clash</a></p>
+        <p>订阅链接：<br><a href="https://${hostName}/${配置路径}/Y2xhc2g=">https://${hostName}/${配置路径}/Y2xhc2g=</a></p>
       </div>
       <div class="button-group">
-        <button class="cute-button config1-btn" onclick="导入Config('${配置路径}', '${hostName}', 'clash')">一键导入</button>
+        <button class="cute-button Y2xhc2g=-btn" onclick="导入Config('${配置路径}', '${hostName}', 'Y2xhc2g=')">一键导入</button>
       </div>
     </div>
     <div class="card">
       <h2 class="card-title">🐰 配置2订阅</h2>
       <div class="link-box">
-        <p>订阅链接：<br><a href="https://${hostName}/${配置路径}/v2ray">https://${hostName}/${配置路径}/v2ray</a></p>
+        <p>订阅链接：<br><a href="https://${hostName}/${配置路径}/djJyYXluZw==">https://${hostName}/${配置路径}/djJyYXluZw==</a></p>
       </div>
       <div class="button-group">
-        <button class="cute-button config2-btn" onclick="导入Config('${配置路径}', '${hostName}', 'v2ray')">一键导入</button>
+        <button class="cute-button djJyYXluZw==-btn" onclick="导入Config('${配置路径}', '${hostName}', 'djJyYXluZw==')">一键导入</button>
       </div>
     </div>
     <div class="card">
