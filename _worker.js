@@ -1078,6 +1078,8 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       color: white;
       cursor: pointer;
       transition: transform 0.2s ease, box-shadow 0.2s ease;
+      box-sizing: border-box;
+      display: inline-block;
     }
     .cute-button:hover { transform: scale(1.05); box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4); }
     .cute-button:active { transform: scale(0.95); }
@@ -1120,7 +1122,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       .card::after { font-size: 50px; top: -15px; right: -15px; }
       .url-input { font-size: 0.9em; }
     }
-</style>
+  </style>
 </head>
 <body>
   <img id="backgroundImage" class="background-media">
@@ -1197,7 +1199,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
         <label for="ipFiles" class="upload-label">选择文件</label>
         <input type="file" id="ipFiles" name="ipFiles" accept=".txt" multiple required onchange="显示文件()" style="display: none;">
         <div class="file-list" id="fileList"></div>
-        <button type="submit" class="upload-submit" onclick="开始上传(event)">上传</button>
+        <button type="submit" class="cute-button upload-btn" onclick="开始上传(event)">上传</button>
         <div class="progress-container" id="progressContainer">
           <div class="progress-bar">
             <div class="progress-fill" id="progressFill"></div>
