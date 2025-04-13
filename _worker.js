@@ -1124,7 +1124,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
   <img id="backgroundImage" class="background-media">
   <div class="container">
     <div class="card">
-      <h1 class="card-title">🌸 欢迎来到樱花订阅站 🌸</h1>
+      <h1 class="card-title">🌸樱花面板🌸</h1>
       <p style="font-size: 1em;">支持 <span style="color: #ff69b4;">${atob('Y2xhc2g=')}</span> 和 <span style="color: #ff85a2;">${atob('djJyYXluZw==')}</span> 哦~</p>
     </div>
     <div class="card">
