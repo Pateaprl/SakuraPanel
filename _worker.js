@@ -1190,7 +1190,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       </div>
     </div>
     <div class="card">
-      <h2 class="upload-title">🌟 上传你的魔法 IP</h2>
+      <h2 class="upload-title">🌟 上传你的优选IP</h2>
       <form id="uploadForm" action="/${配置路径}/upload" method="POST" enctype="multipart/form-data">
         <label for="ipFiles" class="upload-label">选择文件</label>
         <input type="file" id="ipFiles" name="ipFiles" accept=".txt" multiple required onchange="显示文件()" style="display: none;">
