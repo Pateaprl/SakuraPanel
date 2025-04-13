@@ -1164,7 +1164,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       </div>
     </div>
     <div class="card">
-      <h2 class="upload-title">🌐 管理节点文件路径</h2>
+      <h2 class="upload-title">🌏 优选IP网络路径</h2>
       <div>
         <input type="text" id="nodeUrlInput" class="url-input" placeholder="输入节点文件 URL（如 https://example.com/ips.txt）">
         <button class="add-url-btn" onclick="添加节点路径()">添加路径</button>
@@ -1712,9 +1712,6 @@ ${国家列表.map(国家 => `      - "${国家}"`).join("\n")}
 ${国家分组配置}
 
 rules:
-  - DOMAIN-SUFFIX,googleapis.com,🚀节点选择
-  - DOMAIN-SUFFIX,play.google.com,🚀节点选择
-  - DOMAIN-SUFFIX,bing.com,🚀节点选择
   - GEOIP,LAN,DIRECT
   - DOMAIN-SUFFIX,cn,DIRECT
   - GEOIP,CN,DIRECT
