@@ -363,9 +363,9 @@ async function 加载节点和配置(env, hostName) {
         const 新版本 = String(Date.now());
         await env.KV数据库.put('ip_preferred_ips', JSON.stringify(合并节点列表));
         await env.KV数据库.put('ip_preferred_ips_version', 新版本);
-        await env.KV数据库.put('config_' + atob('Y2xhc2g='), await 生成配置1(env, hostName));
+        await env.KV数据库.put('config_' + atob('Y2xhc2g='), await 生成猫咪(env, hostName));
         await env.KV数据库.put('config_' + atob('Y2xhc2g=') + '_version', 新版本);
-        await env.KV数据库.put('config_' + atob('djJyYXk='), await 生成配置2(env, hostName));
+        await env.KV数据库.put('config_' + atob('djJyYXk='), await 生成通用(env, hostName));
         await env.KV数据库.put('config_' + atob('djJyYXk=') + '_version', 新版本);
       }
     } else {
@@ -391,7 +391,7 @@ async function 获取配置(env, 类型, hostName) {
     return 缓存配置;
   }
 
-  const 新配置 = 类型 === atob('Y2xhc2g=') ? await 生成配置1(env, hostName) : await 生成配置2(env, hostName);
+  const 新配置 = 类型 === atob('Y2xhc2g=') ? await 生成猫咪(env, hostName) : await 生成通用(env, hostName);
   await env.KV数据库.put(缓存键, 新配置);
   await env.KV数据库.put(版本键, 节点版本);
   return 新配置;
@@ -601,9 +601,9 @@ export default {
             await env.KV数据库.put('manual_preferred_ips', JSON.stringify(uniqueIpList));
             const 新版本 = String(Date.now());
             await env.KV数据库.put('ip_preferred_ips_version', 新版本);
-            await env.KV数据库.put('config_' + atob('Y2xhc2g='), await 生成配置1(env, hostName));
+            await env.KV数据库.put('config_' + atob('Y2xhc2g='), await 生成猫咪(env, hostName));
             await env.KV数据库.put('config_' + atob('Y2xhc2g=') + '_version', 新版本);
-            await env.KV数据库.put('config_' + atob('djJyYXk='), await 生成配置2(env, hostName));
+            await env.KV数据库.put('config_' + atob('djJyYXk='), await 生成通用(env, hostName));
             await env.KV数据库.put('config_' + atob('djJyYXk=') + '_version', 新版本);
             return 创建JSON响应({ message: '上传成功，即将跳转' }, 200, { 'Location': `/${配置路径}` });
           } catch (错误) {
@@ -619,8 +619,8 @@ export default {
           }
           const 新UUID = 生成UUID();
           await env.KV数据库.put('current_uuid', 新UUID);
-          await env.KV数据库.put('config_' + atob('Y2xhc2g='), await 生成配置1(env, hostName));
-          await env.KV数据库.put('config_' + atob('djJyYXk='), await 生成配置2(env, hostName));
+          await env.KV数据库.put('config_' + atob('Y2xhc2g='), await 生成猫咪(env, hostName));
+          await env.KV数据库.put('config_' + atob('djJyYXk='), await 生成通用(env, hostName));
           const 新版本 = String(Date.now());
           await env.KV数据库.put('config_' + atob('Y2xhc2g=') + '_version', 新版本);
           await env.KV数据库.put('config_' + atob('djJyYXk=') + '_version', 新版本);
@@ -1172,7 +1172,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       </div>
     </div>
     <div class="card">
-      <h2 class="card-title">🐾 配置1订阅</h2>
+      <h2 class="card-title">🐾 猫咪订阅</h2>
       <div class="link-box">
         <p>订阅链接：<br><a href="https://${hostName}/${配置路径}/${atob('Y2xhc2g=')}">https://${hostName}/${配置路径}/${atob('Y2xhc2g=')}</a></p>
       </div>
@@ -1181,7 +1181,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       </div>
     </div>
     <div class="card">
-      <h2 class="card-title">🐰 配置2订阅</h2>
+      <h2 class="card-title">🐰 通用订阅</h2>
       <div class="link-box">
         <p>订阅链接：<br><a href="https://${hostName}/${配置路径}/${atob('djJyYXluZw==')}">https://${hostName}/${配置路径}/${atob('djJyYXluZw==')}</a></p>
       </div>
@@ -1615,7 +1615,7 @@ function 生成KV未绑定提示页面() {
   `;
 }
 
-async function 生成配置1(env, hostName) {
+async function 生成猫咪(env, hostName) {
   const uuid = await 获取或初始化UUID(env);
   const 节点列表 = 优选节点.length ? 优选节点 : [`${hostName}:443`];
   const 国家分组 = {};
@@ -1719,7 +1719,7 @@ rules:
 `;
 }
 
-async function 生成配置2(env, hostName) {
+async function 生成通用(env, hostName) {
   const uuid = await 获取或初始化UUID(env);
   const 节点列表 = 优选节点.length ? 优选节点 : [`${hostName}:443`];
   const 配置列表 = 节点列表.map(节点 => {
@@ -1736,7 +1736,7 @@ async function 生成配置2(env, hostName) {
       const encodedPath = encodeURIComponent('/?ed=2560');
       return `${atob('dmxlc3M=')}://${uuid}@${修正地址}:${端口}?encryption=none&security=${TLS开关}&type=ws&host=${hostName}&path=${encodedPath}&sni=${hostName}#${节点名字}`;
     } catch (error) {
-      console.error(`生成配置2节点失败: ${节点}, 错误: ${error.message}`);
+      console.error(`生成通用节点失败: ${节点}, 错误: ${error.message}`);
       return null;
     }
   }).filter(Boolean);
