@@ -1074,6 +1074,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       border-radius: 20px;
       border: none;
       font-size: 1em;
+      font-family: 'Comic Sans MS', 'Arial', sans-serif;
       color: white;
       cursor: pointer;
       transition: transform 0.2s ease, box-shadow 0.2s ease;
@@ -1084,6 +1085,9 @@ function 生成订阅页面(配置路径, hostName, uuid) {
     .config2-btn { background: linear-gradient(to right, #ffd1dc, #ff85a2); }
     .logout-btn { background: linear-gradient(to right, #ff9999, #ff6666); }
     .uuid-btn { background: linear-gradient(to right, #ffdead, #ff85a2); }
+    .upload-btn, .add-url-btn {
+      background: linear-gradient(to right, #ffdead, #ff85a2);
+    }
     .upload-title { font-size: 1.4em; color: #ff85a2; margin-bottom: 15px; }
     .upload-label { padding: 10px 20px; background: linear-gradient(to right, #ffb6c1, #ff69b4); color: white; border-radius: 20px; cursor: pointer; display: inline-block; transition: all 0.3s ease; }
     .upload-label:hover { transform: scale(1.05); box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4); }
@@ -1091,8 +1095,6 @@ function 生成订阅页面(配置路径, hostName, uuid) {
     .file-item, .url-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-radius: 10px; margin: 5px 0; font-size: 0.9em; }
     .file-item button, .url-item button { background: #ff9999; border: none; border-radius: 15px; padding: 5px 10px; color: white; cursor: pointer; transition: background 0.3s ease; }
     .file-item button:hover, .url-item button:hover { background: #ff6666; }
-    .upload-submit, .add-url-btn { background: linear-gradient(to right, #ffdead, #ff85a2); padding: 12px 25px; border-radius: 20px; border: none; color: white; cursor: pointer; transition: all 0.3s ease; width: 100%; }
-    .upload-submit:hover, .add-url-btn:hover { transform: scale(1.05); box-shadow: 0 5px 15px rgba(255, 105, 180, 0.4); }
     .progress-container { display: none; margin-top: 15px; }
     .progress-bar { width: 100%; height: 15px; background: #ffe6f0; border-radius: 10px; overflow: hidden; border: 1px solid #ffb6c1; }
     .progress-fill { height: 100%; background: linear-gradient(to right, #ff69b4, #ff1493); width: 0; transition: width 0.3s ease; }
@@ -1114,11 +1116,11 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       .proxy-option { width: 70px; padding: 8px 0; font-size: 0.9em; }
       .proxy-status, .uuid-box, .force-proxy-note { font-size: 0.9em; padding: 12px; }
       .link-box { font-size: 0.9em; padding: 12px; }
-      .cute-button, .upload-label, .upload-submit, .add-url-btn { padding: 10px 20px; font-size: 0.9em; }
+      .cute-button, .upload-label { padding: 10px 20px; font-size: 0.9em; }
       .card::after { font-size: 50px; top: -15px; right: -15px; }
       .url-input { font-size: 0.9em; }
     }
-  </style>
+</style>
 </head>
 <body>
   <img id="backgroundImage" class="background-media">
@@ -1167,7 +1169,7 @@ function 生成订阅页面(配置路径, hostName, uuid) {
       <h2 class="upload-title">🌏 优选IP网络路径</h2>
       <div>
         <input type="text" id="nodeUrlInput" class="url-input" placeholder="输入节点文件 URL（如 https://example.com/ips.txt）">
-        <button class="add-url-btn" onclick="添加节点路径()">添加路径</button>
+        <button class="cute-button add-url-btn" onclick="添加节点路径()">添加路径</button>
         <div class="url-list" id="urlList"></div>
       </div>
     </div>
