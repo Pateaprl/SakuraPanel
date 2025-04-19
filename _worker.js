@@ -1715,16 +1715,7 @@ ${国家列表.map(国家 => `      - "${国家}"`).join("\n")}
 
 ${国家分组配置}
 
-rule-providers:
-  adblock:
-    type: http
-    behavior: domain
-    url: "https://raw.githubusercontent.com/REIJI007/AdBlock_Rule_For_Clash/main/adblock_reject.yaml"
-    path: ./ruleset/adblock_reject.yaml
-    interval: 86400
-
 rules:
-  - RULE-SET,adblock,REJECT
   - GEOIP,LAN,DIRECT
   - DOMAIN-SUFFIX,cn,DIRECT
   - GEOIP,CN,DIRECT
