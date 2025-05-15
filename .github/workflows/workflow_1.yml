@@ -29,33 +29,33 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/android-ndk
-          key: android-ndk-r21e
+          key: android-ndk-r21d
 
-      - name: 下载并设置Android NDK r21e
+      - name: 下载并设置Android NDK r21d
         run: |
           echo "检查可用磁盘空间："
           df -h
-          if [ -d "$HOME/android-ndk/android-ndk-r21e" ]; then
-            echo "NDK r21e 已存在，跳过下载。"
+          if [ -d "$HOME/android-ndk/android-ndk-r21d" ]; then
+            echo "NDK r21d 已存在，跳过下载。"
           else
-            echo "正在下载 NDK r21e..."
+            echo "正在下载 NDK r21d..."
             mkdir -p ~/android-ndk || { echo "创建目录失败"; exit 1; }
-            wget -O ~/android-ndk/android-ndk-r21e-linux.zip https://dl.google.com/android/repository/android-ndk-r21e-linux-x86_64.zip || { echo "下载失败"; exit 1; }
+            wget -O ~/android-ndk/android-ndk-r21d-linux.zip https://dl.google.com/android/repository/android-ndk-r21d-linux-x86_64.zip || { echo "下载失败"; exit 1; }
             echo "检查下载文件大小："
-            ls -lh ~/android-ndk/android-ndk-r21e-linux.zip
-            echo "解压 NDK r21e..."
-            unzip -o -d ~/android-ndk ~/android-ndk/android-ndk-r21e-linux.zip || { echo "解压失败"; exit 1; }
-            if [ -d "$HOME/android-ndk/android-ndk-r21e" ]; then
-              echo "解压成功，NDK r21e 目录存在。"
+            ls -lh ~/android-ndk/android-ndk-r21d-linux.zip
+            echo "解压 NDK r21d..."
+            unzip -o -d ~/android-ndk ~/android-ndk/android-ndk-r21d-linux.zip || { echo "解压失败"; exit 1; }
+            if [ -d "$HOME/android-ndk/android-ndk-r21d" ]; then
+              echo "解压成功，NDK r21d 目录存在。"
             else
-              echo "解压后 NDK r21e 目录不存在！"
+              echo "解压后 NDK r21d 目录不存在！"
               exit 1
             fi
           fi
-          export ANDROID_NDK_HOME=$HOME/android-ndk/android-ndk-r21e
+          export ANDROID_NDK_HOME=$HOME/android-ndk/android-ndk-r21d
           echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME" >> $GITHUB_ENV
           echo "$ANDROID_NDK_HOME" >> $GITHUB_PATH
-          echo "NDK r21e 设置完成"
+          echo "NDK r21d 设置完成"
 
       - name: 检查Python版本并下载匹配源码
         run: |
