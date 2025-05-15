@@ -28,19 +28,19 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/android-ndk
-          key: android-ndk-r21d
+          key: android-ndk-11d
 
       - name: Download and Set Up Android NDK
         run: |
-          if [ -d "$HOME/android-ndk/android-ndk-r21d" ]; then
+          if [ -d "$HOME/android-ndk/android-ndk-r21e" ]; then
             echo "NDK already exists, skipping download."
           else
             echo "Downloading NDK..."
             mkdir -p ~/android-ndk
-            wget -O ~/android-ndk/android-ndk-r21d-linux.zip https://dl.google.com/android/repository/android-ndk-r21d-linux-x86_64.zip
-            unzip -o -d ~/android-ndk ~/android-ndk/android-ndk-r21d-linux.zip
+            wget -O ~/android-ndk/android-ndk-r21e-linux.zip https://dl.google.com/android/repository/android-ndk-r21e-linux-x86_64.zip
+            unzip -o -d ~/android-ndk ~/android-ndk/android-ndk-r21e-linux.zip
           fi
-          export ANDROID_NDK_HOME=$HOME/android-ndk/android-ndk-r21d
+          export ANDROID_NDK_HOME=$HOME/android-ndk/android-ndk-r21e
           echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME" >> $GITHUB_ENV
           echo "$ANDROID_NDK_HOME" >> $GITHUB_PATH
 
