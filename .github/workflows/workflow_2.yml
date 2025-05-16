@@ -1,0 +1,119 @@
+name: Build Python and zlib for Android ARM64 (NDK 27)
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Install Dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y build-essential zlib1g-dev libffi-dev libssl-dev libbz2-dev \
+                              libreadline-dev libsqlite3-dev wget curl llvm libncurses5-dev \
+                              libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev \
+                              liblzma-dev git tar python3 python3-pip unzip binutils
+          python3 --version
+          pip3 --version
+
+      - name: Set up Android NDK (r27.2.12479018)
+        uses: android-actions/setup-android@v2
+        with:
+          ndk-version: "27.2.12479018"  # 显式指定 NDK 27.2
+
+      - name: Verify NDK Installation
+        run: |
+          echo "ANDROID_NDK_ROOT: $ANDROID_NDK_ROOT"
+          ls -l $ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/
+
+      - name: Set Cross-Compile Tools
+        run: |
+          export READELF=$(which readelf)
+          if [ ! -f "$READELF" ]; then
+            sudo apt install -y binutils
+            export READELF=$(which readelf)
+          fi
+          echo "READELF=$READELF" >> $GITHUB_ENV
+          export AR=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar  # 使用 llvm-ar 替代旧版命名
+          echo "AR=$AR" >> $GITHUB_ENV
+          echo "RANLIB=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ranlib" >> $GITHUB_ENV
+
+      - name: Check if Latest Python is Installed
+        run: |
+          REQUIRED_PYTHON_VERSION="3.10.0"
+          if python3 --version | grep -q "$REQUIRED_PYTHON_VERSION"; then
+            echo "Python $REQUIRED_PYTHON_VERSION is already installed."
+          else
+            echo "Downloading and compiling Python..."
+            wget https://www.python.org/ftp/python/$REQUIRED_PYTHON_VERSION/Python-$REQUIRED_PYTHON_VERSION.tgz
+            tar -xf Python-$REQUIRED_PYTHON_VERSION.tgz
+            mv Python-$REQUIRED_PYTHON_VERSION cpython
+          fi
+
+      - name: Download and Extract zlib
+        run: |
+          wget https://github.com/madler/zlib/archive/refs/tags/v1.2.13.tar.gz -O zlib-1.2.13.tar.gz
+          tar -xvf zlib-1.2.13.tar.gz
+          cd zlib-1.2.13
+
+      - name: Configure and Compile Python
+        run: |
+          cd cpython
+          export CONFIG_SITE=config.site
+          cat <<EOF > $CONFIG_SITE
+          ac_cv_file__dev_ptmx=yes
+          ac_cv_file__dev_ptc=no
+          EOF
+
+          BUILD_PYTHON=$(which python3)
+          ./configure --host=aarch64-linux-android --build=x86_64-linux-gnu \
+                      --disable-optimizations \
+                      --disable-ipv6 \
+                      --with-build-python=$BUILD_PYTHON \
+                      CC=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang \
+                      CXX=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang++ \
+                      AR=$AR \
+                      RANLIB=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ranlib \
+                      READELF=$READELF
+
+          echo "Configuration completed"
+          make -j$(nproc)
+
+      - name: Compile zlib
+        run: |
+          cd zlib-1.2.13
+          ./configure --prefix=$GITHUB_WORKSPACE/android-rootfs/data
+          make -j$(nproc)
+
+      - name: Install Python and zlib to Simulated Android Root
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/android-rootfs/data
+          
+          # 安装 Python
+          cd cpython
+          make install prefix=$GITHUB_WORKSPACE/android-rootfs/data
+          
+          # 安装 zlib
+          cd ../zlib-1.2.13
+          make install
+
+          # 检查安装结果
+          ls -lh $GITHUB_WORKSPACE/android-rootfs/data
+
+      - name: Package Artifacts
+        run: |
+          tar -czvf python-zlib-android-arm64.tar.gz -C $GITHUB_WORKSPACE/android-rootfs/data .
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-zlib-android-arm64-ndk27
+          path: python-zlib-android-arm64.tar.gz
