@@ -1,4 +1,4 @@
-name: 测试中
+name: 适用于 Android 的 Python 3.10
 
 on:
   push:
@@ -105,9 +105,17 @@ jobs:
           cd ../zlib-1.2.13
           make install
 
-          # 修复 shebang
-          find $GITHUB_WORKSPACE/android-rootfs/data -type f -exec grep -l '^#!' {} \; | while read -r file; do
-            sed -i '1s|.*|#!/system/bin/sh|' "$file"
+          # 检查 Python 可执行文件名
+          ls -l $GITHUB_WORKSPACE/android-rootfs/data/bin/python*
+          if [ -f "$GITHUB_WORKSPACE/android-rootfs/data/bin/python3.10" ]; then
+            PYTHON_SHEBANG="/system/bin/python3.10"
+          else
+            PYTHON_SHEBANG="/system/bin/python3"
+          fi
+
+          # 修复 Python 脚本的 shebang
+          find $GITHUB_WORKSPACE/android-rootfs/data/bin -type f -exec grep -l '^#!' {} \; | while read -r file; do
+            sed -i "1s|.*|#!$PYTHON_SHEBANG|" "$file"
           done
 
           # 修复软连接
