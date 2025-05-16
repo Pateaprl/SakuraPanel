@@ -1,4 +1,4 @@
-name: 适用于 Android 的 Python 3.10 和 pip (修复交叉编译问题)
+name: 适用于 Android 的 Python 3.10 和 pip (修复编译错误)
 
 on:
   push:
@@ -57,6 +57,26 @@ jobs:
           
           cd cpython
           
+          # 应用补丁修复 pytime_fromtimespec 问题
+          cat > pytime.patch << 'EOF'
+          --- a/Python/pytime.c
+          +++ b/Python/pytime.c
+          @@ -943,6 +943,12 @@
+           #ifdef HAVE_CLOCK_GETTIME
+           static int
+           pytime_fromtimespec(_PyTime_t *tp, struct timespec *ts, int raise)
+          +{
+          +    return _PyTime_FromTimespec(tp, ts, raise);
+          +}
+          +
+          +static int
+          +_PyTime_FromTimespec(_PyTime_t *tp, struct timespec *ts, int raise)
+           {
+               _PyTime_t t;
+               /* Sanity check */
+          EOF
+          git apply pytime.patch || true
+          
           # 创建 config.site 文件解决交叉编译问题
           cat > config.site << EOF
           ac_cv_file__dev_ptmx=yes
@@ -71,21 +91,22 @@ jobs:
           
           export CONFIG_SITE=$(pwd)/config.site
           
+          # 禁用 PGO 优化以避免类型转换警告
           ./configure \
             --host=aarch64-linux-android \
             --build=x86_64-linux-gnu \
             --prefix="$ANDROID_INSTALL_DIR" \
             --disable-ipv6 \
-            --enable-optimizations \
+            --disable-optimizations \
             --with-system-ffi \
             --without-ensurepip \
             CC="$CC" \
             CXX="$CXX" \
             AR="$AR" \
             RANLIB="$RANLIB" \
-            READELF="$READELF"
+            READELF="$READEFL"
           
-          make -j$(nproc)
+          make -j$(nproc) CFLAGS="-Wno-implicit-const-int-float-conversion"
           make install
           
           # 检查安装结果
@@ -108,16 +129,13 @@ jobs:
         run: |
           ANDROID_INSTALL_DIR="$GITHUB_WORKSPACE/android-rootfs/data"
           
-          # 下载get-pip.py
           wget https://bootstrap.pypa.io/get-pip.py -O get-pip.py
           
-          # 使用宿主机Python构建pip到Android目录
           python3 get-pip.py \
             --prefix="$ANDROID_INSTALL_DIR" \
             --ignore-installed \
             --no-warn-script-location
           
-          # 修复pip脚本的shebang
           find "$ANDROID_INSTALL_DIR/bin" -name "pip*" -type f | while read -r file; do
             if [ -f "$ANDROID_INSTALL_DIR/bin/python3.10" ]; then
               sed -i "1s|.*|#!/system/bin/python3.10|" "$file"
@@ -126,7 +144,6 @@ jobs:
             fi
           done
           
-          # 验证pip安装
           ls -l "$ANDROID_INSTALL_DIR/bin/pip"*
           grep "^#!" "$ANDROID_INSTALL_DIR/bin/pip" | head -n 1
 
@@ -134,7 +151,6 @@ jobs:
         run: |
           ANDROID_INSTALL_DIR="$GITHUB_WORKSPACE/android-rootfs/data"
           
-          # 修复Python脚本的shebang
           find "$ANDROID_INSTALL_DIR/bin" -type f | while read -r file; do
             if head -n 1 "$file" | grep -q "^#!"; then
               if [ -f "$ANDROID_INSTALL_DIR/bin/python3.10" ]; then
@@ -145,7 +161,6 @@ jobs:
             fi
           done
           
-          # 修复符号链接
           find "$ANDROID_INSTALL_DIR" -type l | while read -r link; do
             target=$(readlink "$link")
             if [[ ! "$target" =~ ^/ ]]; then
