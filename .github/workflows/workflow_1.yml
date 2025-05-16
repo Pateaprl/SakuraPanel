@@ -24,7 +24,7 @@ jobs:
               python3.13 python3.13-dev python3.13-venv \
               build-essential zlib1g-dev libffi-dev libssl-dev \
               libbz2-dev libreadline-dev libsqlite3-dev \
-              liblzma-dev libncurses5-dev libncursesw5-dev \
+              liblzma-dev libncurses5-dev libncursesw5-dev \  # 确保安装 liblzma-dev
               xz-utils tk-dev libxml2-dev libxmlsec1-dev \
               wget curl llvm git tar unzip binutils
 
@@ -61,24 +61,17 @@ jobs:
           tar -xf Python-3.13.0.tar.xz
           mv Python-3.13.0 cpython
 
-      - name: Patch _lzmamodule.c (Optional)
-        run: |
-          # 如果仍然找不到 lzma.h，可以禁用 LZMA 模块
-          sed -i 's/#define HAVE_LZMA 1/#define HAVE_LZMA 0/' cpython/Modules/Setup
-
       - name: Configure Python
         run: |
           cd cpython
           cat <<EOF > config.site
           ac_cv_file__dev_ptmx=yes
           ac_cv_file__dev_ptc=no
-          ac_cv_lib_lzma_lzma_code=no  # 显式禁用 LZMA 检查
           EOF
 
           ./configure --host=aarch64-linux-android \
                      --build=x86_64-linux-gnu \
                      --disable-ipv6 \
-                     --without-lzma \
                      --with-build-python=$(which python3.13) \
                      CC="$CC" \
                      CXX="$CXX" \
