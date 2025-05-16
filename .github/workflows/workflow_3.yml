@@ -1,4 +1,4 @@
-name: 适用于 Android 的 Python 3.10 和 pip (使用宿主机构建)
+name: 适用于 Android 的 Python 3.10 和 pip (修复交叉编译问题)
 
 on:
   push:
@@ -29,11 +29,6 @@ jobs:
         with:
           ndk-version: "27.2.12479018"
 
-      - name: 验证 NDK 安装
-        run: |
-          echo "Android NDK 根目录: $ANDROID_NDK_ROOT"
-          ls -l $ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/
-
       - name: 设置交叉编译环境
         run: |
           export READELF=$(which readelf)
@@ -45,8 +40,10 @@ jobs:
           export AR=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
           echo "AR=$AR" >> $GITHUB_ENV
           echo "RANLIB=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ranlib" >> $GITHUB_ENV
-          echo "CC=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang" >> $GITHUB_ENV
-          echo "CXX=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang++" >> $GITHUB_ENV
+          export CC=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang
+          echo "CC=$CC" >> $GITHUB_ENV
+          export CXX=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang++
+          echo "CXX=$CXX" >> $GITHUB_ENV
 
       - name: 下载并编译 Python 3.10
         run: |
@@ -59,12 +56,29 @@ jobs:
           mv Python-$REQUIRED_PYTHON_VERSION cpython
           
           cd cpython
+          
+          # 创建 config.site 文件解决交叉编译问题
+          cat > config.site << EOF
+          ac_cv_file__dev_ptmx=yes
+          ac_cv_file__dev_ptc=no
+          ac_cv_have_long_long_format=yes
+          ac_cv_func_wcsftime=yes
+          ac_cv_func_getentropy=no
+          ac_cv_func_clock_gettime=no
+          ac_cv_func_clock_settime=no
+          ac_cv_func_clock_getres=no
+          EOF
+          
+          export CONFIG_SITE=$(pwd)/config.site
+          
           ./configure \
             --host=aarch64-linux-android \
             --build=x86_64-linux-gnu \
             --prefix="$ANDROID_INSTALL_DIR" \
             --disable-ipv6 \
             --enable-optimizations \
+            --with-system-ffi \
+            --without-ensurepip \
             CC="$CC" \
             CXX="$CXX" \
             AR="$AR" \
