@@ -23,23 +23,25 @@ jobs:
           python3 --version
           pip3 --version
 
-      - name: 设置 Android SDK 和 NDK
-        uses: android-actions/setup-android@v3
-        with:
-          cmdline-tools-version: "14.0" # 使用有效的命令行工具版本
-          accept-android-sdk-licenses: true # 自动接受所有 SDK 许可证
-          packages: "ndk;27.2.12479018" # 明确安装 NDK 版本 27.2.12479018
-          log-accepted-android-sdk-licenses: true # 记录许可证接受情况
-
-      - name: 验证 Android SDK 和 NDK 安装
+      - name: 设置 Android SDK 和 NDK 环境
         run: |
+          # 确认 Android SDK 和 NDK 路径
           echo "Android SDK 根目录: $ANDROID_SDK_ROOT"
           echo "Android NDK 根目录: $ANDROID_NDK_HOME"
-          ls -l $ANDROID_SDK_ROOT/cmdline-tools/14.0/bin/
-          ls -l $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-aarch64/bin/
-          $ANDROID_SDK_ROOT/cmdline-tools/14.0/bin/sdkmanager --version
+          if [ -z "$ANDROID_NDK_HOME" ]; then
+            echo "错误: ANDROID_NDK_HOME 未设置"
+            exit 1
+          fi
+          # 检查预安装的 NDK 版本
+          sdkmanager --list | grep ndk || true
+          ls -l $ANDROID_NDK_HOME
+          # 设置 NDK 工具链路径
+          echo "NDK_CLANG=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-aarch64/bin/aarch64-linux-android21-clang" >> $GITHUB_ENV
+          echo "NDK_CLANGXX=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-aarch64/bin/aarch64-linux-android21-clang++" >> $GITHUB_ENV
+          echo "NDK_AR=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-aarch64/bin/llvm-ar" >> $GITHUB_ENV
+          echo "NDK_RANLIB=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-aarch64/bin/llvm-ranlib" >> $GITHUB_ENV
+          # 验证 NDK 工具
           $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-aarch64/bin/aarch64-linux-android21-clang --version
-          $ANDROID_SDK_ROOT/cmdline-tools/14.0/bin/sdkmanager --list | grep ndk
 
       - name: 设置编译工具
         run: |
@@ -49,9 +51,6 @@ jobs:
             export READELF=$(which readelf)
           fi
           echo "READELF=$READELF" >> $GITHUB_ENV
-          export AR=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-aarch64/bin/llvm-ar
-          echo "AR=$AR" >> $GITHUB_ENV
-          echo "RANLIB=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-aarch64/bin/llvm-ranlib" >> $GITHUB_ENV
 
       - name: 检查是否安装最新 Python
         run: |
@@ -90,10 +89,10 @@ jobs:
                       --disable-optimizations \
                       --disable-ipv6 \
                       --with-build-python=$BUILD_PYTHON \
-                      CC=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-aarch64/bin/aarch64-linux-android21-clang \
-                      CXX=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-aarch64/bin/aarch64-linux-android21-clang++ \
-                      AR=$AR \
-                      RANLIB=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-aarch64/bin/llvm-ranlib \
+                      CC=$NDK_CLANG \
+                      CXX=$NDK_CLANGXX \
+                      AR=$NDK_AR \
+                      RANLIB=$NDK_RANLIB \
                       READELF=$READELF
 
           echo "配置完成"
@@ -165,7 +164,7 @@ jobs:
       - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
-          name: python-zlib-pip-android-arm64-ndk27
+          name: python-zlib-pip-android-arm64-ndk-latest
           path: |
             python-zlib-pip-android-arm64.tar.gz
             source-code.tar.gz
