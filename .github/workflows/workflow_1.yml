@@ -23,20 +23,12 @@ jobs:
               python3.13 python3.13-dev python3.13-venv \
               build-essential zlib1g-dev libffi-dev libssl-dev \
               libbz2-dev libreadline-dev libsqlite3-dev \
-              liblzma-dev libncurses5-dev libncursesw5-dev \
+              libncurses5-dev libncursesw5-dev \
               xz-utils tk-dev libxml2-dev libxmlsec1-dev \
               wget curl llvm git tar unzip binutils
 
           python3.13 -m venv /opt/python3.13
           source /opt/python3.13/bin/activate
-
-      - name: Verify LZMA Headers
-        run: |
-          # 检查并安装 LZMA 开发包
-          sudo apt install -y liblzma-dev
-          # 验证头文件位置
-          find /usr -name lzma.h
-          echo "LZMA_HEADERS=$(find /usr -name lzma.h | head -1)" >> $GITHUB_ENV
 
       - name: Download and Extract Android NDK
         run: |
@@ -59,8 +51,6 @@ jobs:
           echo "CXX=$CXX" >> $GITHUB_ENV
           echo "AR=$AR" >> $GITHUB_ENV
           echo "RANLIB=$RANLIB" >> $GITHUB_ENV
-          # 添加 LZMA 头文件路径到编译环境
-          echo "CFLAGS=-I${LZMA_HEADERS%/*}" >> $GITHUB_ENV
 
       - name: Download Python Source
         run: |
@@ -71,10 +61,13 @@ jobs:
       - name: Patch Python Source (Disable LZMA)
         run: |
           cd cpython
-          # 方法1：完全禁用 LZMA 模块
-          sed -i 's/^_lzma/#_lzma/' Modules/Setup
-          # 方法2：确保配置禁用 LZMA
+          # 完全禁用 LZMA 模块
+          sed -i '/lzma/d' Modules/Setup
+          # 删除 LZMA 源文件
+          rm -f Modules/_lzmamodule.c
+          # 强制配置禁用 LZMA
           echo "ac_cv_lib_lzma_lzma_code=no" >> config.site
+          echo "ac_cv_header_lzma_h=no" >> config.site
 
       - name: Configure Python
         run: |
@@ -86,8 +79,7 @@ jobs:
             --disable-ipv6 \
             --without-lzma \
             --with-build-python=$(which python3.13) \
-            CC="$CC" CXX="$CXX" AR="$AR" RANLIB="$RANLIB" \
-            CFLAGS="$CFLAGS"
+            CC="$CC" CXX="$CXX" AR="$AR" RANLIB="$RANLIB"
 
       - name: Build Python
         run: |
