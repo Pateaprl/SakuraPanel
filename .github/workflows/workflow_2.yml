@@ -1,4 +1,4 @@
-name: Build Python and zlib for Android ARM64 (NDK 27)
+name: 适用于 Android 的 Python 3.10
 
 on:
   push:
@@ -11,10 +11,10 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-      - name: Checkout Code
+      - name: 检出代码
         uses: actions/checkout@v3
 
-      - name: Install Dependencies
+      - name: 安装依赖
         run: |
           sudo apt update
           sudo apt install -y build-essential zlib1g-dev libffi-dev libssl-dev libbz2-dev \
@@ -24,17 +24,17 @@ jobs:
           python3 --version
           pip3 --version
 
-      - name: Set up Android NDK (r27.2.12479018)
+      - name: 设置 Android NDK (r27.2.12479018)
         uses: android-actions/setup-android@v2
         with:
-          ndk-version: "27.2.12479018"  # 显式指定 NDK 27.2
+          ndk-version: "27.2.12479018"
 
-      - name: Verify NDK Installation
+      - name: 验证 NDK 安装
         run: |
-          echo "ANDROID_NDK_ROOT: $ANDROID_NDK_ROOT"
+          echo "Android NDK 根目录: $ANDROID_NDK_ROOT"
           ls -l $ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/
 
-      - name: Set Cross-Compile Tools
+      - name: 设置交叉编译工具
         run: |
           export READELF=$(which readelf)
           if [ ! -f "$READELF" ]; then
@@ -42,29 +42,29 @@ jobs:
             export READELF=$(which readelf)
           fi
           echo "READELF=$READELF" >> $GITHUB_ENV
-          export AR=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar  # 使用 llvm-ar 替代旧版命名
+          export AR=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
           echo "AR=$AR" >> $GITHUB_ENV
           echo "RANLIB=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ranlib" >> $GITHUB_ENV
 
-      - name: Check if Latest Python is Installed
+      - name: 检查是否安装最新 Python
         run: |
           REQUIRED_PYTHON_VERSION="3.10.0"
           if python3 --version | grep -q "$REQUIRED_PYTHON_VERSION"; then
-            echo "Python $REQUIRED_PYTHON_VERSION is already installed."
+            echo "Python $REQUIRED_PYTHON_VERSION 已安装。"
           else
-            echo "Downloading and compiling Python..."
+            echo "正在下载并编译 Python..."
             wget https://www.python.org/ftp/python/$REQUIRED_PYTHON_VERSION/Python-$REQUIRED_PYTHON_VERSION.tgz
             tar -xf Python-$REQUIRED_PYTHON_VERSION.tgz
             mv Python-$REQUIRED_PYTHON_VERSION cpython
           fi
 
-      - name: Download and Extract zlib
+      - name: 下载并解压 zlib
         run: |
           wget https://github.com/madler/zlib/archive/refs/tags/v1.2.13.tar.gz -O zlib-1.2.13.tar.gz
           tar -xvf zlib-1.2.13.tar.gz
           cd zlib-1.2.13
 
-      - name: Configure and Compile Python
+      - name: 配置并编译 Python
         run: |
           cd cpython
           export CONFIG_SITE=config.site
@@ -84,16 +84,16 @@ jobs:
                       RANLIB=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ranlib \
                       READELF=$READELF
 
-          echo "Configuration completed"
+          echo "配置完成"
           make -j$(nproc)
 
-      - name: Compile zlib
+      - name: 编译 zlib
         run: |
           cd zlib-1.2.13
           ./configure --prefix=$GITHUB_WORKSPACE/android-rootfs/data
           make -j$(nproc)
 
-      - name: Install Python and zlib to Simulated Android Root
+      - name: 将 Python 和 zlib 安装到模拟 Android 根目录
         run: |
           mkdir -p $GITHUB_WORKSPACE/android-rootfs/data
           
@@ -108,12 +108,23 @@ jobs:
           # 检查安装结果
           ls -lh $GITHUB_WORKSPACE/android-rootfs/data
 
-      - name: Package Artifacts
+      - name: 打包源代码
+        run: |
+          # 创建源代码包，包含下载的 Python 和 zlib 源代码
+          tar -czvf source-code.tar.gz \
+              Python-3.10.0.tgz \
+              zlib-1.2.13.tar.gz \
+              cpython/ \
+              zlib-1.2.13/
+
+      - name: 打包产物
         run: |
           tar -czvf python-zlib-android-arm64.tar.gz -C $GITHUB_WORKSPACE/android-rootfs/data .
 
-      - name: Upload Artifacts
+      - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
           name: python-zlib-android-arm64-ndk27
-          path: python-zlib-android-arm64.tar.gz
+          path: |
+            python-zlib-android-arm64.tar.gz
+            source-code.tar.gz
