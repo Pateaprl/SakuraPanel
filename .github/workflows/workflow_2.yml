@@ -1,4 +1,4 @@
-name: Build Python and zlib for Android ARM64
+name: Python for Android
 
 on:
   push:
