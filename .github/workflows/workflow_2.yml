@@ -23,15 +23,18 @@ jobs:
           python3 --version
           pip3 --version
 
-      - name: 设置 Android NDK (r27.2.12479018)
+      - name: 设置 Android SDK 和 NDK
         uses: android-actions/setup-android@v3
         with:
-          ndk-version: "27.2.12479018"
+          cmdline-tools-version: "16.0" # 指定命令行工具版本
+          accept-android-sdk-licenses: true # 自动接受所有 SDK 许可证
+          packages: "ndk;27.2.12479018" # 明确安装 NDK 版本 27.2.12479018
 
       - name: 验证 NDK 安装
         run: |
-          echo "Android NDK 根目录: $ANDROID_NDK_ROOT"
-          ls -l $ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-aarch64/bin/
+          echo "Android NDK 根目录: $ANDROID_NDK_HOME"
+          ls -l $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-aarch64/bin/
+          $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-aarch64/bin/aarch64-linux-android21-clang --version
 
       - name: 设置编译工具
         run: |
@@ -41,9 +44,9 @@ jobs:
             export READELF=$(which readelf)
           fi
           echo "READELF=$READELF" >> $GITHUB_ENV
-          export AR=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-aarch64/bin/llvm-ar
+          export AR=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-aarch64/bin/llvm-ar
           echo "AR=$AR" >> $GITHUB_ENV
-          echo "RANLIB=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-aarch64/bin/llvm-ranlib" >> $GITHUB_ENV
+          echo "RANLIB=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-aarch64/bin/llvm-ranlib" >> $GITHUB_ENV
 
       - name: 检查是否安装最新 Python
         run: |
@@ -82,10 +85,10 @@ jobs:
                       --disable-optimizations \
                       --disable-ipv6 \
                       --with-build-python=$BUILD_PYTHON \
-                      CC=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-aarch64/bin/aarch64-linux-android21-clang \
-                      CXX=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-aarch64/bin/aarch64-linux-android21-clang++ \
+                      CC=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-aarch64/bin/aarch64-linux-android21-clang \
+                      CXX=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-aarch64/bin/aarch64-linux-android21-clang++ \
                       AR=$AR \
-                      RANLIB=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-aarch64/bin/llvm-ranlib \
+                      RANLIB=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-aarch64/bin/llvm-ranlib \
                       READELF=$READELF
 
           echo "配置完成"
