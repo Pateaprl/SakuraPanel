@@ -1,9 +1,8 @@
-name: Build Python and zlib for Android ARM64 (NDK 27)
+name: Build Python 3.13 for Android ARM64
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -12,108 +11,98 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Install Dependencies
+      - name: Set up Python 3.13 and Dependencies
         run: |
-          sudo apt update
-          sudo apt install -y build-essential zlib1g-dev libffi-dev libssl-dev libbz2-dev \
-                              libreadline-dev libsqlite3-dev wget curl llvm libncurses5-dev \
-                              libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev \
-                              liblzma-dev git tar python3 python3-pip unzip binutils
-          python3 --version
-          pip3 --version
+          # 安装基础依赖（包含 liblzma-dev）
+          sudo apt-get update -y
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository -y ppa:deadsnakes/ppa
+          sudo apt-get update -y
+          sudo apt-get install -y \
+              python3.13 python3.13-dev python3.13-venv \
+              build-essential zlib1g-dev libffi-dev libssl-dev \
+              libbz2-dev libreadline-dev libsqlite3-dev \
+              liblzma-dev libncurses5-dev libncursesw5-dev \
+              xz-utils tk-dev libxml2-dev libxmlsec1-dev \
+              wget curl llvm git tar unzip binutils
 
-      - name: Set up Android NDK (r27.2.12479018)
+          # 创建虚拟环境
+          python3.13 -m venv /opt/python3.13
+          source /opt/python3.13/bin/activate
+
+      - name: Set up Android NDK
         uses: android-actions/setup-android@v2
         with:
-          ndk-version: "27.2.12479018"  # 显式指定 NDK 27.2
+          ndk-version: "25.2.9519653"  # 使用稳定版本
 
-      - name: Verify NDK Installation
+      - name: Configure Android Toolchain
         run: |
-          echo "ANDROID_NDK_ROOT: $ANDROID_NDK_ROOT"
-          ls -l $ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_ROOT" >> $GITHUB_ENV
+          echo "$ANDROID_NDK_ROOT" >> $GITHUB_PATH
 
-      - name: Set Cross-Compile Tools
-        run: |
+          TOOLCHAIN="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          export CC="$TOOLCHAIN/aarch64-linux-android21-clang"
+          export CXX="$TOOLCHAIN/aarch64-linux-android21-clang++"
+          export AR="$TOOLCHAIN/llvm-ar"
+          export RANLIB="$TOOLCHAIN/llvm-ranlib"
           export READELF=$(which readelf)
-          if [ ! -f "$READELF" ]; then
-            sudo apt install -y binutils
-            export READELF=$(which readelf)
-          fi
-          echo "READELF=$READELF" >> $GITHUB_ENV
-          export AR=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar  # 使用 llvm-ar 替代旧版命名
+
+          echo "CC=$CC" >> $GITHUB_ENV
+          echo "CXX=$CXX" >> $GITHUB_ENV
           echo "AR=$AR" >> $GITHUB_ENV
-          echo "RANLIB=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ranlib" >> $GITHUB_ENV
+          echo "RANLIB=$RANLIB" >> $GITHUB_ENV
+          echo "READELF=$READELF" >> $GITHUB_ENV
 
-      - name: Check if Latest Python is Installed
+      - name: Download Python 3.13 Source
         run: |
-          REQUIRED_PYTHON_VERSION="3.10.0"
-          if python3 --version | grep -q "$REQUIRED_PYTHON_VERSION"; then
-            echo "Python $REQUIRED_PYTHON_VERSION is already installed."
-          else
-            echo "Downloading and compiling Python..."
-            wget https://www.python.org/ftp/python/$REQUIRED_PYTHON_VERSION/Python-$REQUIRED_PYTHON_VERSION.tgz
-            tar -xf Python-$REQUIRED_PYTHON_VERSION.tgz
-            mv Python-$REQUIRED_PYTHON_VERSION cpython
-          fi
+          wget https://www.python.org/ftp/python/3.13.0/Python-3.13.0.tar.xz
+          tar -xf Python-3.13.0.tar.xz
+          mv Python-3.13.0 cpython
 
-      - name: Download and Extract zlib
+      - name: Patch _lzmamodule.c (Optional)
         run: |
-          wget https://github.com/madler/zlib/archive/refs/tags/v1.2.13.tar.gz -O zlib-1.2.13.tar.gz
-          tar -xvf zlib-1.2.13.tar.gz
-          cd zlib-1.2.13
+          # 如果仍然找不到 lzma.h，可以禁用 LZMA 模块
+          sed -i 's/#define HAVE_LZMA 1/#define HAVE_LZMA 0/' cpython/Modules/Setup
 
-      - name: Configure and Compile Python
+      - name: Configure Python
         run: |
           cd cpython
-          export CONFIG_SITE=config.site
-          cat <<EOF > $CONFIG_SITE
+          cat <<EOF > config.site
           ac_cv_file__dev_ptmx=yes
           ac_cv_file__dev_ptc=no
+          ac_cv_lib_lzma_lzma_code=no  # 显式禁用 LZMA 检查
           EOF
 
-          BUILD_PYTHON=$(which python3)
-          ./configure --host=aarch64-linux-android --build=x86_64-linux-gnu \
-                      --disable-optimizations \
-                      --disable-ipv6 \
-                      --with-build-python=$BUILD_PYTHON \
-                      CC=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang \
-                      CXX=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang++ \
-                      AR=$AR \
-                      RANLIB=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ranlib \
-                      READELF=$READELF
+          ./configure --host=aarch64-linux-android \
+                     --build=x86_64-linux-gnu \
+                     --disable-ipv6 \
+                     --without-lzma \
+                     --with-build-python=$(which python3.13) \
+                     CC="$CC" \
+                     CXX="$CXX" \
+                     AR="$AR" \
+                     RANLIB="$RANLIB" \
+                     READELF="$READELF"
 
-          echo "Configuration completed"
-          make -j$(nproc)
-
-      - name: Compile zlib
+      - name: Build Python
         run: |
-          cd zlib-1.2.13
-          ./configure --prefix=$GITHUB_WORKSPACE/android-rootfs/data
+          cd cpython
           make -j$(nproc)
 
-      - name: Install Python and zlib to Simulated Android Root
+      - name: Install Python
         run: |
           mkdir -p $GITHUB_WORKSPACE/android-rootfs/data
-          
-          # 安装 Python
           cd cpython
           make install prefix=$GITHUB_WORKSPACE/android-rootfs/data
-          
-          # 安装 zlib
-          cd ../zlib-1.2.13
-          make install
-
-          # 检查安装结果
-          ls -lh $GITHUB_WORKSPACE/android-rootfs/data
 
       - name: Package Artifacts
         run: |
-          tar -czvf python-zlib-android-arm64.tar.gz -C $GITHUB_WORKSPACE/android-rootfs/data .
+          tar -czvf python-3.13-android-arm64.tar.gz -C android-rootfs/data .
 
-      - name: Upload Artifacts
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: python-zlib-android-arm64-ndk27
-          path: python-zlib-android-arm64.tar.gz
+          name: python-3.13-android-arm64
+          path: python-3.13-android-arm64.tar.gz
