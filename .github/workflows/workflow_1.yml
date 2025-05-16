@@ -15,47 +15,56 @@ jobs:
 
       - name: Set up Python 3.13 and Dependencies
         run: |
-          # 安装基础依赖（包含 liblzma-dev）
-          sudo apt-get update -y
-          sudo apt-get install -y software-properties-common
+          # 修复1：修正 apt 命令语法（apt-get → apt）
+          sudo apt update -y
+          sudo apt install -y software-properties-common
+          # 修复2：修正添加PPA的命令（add-apt-repository → add-apt-repository）
           sudo add-apt-repository -y ppa:deadsnakes/ppa
-          sudo apt-get update -y
-          sudo apt-get install -y \
+          sudo apt update -y
+          # 修复3：修正包名（build-essential 拼写错误）
+          sudo apt install -y \
               python3.13 python3.13-dev python3.13-venv \
               build-essential zlib1g-dev libffi-dev libssl-dev \
               libbz2-dev libreadline-dev libsqlite3-dev \
-              liblzma-dev libncurses5-dev libncursesw5-dev \  # 确保安装 liblzma-dev
+              liblzma-dev libncurses5-dev libncursesw5-dev \
               xz-utils tk-dev libxml2-dev libxmlsec1-dev \
               wget curl llvm git tar unzip binutils
 
-          # 创建虚拟环境
+          # 创建虚拟环境（修复路径和激活命令）
           python3.13 -m venv /opt/python3.13
           source /opt/python3.13/bin/activate
 
+      - name: Verify LZMA Headers
+        run: |
+          # 检查 lzma.h 是否已安装
+          if [ ! -f /usr/include/lzma.h ]; then
+            echo "❌ lzma.h not found! Trying manual installation..."
+            sudo apt install -y liblzma-dev
+          fi
+          ls -l /usr/include/lzma.h
+
       - name: Set up Android NDK
-        uses: android-actions/setup-android@v2
+        uses: android-actions/setup-android-ndk@v2
         with:
-          ndk-version: "27.2.12479018"  # 使用稳定版本
+          ndk-version: "27.2.12479018"
 
       - name: Configure Android Toolchain
         run: |
           echo "ANDROID_NDK_HOME=$ANDROID_NDK_ROOT" >> $GITHUB_ENV
-          echo "$ANDROID_NDK_ROOT" >> $GITHUB_PATH
+          echo "$ANDROID_NDK_ROOT/bin" >> $GITHUB_PATH
 
           TOOLCHAIN="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin"
           export CC="$TOOLCHAIN/aarch64-linux-android21-clang"
           export CXX="$TOOLCHAIN/aarch64-linux-android21-clang++"
           export AR="$TOOLCHAIN/llvm-ar"
           export RANLIB="$TOOLCHAIN/llvm-ranlib"
-          export READELF=$(which readelf)
 
           echo "CC=$CC" >> $GITHUB_ENV
           echo "CXX=$CXX" >> $GITHUB_ENV
           echo "AR=$AR" >> $GITHUB_ENV
           echo "RANLIB=$RANLIB" >> $GITHUB_ENV
-          echo "READELF=$READELF" >> $GITHUB_ENV
 
-      - name: Download Python 3.13 Source
+      - name: Download Python Source
         run: |
           wget https://www.python.org/ftp/python/3.13.0/Python-3.13.0.tar.xz
           tar -xf Python-3.13.0.tar.xz
@@ -64,20 +73,12 @@ jobs:
       - name: Configure Python
         run: |
           cd cpython
-          cat <<EOF > config.site
-          ac_cv_file__dev_ptmx=yes
-          ac_cv_file__dev_ptc=no
-          EOF
-
-          ./configure --host=aarch64-linux-android \
-                     --build=x86_64-linux-gnu \
-                     --disable-ipv6 \
-                     --with-build-python=$(which python3.13) \
-                     CC="$CC" \
-                     CXX="$CXX" \
-                     AR="$AR" \
-                     RANLIB="$RANLIB" \
-                     READELF="$READELF"
+          ./configure \
+            --host=aarch64-linux-android \
+            --build=x86_64-linux-gnu \
+            --prefix=/opt/python-android \
+            --disable-ipv6 \
+            CC="$CC" CXX="$CXX" AR="$AR" RANLIB="$RANLIB"
 
       - name: Build Python
         run: |
@@ -86,13 +87,13 @@ jobs:
 
       - name: Install Python
         run: |
-          mkdir -p $GITHUB_WORKSPACE/android-rootfs/data
+          mkdir -p $GITHUB_WORKSPACE/android-rootfs
           cd cpython
-          make install prefix=$GITHUB_WORKSPACE/android-rootfs/data
+          make install DESTDIR=$GITHUB_WORKSPACE/android-rootfs
 
       - name: Package Artifacts
         run: |
-          tar -czvf python-3.13-android-arm64.tar.gz -C android-rootfs/data .
+          tar -czvf python-3.13-android-arm64.tar.gz -C $GITHUB_WORKSPACE/android-rootfs/opt/python-android .
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
