@@ -48,7 +48,7 @@ jobs:
 
       - name: Check if Latest Python is Installed
         run: |
-          REQUIRED_PYTHON_VERSION="3.13.0"
+          REQUIRED_PYTHON_VERSION="3.10.0"
           if python3 --version | grep -q "$REQUIRED_PYTHON_VERSION"; then
             echo "Python $REQUIRED_PYTHON_VERSION is already installed."
           else
