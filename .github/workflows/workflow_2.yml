@@ -26,15 +26,20 @@ jobs:
       - name: 设置 Android SDK 和 NDK
         uses: android-actions/setup-android@v3
         with:
-          cmdline-tools-version: "16.0" # 指定命令行工具版本
+          cmdline-tools-version: "14.0" # 使用有效的命令行工具版本
           accept-android-sdk-licenses: true # 自动接受所有 SDK 许可证
           packages: "ndk;27.2.12479018" # 明确安装 NDK 版本 27.2.12479018
+          log-accepted-android-sdk-licenses: true # 记录许可证接受情况
 
-      - name: 验证 NDK 安装
+      - name: 验证 Android SDK 和 NDK 安装
         run: |
+          echo "Android SDK 根目录: $ANDROID_SDK_ROOT"
           echo "Android NDK 根目录: $ANDROID_NDK_HOME"
+          ls -l $ANDROID_SDK_ROOT/cmdline-tools/14.0/bin/
           ls -l $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-aarch64/bin/
+          $ANDROID_SDK_ROOT/cmdline-tools/14.0/bin/sdkmanager --version
           $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-aarch64/bin/aarch64-linux-android21-clang --version
+          $ANDROID_SDK_ROOT/cmdline-tools/14.0/bin/sdkmanager --list | grep ndk
 
       - name: 设置编译工具
         run: |
