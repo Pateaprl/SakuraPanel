@@ -1,4 +1,4 @@
-name: 适用于 Android 的 Python 3.10
+name: 测试中
 
 on:
   push:
@@ -104,6 +104,20 @@ jobs:
           # 安装 zlib
           cd ../zlib-1.2.13
           make install
+
+          # 修复 shebang
+          find $GITHUB_WORKSPACE/android-rootfs/data -type f -exec grep -l '^#!' {} \; | while read -r file; do
+            sed -i '1s|.*|#!/system/bin/sh|' "$file"
+          done
+
+          # 修复软连接
+          find $GITHUB_WORKSPACE/android-rootfs/data -type l | while read -r link; do
+            target=$(readlink "$link")
+            if [[ ! "$target" =~ ^/ ]]; then
+              new_target="system/$(basename "$target")"
+              ln -sf "$new_target" "$link"
+            fi
+          done
 
           # 检查安装结果
           ls -lh $GITHUB_WORKSPACE/android-rootfs/data
