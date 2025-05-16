@@ -1,4 +1,4 @@
-name: 适用于 Android 的 Python 3.10
+name: 适用于 Android 的 Python 3.12.8
 
 on:
   push:
@@ -48,7 +48,7 @@ jobs:
 
       - name: 检查是否安装最新 Python
         run: |
-          REQUIRED_PYTHON_VERSION="3.10.0"
+          REQUIRED_PYTHON_VERSION="3.12.8.0"
           if python3 --version | grep -q "$REQUIRED_PYTHON_VERSION"; then
             echo "Python $REQUIRED_PYTHON_VERSION 已安装。"
           else
@@ -107,8 +107,8 @@ jobs:
 
           # 检查 Python 可执行文件名
           ls -l $GITHUB_WORKSPACE/android-rootfs/data/bin/python*
-          if [ -f "$GITHUB_WORKSPACE/android-rootfs/data/bin/python3.10" ]; then
-            PYTHON_SHEBANG="/system/bin/python3.10"
+          if [ -f "$GITHUB_WORKSPACE/android-rootfs/data/bin/python3.12.8" ]; then
+            PYTHON_SHEBANG="/system/bin/python3.12.8"
           else
             PYTHON_SHEBANG="/system/bin/python3"
           fi
@@ -134,7 +134,7 @@ jobs:
         run: |
           # 创建源代码包，包含下载的 Python 和 zlib 源代码
           tar -czvf source-code.tar.gz \
-              Python-3.10.0.tgz \
+              Python-3.12.8.0.tgz \
               zlib-1.2.13.tar.gz \
               cpython/ \
               zlib-1.2.13/
