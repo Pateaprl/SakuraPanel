@@ -69,11 +69,13 @@ jobs:
       - name: Configure Python
         run: |
           cd cpython
+          # 关键修复：添加 --with-build-python 参数
           ./configure \
             --host=aarch64-linux-android \
             --build=x86_64-linux-gnu \
             --prefix=/opt/python-android \
             --disable-ipv6 \
+            --with-build-python=$(which python3.13) \
             CC="$CC" CXX="$CXX" AR="$AR" RANLIB="$RANLIB"
 
       - name: Build Python
