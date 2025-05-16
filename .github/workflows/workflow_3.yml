@@ -1,4 +1,4 @@
-name: 适用于 Android 的 Python 3.10
+name: 适用于 Android 的 Python 3.10 和 pip
 
 on:
   push:
@@ -130,25 +130,53 @@ jobs:
           # 检查安装结果
           ls -lh $GITHUB_WORKSPACE/android-rootfs/data
 
+      - name: 构建并安装 pip
+        run: |
+          # 下载 get-pip.py
+          wget https://bootstrap.pypa.io/get-pip.py -O get-pip.py
+          
+          # 使用交叉编译的 Python 安装 pip
+          export PATH=$GITHUB_WORKSPACE/android-rootfs/data/bin:$PATH
+          export PYTHONPATH=$GITHUB_WORKSPACE/android-rootfs/data/lib/python3.10/site-packages
+          
+          # 确保 Python 可执行文件存在
+          if [ -f "$GITHUB_WORKSPACE/android-rootfs/data/bin/python3.10" ]; then
+            PYTHON_EXEC="$GITHUB_WORKSPACE/android-rootfs/data/bin/python3.10"
+          else
+            PYTHON_EXEC="$GITHUB_WORKSPACE/android-rootfs/data/bin/python3"
+          fi
+          
+          # 安装 pip
+          $PYTHON_EXEC get-pip.py --prefix=$GITHUB_WORKSPACE/android-rootfs/data
+          
+          # 修复 pip 脚本的 shebang
+          find $GITHUB_WORKSPACE/android-rootfs/data/bin -name "pip*" -type f | while read -r file; do
+            sed -i "1s|.*|#!$PYTHON_SHEBANG|" "$file"
+          done
+          
+          # 验证 pip 安装
+          $PYTHON_EXEC -m pip --version
+
       - name: 打包源代码
         run: |
-          # 创建源代码包，包含下载的 Python 和 zlib 源代码
+          # 创建源代码包，包含下载的 Python、zlib 和 get-pip.py
           tar -czvf source-code.tar.gz \
               Python-3.10.0.tgz \
               zlib-1.2.13.tar.gz \
+              get-pip.py \
               cpython/ \
               zlib-1.2.13/
 
       - name: 打包产物
         run: |
-          tar -czvf python-zlib-android-arm64.tar.gz \
+          tar -czvf python-zlib-pip-android-arm64.tar.gz \
               -C $GITHUB_WORKSPACE/android-rootfs/data \
               --transform 's,^\./,system/,' .
 
       - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
-          name: python-zlib-android-arm64-ndk27
+          name: python-zlib-pip-android-arm64-ndk27
           path: |
-            python-zlib-android-arm64.tar.gz
+            python-zlib-pip-android-arm64.tar.gz
             source-code.tar.gz

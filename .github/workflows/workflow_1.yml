@@ -1,4 +1,4 @@
-name: 适用于 Android 的 Python 3.10
+name: 适用于 Android 的 Python 3.10 (ARM Ubuntu)
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-22.04-arm64  # 使用 ARM 架构的 Ubuntu runner
 
     steps:
       - name: 检出代码
@@ -32,7 +32,7 @@ jobs:
       - name: 验证 NDK 安装
         run: |
           echo "Android NDK 根目录: $ANDROID_NDK_ROOT"
-          ls -l $ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/
+          ls -l $ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-aarch64/bin/  # 修改为 ARM 路径
 
       - name: 设置交叉编译工具
         run: |
@@ -42,9 +42,9 @@ jobs:
             export READELF=$(which readelf)
           fi
           echo "READELF=$READELF" >> $GITHUB_ENV
-          export AR=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
+          export AR=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-aarch64/bin/llvm-ar  # ARM 路径
           echo "AR=$AR" >> $GITHUB_ENV
-          echo "RANLIB=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ranlib" >> $GITHUB_ENV
+          echo "RANLIB=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-aarch64/bin/llvm-ranlib" >> $GITHUB_ENV  # ARM 路径
 
       - name: 检查是否安装最新 Python
         run: |
@@ -74,18 +74,37 @@ jobs:
           EOF
 
           BUILD_PYTHON=$(which python3)
-          ./configure --host=aarch64-linux-android --build=x86_64-linux-gnu \
+          ./configure --host=aarch64-linux-android --build=aarch64-linux-gnu \  # 修改为 ARM 构建
                       --disable-optimizations \
                       --disable-ipv6 \
                       --with-build-python=$BUILD_PYTHON \
-                      CC=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang \
-                      CXX=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang++ \
+                      CC=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-aarch64/bin/aarch64-linux-android21-clang \  # ARM 路径
+                      CXX=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-aarch64/bin/aarch64-linux-android21-clang++ \  # ARM 路径
                       AR=$AR \
-                      RANLIB=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ranlib \
+                      RANLIB=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-aarch64/bin/llvm-ranlib \  # ARM 路径
                       READELF=$READELF
 
           echo "配置完成"
           make -j$(nproc)
+
+      - name: 编译 pip
+        run: |
+          # 确保 pip 已安装
+          python3 -m ensurepip --upgrade
+          python3 -m pip install --upgrade pip setuptools wheel
+
+          # 下载 pip 源代码
+          pip download --no-binary :all: pip --no-deps
+          tar -xzf pip-*.tar.gz
+          cd pip-*/
+
+          # 使用交叉编译环境编译 pip
+          CC=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-aarch64/bin/aarch64-linux-android21-clang \
+          CXX=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-aarch64/bin/aarch64-linux-android21-clang++ \
+          AR=$AR \
+          RANLIB=$RANLIB \
+          READELF=$READELF \
+          python3 setup.py build
 
       - name: 编译 zlib
         run: |
@@ -93,13 +112,17 @@ jobs:
           ./configure --prefix=$GITHUB_WORKSPACE/android-rootfs/data
           make -j$(nproc)
 
-      - name: 将 Python 和 zlib 安装到模拟 Android 根目录
+      - name: 将 Python、pip 和 zlib 安装到模拟 Android 根目录
         run: |
           mkdir -p $GITHUB_WORKSPACE/android-rootfs/data
           
           # 安装 Python
           cd cpython
           make install prefix=$GITHUB_WORKSPACE/android-rootfs/data
+          
+          # 安装 pip
+          cd ../pip-*/
+          python3 setup.py install --prefix=$GITHUB_WORKSPACE/android-rootfs/data
           
           # 安装 zlib
           cd ../zlib-1.2.13
@@ -132,23 +155,25 @@ jobs:
 
       - name: 打包源代码
         run: |
-          # 创建源代码包，包含下载的 Python 和 zlib 源代码
+          # 创建源代码包，包含下载的 Python、pip 和 zlib 源代码
           tar -czvf source-code.tar.gz \
               Python-3.10.0.tgz \
               zlib-1.2.13.tar.gz \
+              pip-*.tar.gz \
               cpython/ \
-              zlib-1.2.13/
+              zlib-1.2.13/ \
+              pip-*/
 
       - name: 打包产物
         run: |
-          tar -czvf python-zlib-android-arm64.tar.gz \
+          tar -czvf python-zlib-pip-android-arm64.tar.gz \
               -C $GITHUB_WORKSPACE/android-rootfs/data \
               --transform 's,^\./,system/,' .
 
       - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
-          name: python-zlib-android-arm64-ndk27
+          name: python-zlib-pip-android-arm64-ndk27
           path: |
-            python-zlib-android-arm64.tar.gz
+            python-zlib-pip-android-arm64.tar.gz
             source-code.tar.gz
