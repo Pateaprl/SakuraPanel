@@ -35,7 +35,7 @@ jobs:
       - name: Set up Android NDK
         uses: android-actions/setup-android@v2
         with:
-          ndk-version: "25.2.9519653"  # 使用稳定版本
+          ndk-version: "27.2.12479018"  # 使用稳定版本
 
       - name: Configure Android Toolchain
         run: |
