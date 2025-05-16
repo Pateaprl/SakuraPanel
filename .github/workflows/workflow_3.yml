@@ -1,4 +1,4 @@
-name: 适用于 Android 的 Python 3.10 和 pip
+name: 适用于 Android 的 Python 3.10 和 pip (使用宿主机构建)
 
 on:
   push:
@@ -14,7 +14,7 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v3
 
-      - name: 安装依赖
+      - name: 安装宿主机依赖
         run: |
           sudo apt update
           sudo apt install -y build-essential zlib1g-dev libffi-dev libssl-dev libbz2-dev \
@@ -34,7 +34,7 @@ jobs:
           echo "Android NDK 根目录: $ANDROID_NDK_ROOT"
           ls -l $ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/
 
-      - name: 设置交叉编译工具
+      - name: 设置交叉编译环境
         run: |
           export READELF=$(which readelf)
           if [ ! -f "$READELF" ]; then
@@ -45,81 +45,94 @@ jobs:
           export AR=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
           echo "AR=$AR" >> $GITHUB_ENV
           echo "RANLIB=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ranlib" >> $GITHUB_ENV
+          echo "CC=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang" >> $GITHUB_ENV
+          echo "CXX=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang++" >> $GITHUB_ENV
 
-      - name: 检查是否安装最新 Python
+      - name: 下载并编译 Python 3.10
         run: |
           REQUIRED_PYTHON_VERSION="3.10.0"
-          if python3 --version | grep -q "$REQUIRED_PYTHON_VERSION"; then
-            echo "Python $REQUIRED_PYTHON_VERSION 已安装。"
-          else
-            echo "正在下载并编译 Python..."
-            wget https://www.python.org/ftp/python/$REQUIRED_PYTHON_VERSION/Python-$REQUIRED_PYTHON_VERSION.tgz
-            tar -xf Python-$REQUIRED_PYTHON_VERSION.tgz
-            mv Python-$REQUIRED_PYTHON_VERSION cpython
-          fi
+          ANDROID_INSTALL_DIR="$GITHUB_WORKSPACE/android-rootfs/data"
+          
+          echo "正在下载并编译 Python $REQUIRED_PYTHON_VERSION..."
+          wget https://www.python.org/ftp/python/$REQUIRED_PYTHON_VERSION/Python-$REQUIRED_PYTHON_VERSION.tgz
+          tar -xzf Python-$REQUIRED_PYTHON_VERSION.tgz
+          mv Python-$REQUIRED_PYTHON_VERSION cpython
+          
+          cd cpython
+          ./configure \
+            --host=aarch64-linux-android \
+            --build=x86_64-linux-gnu \
+            --prefix="$ANDROID_INSTALL_DIR" \
+            --disable-ipv6 \
+            --enable-optimizations \
+            CC="$CC" \
+            CXX="$CXX" \
+            AR="$AR" \
+            RANLIB="$RANLIB" \
+            READELF="$READELF"
+          
+          make -j$(nproc)
+          make install
+          
+          # 检查安装结果
+          ls -l "$ANDROID_INSTALL_DIR/bin/python"*
+          "$ANDROID_INSTALL_DIR/bin/python3.10" --version
 
-      - name: 下载并解压 zlib
+      - name: 下载并编译 zlib
         run: |
+          ANDROID_INSTALL_DIR="$GITHUB_WORKSPACE/android-rootfs/data"
+          
           wget https://github.com/madler/zlib/archive/refs/tags/v1.2.13.tar.gz -O zlib-1.2.13.tar.gz
-          tar -xvf zlib-1.2.13.tar.gz
-          cd zlib-1.2.13
-
-      - name: 配置并编译 Python
-        run: |
-          cd cpython
-          export CONFIG_SITE=config.site
-          cat <<EOF > $CONFIG_SITE
-          ac_cv_file__dev_ptmx=yes
-          ac_cv_file__dev_ptc=no
-          EOF
-
-          BUILD_PYTHON=$(which python3)
-          ./configure --host=aarch64-linux-android --build=x86_64-linux-gnu \
-                      --disable-optimizations \
-                      --disable-ipv6 \
-                      --with-build-python=$BUILD_PYTHON \
-                      CC=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang \
-                      CXX=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang++ \
-                      AR=$AR \
-                      RANLIB=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ranlib \
-                      READELF=$READELF
-
-          echo "配置完成"
-          make -j$(nproc)
-
-      - name: 编译 zlib
-        run: |
-          cd zlib-1.2.13
-          ./configure --prefix=$GITHUB_WORKSPACE/android-rootfs/data
-          make -j$(nproc)
-
-      - name: 将 Python 和 zlib 安装到模拟 Android 根目录
-        run: |
-          mkdir -p $GITHUB_WORKSPACE/android-rootfs/data
+          tar -xzf zlib-1.2.13.tar.gz
           
-          # 安装 Python
-          cd cpython
-          make install prefix=$GITHUB_WORKSPACE/android-rootfs/data
-          
-          # 安装 zlib
-          cd ../zlib-1.2.13
+          cd zlib-1.2.13
+          CC="$CC" ./configure --prefix="$ANDROID_INSTALL_DIR"
+          make -j$(nproc)
           make install
 
-          # 检查 Python 可执行文件名
-          ls -l $GITHUB_WORKSPACE/android-rootfs/data/bin/python*
-          if [ -f "$GITHUB_WORKSPACE/android-rootfs/data/bin/python3.10" ]; then
-            PYTHON_SHEBANG="/system/bin/python3.10"
-          else
-            PYTHON_SHEBANG="/system/bin/python3"
-          fi
-
-          # 修复 Python 脚本的 shebang
-          find $GITHUB_WORKSPACE/android-rootfs/data/bin -type f -exec grep -l '^#!' {} \; | while read -r file; do
-            sed -i "1s|.*|#!$PYTHON_SHEBANG|" "$file"
+      - name: 使用宿主机Python构建pip
+        run: |
+          ANDROID_INSTALL_DIR="$GITHUB_WORKSPACE/android-rootfs/data"
+          
+          # 下载get-pip.py
+          wget https://bootstrap.pypa.io/get-pip.py -O get-pip.py
+          
+          # 使用宿主机Python构建pip到Android目录
+          python3 get-pip.py \
+            --prefix="$ANDROID_INSTALL_DIR" \
+            --ignore-installed \
+            --no-warn-script-location
+          
+          # 修复pip脚本的shebang
+          find "$ANDROID_INSTALL_DIR/bin" -name "pip*" -type f | while read -r file; do
+            if [ -f "$ANDROID_INSTALL_DIR/bin/python3.10" ]; then
+              sed -i "1s|.*|#!/system/bin/python3.10|" "$file"
+            else
+              sed -i "1s|.*|#!/system/bin/python3|" "$file"
+            fi
           done
+          
+          # 验证pip安装
+          ls -l "$ANDROID_INSTALL_DIR/bin/pip"*
+          grep "^#!" "$ANDROID_INSTALL_DIR/bin/pip" | head -n 1
 
-          # 修复软连接
-          find $GITHUB_WORKSPACE/android-rootfs/data -type l | while read -r link; do
+      - name: 修复所有shebang和符号链接
+        run: |
+          ANDROID_INSTALL_DIR="$GITHUB_WORKSPACE/android-rootfs/data"
+          
+          # 修复Python脚本的shebang
+          find "$ANDROID_INSTALL_DIR/bin" -type f | while read -r file; do
+            if head -n 1 "$file" | grep -q "^#!"; then
+              if [ -f "$ANDROID_INSTALL_DIR/bin/python3.10" ]; then
+                sed -i "1s|.*|#!/system/bin/python3.10|" "$file"
+              else
+                sed -i "1s|.*|#!/system/bin/python3|" "$file"
+              fi
+            fi
+          done
+          
+          # 修复符号链接
+          find "$ANDROID_INSTALL_DIR" -type l | while read -r link; do
             target=$(readlink "$link")
             if [[ ! "$target" =~ ^/ ]]; then
               new_target="system/$(basename "$target")"
@@ -127,39 +140,8 @@ jobs:
             fi
           done
 
-          # 检查安装结果
-          ls -lh $GITHUB_WORKSPACE/android-rootfs/data
-
-      - name: 构建并安装 pip
-        run: |
-          # 下载 get-pip.py
-          wget https://bootstrap.pypa.io/get-pip.py -O get-pip.py
-          
-          # 使用交叉编译的 Python 安装 pip
-          export PATH=$GITHUB_WORKSPACE/android-rootfs/data/bin:$PATH
-          export PYTHONPATH=$GITHUB_WORKSPACE/android-rootfs/data/lib/python3.10/site-packages
-          
-          # 确保 Python 可执行文件存在
-          if [ -f "$GITHUB_WORKSPACE/android-rootfs/data/bin/python3.10" ]; then
-            PYTHON_EXEC="$GITHUB_WORKSPACE/android-rootfs/data/bin/python3.10"
-          else
-            PYTHON_EXEC="$GITHUB_WORKSPACE/android-rootfs/data/bin/python3"
-          fi
-          
-          # 安装 pip
-          $PYTHON_EXEC get-pip.py --prefix=$GITHUB_WORKSPACE/android-rootfs/data
-          
-          # 修复 pip 脚本的 shebang
-          find $GITHUB_WORKSPACE/android-rootfs/data/bin -name "pip*" -type f | while read -r file; do
-            sed -i "1s|.*|#!$PYTHON_SHEBANG|" "$file"
-          done
-          
-          # 验证 pip 安装
-          $PYTHON_EXEC -m pip --version
-
       - name: 打包源代码
         run: |
-          # 创建源代码包，包含下载的 Python、zlib 和 get-pip.py
           tar -czvf source-code.tar.gz \
               Python-3.10.0.tgz \
               zlib-1.2.13.tar.gz \
@@ -167,16 +149,17 @@ jobs:
               cpython/ \
               zlib-1.2.13/
 
-      - name: 打包产物
+      - name: 打包Android产物
         run: |
-          tar -czvf python-zlib-pip-android-arm64.tar.gz \
-              -C $GITHUB_WORKSPACE/android-rootfs/data \
+          ANDROID_INSTALL_DIR="$GITHUB_WORKSPACE/android-rootfs/data"
+          tar -czvf python-android-arm64.tar.gz \
+              -C "$ANDROID_INSTALL_DIR" \
               --transform 's,^\./,system/,' .
 
       - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
-          name: python-zlib-pip-android-arm64-ndk27
+          name: python-3.10-android-arm64-with-pip
           path: |
-            python-zlib-pip-android-arm64.tar.gz
+            python-android-arm64.tar.gz
             source-code.tar.gz
