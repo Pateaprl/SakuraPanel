@@ -1,4 +1,4 @@
-name: 适用于 Android 的 Python 3.10
+name: 适用于 Android 的 Python 3.10测试
 
 on:
   push:
