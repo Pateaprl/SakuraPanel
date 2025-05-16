@@ -1,4 +1,4 @@
-name: Build Python and zlib for Android ARM64
+name: Python for Android
 
 on:
   push:
@@ -34,17 +34,18 @@ jobs:
           echo "ANDROID_NDK_HOME=$ANDROID_NDK_ROOT" >> $GITHUB_ENV
           echo "$ANDROID_NDK_ROOT" >> $GITHUB_PATH
 
-      - name: Check if Latest Python is Installed
+      - name: Detect and Download Python Source
+        id: python-version
         run: |
-          REQUIRED_PYTHON_VERSION="3.10.0"
-          if python3 --version | grep -q "$REQUIRED_PYTHON_VERSION"; then
-            echo "Python $REQUIRED_PYTHON_VERSION is already installed."
-          else
-            echo "Downloading and compiling Python..."
-            wget https://www.python.org/ftp/python/$REQUIRED_PYTHON_VERSION/Python-$REQUIRED_PYTHON_VERSION.tgz
-            tar -xf Python-$REQUIRED_PYTHON_VERSION.tgz
-            mv Python-$REQUIRED_PYTHON_VERSION cpython
-          fi
+          # 检测当前系统 Python 版本（如 3.10.12）
+          PY_VERSION=$(python3 -c "import sys; print('.'.join(map(str, sys.version_info[:3])))")
+          echo "Detected Python version: $PY_VERSION"
+          echo "PY_VERSION=$PY_VERSION" >> $GITHUB_ENV
+          
+          # 下载对应版本的 Python 源码
+          wget https://www.python.org/ftp/python/$PY_VERSION/Python-$PY_VERSION.tgz
+          tar -xf Python-$PY_VERSION.tgz
+          mv Python-$PY_VERSION cpython
 
       - name: Download and Extract zlib
         run: |

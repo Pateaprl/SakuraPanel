@@ -1,4 +1,4 @@
-name: Python for Android
+name: Build Python and zlib for Android ARM64
 
 on:
   push:
@@ -27,54 +27,41 @@ jobs:
       - name: Set up Android NDK
         uses: android-actions/setup-android@v2
         with:
-          ndk-version: "25.2.9519653"  # 使用这个特定版本
+          ndk-version: "25.2.9519653"  # 使用 GitHub Actions 提供的 NDK 版本
 
-      - name: Verify NDK Installation
+      - name: Set ANDROID_NDK_HOME
         run: |
-          echo "ANDROID_NDK_HOME: $ANDROID_NDK_HOME"
-          echo "NDK contents:"
-          ls -l $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_ROOT" >> $GITHUB_ENV
+          echo "$ANDROID_NDK_ROOT" >> $GITHUB_PATH
 
-      - name: Get Installed Python Version
-        id: python-version
+      - name: Check if Latest Python is Installed
         run: |
-          PY_VERSION=$(python3 -c "import sys; print('.'.join(map(str, sys.version_info[:3])))")
-          echo "Detected Python version: $PY_VERSION"
-          echo "PY_VERSION=$PY_VERSION" >> $GITHUB_ENV
-          wget https://www.python.org/ftp/python/$PY_VERSION/Python-$PY_VERSION.tgz
-          tar -xf Python-$PY_VERSION.tgz
-          mv Python-$PY_VERSION cpython
+          REQUIRED_PYTHON_VERSION="3.10.0"
+          if python3 --version | grep -q "$REQUIRED_PYTHON_VERSION"; then
+            echo "Python $REQUIRED_PYTHON_VERSION is already installed."
+          else
+            echo "Downloading and compiling Python..."
+            wget https://www.python.org/ftp/python/$REQUIRED_PYTHON_VERSION/Python-$REQUIRED_PYTHON_VERSION.tgz
+            tar -xf Python-$REQUIRED_PYTHON_VERSION.tgz
+            mv Python-$REQUIRED_PYTHON_VERSION cpython
+          fi
 
       - name: Download and Extract zlib
         run: |
           wget https://github.com/madler/zlib/archive/refs/tags/v1.2.13.tar.gz -O zlib-1.2.13.tar.gz
           tar -xvf zlib-1.2.13.tar.gz
+          cd zlib-1.2.13
 
       - name: Set Cross-Compile Tools
         run: |
-          # 确保使用正确的 NDK 路径
-          export ANDROID_NDK_HOME="$ANDROID_NDK_ROOT"
-          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME" >> $GITHUB_ENV
-          
-          # 设置工具链路径
-          TOOLCHAIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
-          echo "TOOLCHAIN=$TOOLCHAIN" >> $GITHUB_ENV
-          
-          # 验证工具是否存在
-          export CC="$TOOLCHAIN/aarch64-linux-android21-clang"
-          export CXX="$TOOLCHAIN/aarch64-linux-android21-clang++"
-          export AR="$TOOLCHAIN/llvm-ar"
-          export RANLIB="$TOOLCHAIN/llvm-ranlib"
           export READELF=$(which readelf)
-          
-          echo "CC=$CC" >> $GITHUB_ENV
-          echo "CXX=$CXX" >> $GITHUB_ENV
-          echo "AR=$AR" >> $GITHUB_ENV
-          echo "RANLIB=$RANLIB" >> $GITHUB_ENV
+          if [ ! -f "$READELF" ]; then
+            sudo apt install -y binutils
+            export READELF=$(which readelf)
+          fi
           echo "READELF=$READELF" >> $GITHUB_ENV
-          
-          # 验证工具存在
-          ls -l $CC $CXX $AR $RANLIB
+          export AR=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-ar
+          echo "AR=$AR" >> $GITHUB_ENV
 
       - name: Configure and Compile Python
         run: |
@@ -90,11 +77,11 @@ jobs:
                       --disable-optimizations \
                       --disable-ipv6 \
                       --with-build-python=$BUILD_PYTHON \
-                      CC="$CC" \
-                      CXX="$CXX" \
-                      AR="$AR" \
-                      RANLIB="$RANLIB" \
-                      READELF="$READELF"
+                      CC=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang \
+                      CXX=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang++ \
+                      AR=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-ar \
+                      RANLIB=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-ranlib \
+                      READELF=$READELF
 
           echo "Configuration completed"
           make -j$(nproc)
@@ -102,24 +89,31 @@ jobs:
       - name: Compile zlib
         run: |
           cd zlib-1.2.13
-          CC="$CC" ./configure --prefix=$GITHUB_WORKSPACE/android-rootfs/data
+          ./configure
           make -j$(nproc)
 
-      - name: Install Python and zlib
+      - name: Install Python and zlib to Simulated Android Root (`/data`)
         run: |
           mkdir -p $GITHUB_WORKSPACE/android-rootfs/data
           
+          # 安装 Python 和 zlib 到模拟的 /data 目录
           cd cpython
           make install prefix=$GITHUB_WORKSPACE/android-rootfs/data
           
           cd ../zlib-1.2.13
-          make install
+          make install prefix=$GITHUB_WORKSPACE/android-rootfs/data
 
-      - name: Package and Upload Artifacts
+          # 确保安装成功，检查文件是否在目标目录
+          echo "Contents of android-rootfs/data:"
+          ls -lh $GITHUB_WORKSPACE/android-rootfs/data
+
+      - name: Package Installed Python and zlib
         run: |
+          # 打包安装的 Python 和 zlib 文件
           tar -czvf python-zlib-android-data.tar.gz -C android-rootfs/data .
-          
-      - uses: actions/upload-artifact@v4
+
+      - name: Upload Python and zlib Package
+        uses: actions/upload-artifact@v4
         with:
           name: python-zlib-android-data
           path: python-zlib-android-data.tar.gz
