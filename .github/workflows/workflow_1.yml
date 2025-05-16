@@ -32,11 +32,11 @@ jobs:
 
       - name: Verify LZMA Headers
         run: |
-          if [ ! -f /usr/include/lzma.h ]; then
-            echo "❌ lzma.h not found! Trying manual installation..."
-            sudo apt install -y liblzma-dev
-          fi
-          ls -l /usr/include/lzma.h
+          # 检查并安装 LZMA 开发包
+          sudo apt install -y liblzma-dev
+          # 验证头文件位置
+          find /usr -name lzma.h
+          echo "LZMA_HEADERS=$(find /usr -name lzma.h | head -1)" >> $GITHUB_ENV
 
       - name: Download and Extract Android NDK
         run: |
@@ -59,6 +59,8 @@ jobs:
           echo "CXX=$CXX" >> $GITHUB_ENV
           echo "AR=$AR" >> $GITHUB_ENV
           echo "RANLIB=$RANLIB" >> $GITHUB_ENV
+          # 添加 LZMA 头文件路径到编译环境
+          echo "CFLAGS=-I${LZMA_HEADERS%/*}" >> $GITHUB_ENV
 
       - name: Download Python Source
         run: |
@@ -66,17 +68,26 @@ jobs:
           tar -xf Python-3.13.0.tar.xz
           mv Python-3.13.0 cpython
 
+      - name: Patch Python Source (Disable LZMA)
+        run: |
+          cd cpython
+          # 方法1：完全禁用 LZMA 模块
+          sed -i 's/^_lzma/#_lzma/' Modules/Setup
+          # 方法2：确保配置禁用 LZMA
+          echo "ac_cv_lib_lzma_lzma_code=no" >> config.site
+
       - name: Configure Python
         run: |
           cd cpython
-          # 关键修复：添加 --with-build-python 参数
           ./configure \
             --host=aarch64-linux-android \
             --build=x86_64-linux-gnu \
             --prefix=/opt/python-android \
             --disable-ipv6 \
+            --without-lzma \
             --with-build-python=$(which python3.13) \
-            CC="$CC" CXX="$CXX" AR="$AR" RANLIB="$RANLIB"
+            CC="$CC" CXX="$CXX" AR="$AR" RANLIB="$RANLIB" \
+            CFLAGS="$CFLAGS"
 
       - name: Build Python
         run: |
